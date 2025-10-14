@@ -1,6 +1,13 @@
 # Project place file
 /FlashGordon.rbxlx
+/aftman.toml
 
 # Roblox Studio lock files
 /*.rbxlx.lock
 /*.rbxl.lock
+
+
+Packages/
+ServerPackages/
+sourcemap.Json
+wally.lock
