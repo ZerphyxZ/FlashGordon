@@ -1,7 +1,7 @@
--- ResetProgressService.lua
+-- ServerScriptService/Server/Services/ResetProgressService.lua
 -- Server-side Knit service that handles full progress resets safely.
--- Now: always reloads the character after reset, clears attributes,
--- clears session debounces, and publishes per-player repaint pulses only.
+-- UPDATED: Finds Reset parts anywhere under Workspace (not just Workspace.Reset)
+-- and hooks them dynamically as worlds are loaded/changed.
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -21,15 +21,18 @@ print("[ResetProgressService] Loaded (server)")
 -- Debounce table keyed by player → touched part keys (for Reset parts)
 local debounceMap = {}
 
--- Show reset UI for player; hide after 10s if not confirmed
+-- ==== UI attribute helpers ====
+
 local function showResetUIForPlayer(player, part)
     if not player or not player:IsA("Player") then return end
+    -- Open instantly, every time
     player:SetAttribute("ResetUI", true)
-    player:SetAttribute("ResetUIFromPart", tostring(part.Name))
+    player:SetAttribute("ResetUIFromPart", tostring(part and part.Name or "Reset"))
     player:SetAttribute("ResetResult", nil)
     player:SetAttribute("ResetResultMsg", nil)
 
-    task.delay(10, function()
+    -- Auto-close after 10s if ignored
+    task.delay(30, function()
         if player and player.Parent and player:GetAttribute("ResetUI") == true then
             player:SetAttribute("ResetUI", false)
             player:SetAttribute("ResetUIFromPart", nil)
@@ -37,9 +40,20 @@ local function showResetUIForPlayer(player, part)
     end)
 end
 
--- Connect touch detection on a Reset_%d part
-local function connectResetPart(part)
+-- ==== Touch wiring ====
+
+local CONNECTED = setmetatable({}, { __mode = "k" }) -- weak keys: BasePart → true
+
+local function isResetTouchPart(inst: Instance?): boolean
+    if not (inst and inst:IsA("BasePart")) then return false end
+    return tostring(inst.Name):match("^Reset_%d+$") ~= nil
+end
+
+local function connectResetPart(part: BasePart)
     if not (part and part:IsA("BasePart")) then return end
+    if CONNECTED[part] then return end
+    CONNECTED[part] = true
+
     print("[ResetProgressService] Connecting Reset part:", part:GetFullName())
     part.Touched:Connect(function(hit)
         local character = hit and hit.Parent
@@ -47,11 +61,13 @@ local function connectResetPart(part)
         local player = Players:GetPlayerFromCharacter(character)
         if not player then return end
 
+        -- very small per-part debounce so Touched spam doesn’t flicker UI,
+        -- but lets the player close and immediately re-open on a fresh step
         debounceMap[player] = debounceMap[player] or {}
         local partKey = part:GetFullName()
         if debounceMap[player][partKey] then return end
         debounceMap[player][partKey] = true
-        task.delay(1.0, function()
+        task.delay(0.4, function()
             if debounceMap[player] then debounceMap[player][partKey] = nil end
         end)
 
@@ -59,30 +75,62 @@ local function connectResetPart(part)
     end)
 end
 
-function ResetProgressService:KnitStart()
-    print("[ResetProgressService] KnitStart - scanning workspace.Reset")
-    local resetFolder = Workspace:FindFirstChild("Reset")
-    if resetFolder then
-        for _, desc in ipairs(resetFolder:GetDescendants()) do
-            if desc:IsA("BasePart") and tostring(desc.Name):match("^Reset_%d+$") then
-                connectResetPart(desc)
+local function connectAllResetUnder(container: Instance)
+    -- 1) Any folder named "Reset" at any depth
+    for _, desc in ipairs(container:GetDescendants()) do
+        if desc:IsA("Folder") and desc.Name == "Reset" then
+            for _, d in ipairs(desc:GetDescendants()) do
+                if isResetTouchPart(d) then
+                    connectResetPart(d)
+                end
             end
+            desc.DescendantAdded:Connect(function(newInst)
+                if isResetTouchPart(newInst) then
+                    connectResetPart(newInst)
+                end
+            end)
         end
-        resetFolder.DescendantAdded:Connect(function(desc)
-            if desc:IsA("BasePart") and tostring(desc.Name):match("^Reset_%d+$") then
-                connectResetPart(desc)
-            end
-        end)
-    else
-        warn("[ResetProgressService] workspace.Reset folder not found.")
     end
+
+    -- 2) Or any stray Reset_%d+ parts anywhere
+    for _, desc in ipairs(container:GetDescendants()) do
+        if isResetTouchPart(desc) then
+            connectResetPart(desc)
+        end
+    end
+end
+
+function ResetProgressService:KnitStart()
+    print("[ResetProgressService] KnitStart scanning Reset nodes across Workspace")
+
+    -- Initial sweep
+    connectAllResetUnder(Workspace)
+
+    -- Live hook for worlds streamed/inserted later
+    Workspace.DescendantAdded:Connect(function(inst)
+        if inst:IsA("Folder") and inst.Name == "Reset" then
+            for _, d in ipairs(inst:GetDescendants()) do
+                if isResetTouchPart(d) then
+                    connectResetPart(d)
+                end
+            end
+            inst.DescendantAdded:Connect(function(d)
+                if isResetTouchPart(d) then
+                    connectResetPart(d)
+                end
+            end)
+        elseif isResetTouchPart(inst) then
+            connectResetPart(inst)
+        end
+    end)
 
     Players.PlayerRemoving:Connect(function(player)
         debounceMap[player] = nil
     end)
 end
 
--- Deep copy helper (fallback)
+-- ==== Deep copy fallback ====
+
 local function deepCopy(orig)
     if type(orig) ~= "table" then return orig end
     local copy = {}
@@ -92,7 +140,6 @@ local function deepCopy(orig)
     return copy
 end
 
--- Fallback reset if handler helper missing
 local function fallbackResetProfileToTemplate(player)
     local profile = PlayerDataHandler:GetProfile(player)
     if not profile then
@@ -109,7 +156,6 @@ local function fallbackResetProfileToTemplate(player)
     return true, "Reset via fallback succeeded"
 end
 
--- Helper: brief wait for PlayerDataHandler:GetData(player) to become non-nil
 local function waitForDataAvailable(player, timeout)
     timeout = timeout or 3
     local t = 0
@@ -122,17 +168,18 @@ local function waitForDataAvailable(player, timeout)
     return nil
 end
 
--- Client-callable: perform a progress reset (player has confirmed)
+-- ==== Client API ====
+
 function ResetProgressService.Client:RequestReset(player)
     if not (player and player:IsA("Player")) then return false end
     print("[ResetProgressService] Reset requested by", player.Name)
 
-    -- Wait briefly for profile to load
+    -- Wait briefly for profile
     local timeout = 5
     local waited  = 0
     while not PlayerDataHandler:GetProfile(player) and waited < timeout do
         task.wait(0.25)
-        waited = waited + 0.25
+        waited += 0.25
     end
 
     local profile = PlayerDataHandler:GetProfile(player)
@@ -144,15 +191,15 @@ function ResetProgressService.Client:RequestReset(player)
         return false
     end
 
-    -- Gather visited keys before reset (for optional visuals; retained for analytics)
+    -- (optional analytics) count visited before reset
     local dataBefore = PlayerDataHandler:GetData(player)
-    local visitedKeys = {}
+    local visitedCount = 0
     if dataBefore and dataBefore.VisitedCheckpoints then
-        for k, v in pairs(dataBefore.VisitedCheckpoints) do
-            if v then table.insert(visitedKeys, k) end
+        for _, v in pairs(dataBefore.VisitedCheckpoints) do
+            if v then visitedCount += 1 end
         end
     end
-    print("[ResetProgressService] Visited before reset:", #visitedKeys)
+    print("[ResetProgressService] Visited before reset:", visitedCount)
 
     -- Perform reset
     local success, msg
@@ -171,23 +218,22 @@ function ResetProgressService.Client:RequestReset(player)
     end
     print("[ResetProgressService] Profile reset OK for", player.Name, "-", tostring(msg))
 
-    -- Clear session flags so the very next touch at any checkpoint is treated as first-visit
+    -- Clear session flags so the very next checkpoint counts again
     local cpService = Knit.GetService("CheckpointService")
     if cpService and cpService.ClearPlayerSessionFlags then
         cpService:ClearPlayerSessionFlags(player)
-        print("[ResetProgressService] Cleared session flags for", player.Name)
     end
 
-    -- Clear client-facing attributes for checkpoints & progress
+    -- Clear client-facing attrs (progress + checkpoints)
     player:SetAttribute("CheckpointX", nil)
     player:SetAttribute("CheckpointY", nil)
     player:SetAttribute("CheckpointZ", nil)
-    player:SetAttribute("VisitedCheckpointsBlob", "") -- IMPORTANT: tell client no visits
+    player:SetAttribute("VisitedCheckpointsBlob", "")
     player:SetAttribute("LastVisitedCheckpointKey", nil)
     player:SetAttribute("ProgressPercent", 0)
     player:SetAttribute("VisitedCount", 0)
 
-    -- Per-player repaint pulse (client will repaint ONLY for this player)
+    -- Pulse for repaint (LOCAL player only)
     player:SetAttribute("ResetProgressColours", true)
     task.delay(0.1, function()
         if player and player.Parent == Players then
@@ -195,37 +241,28 @@ function ResetProgressService.Client:RequestReset(player)
         end
     end)
 
-    -- Hide UI and mark result
+    -- Hide UI and flag success
     player:SetAttribute("ResetUI", false)
     player:SetAttribute("ResetResult", "Success")
     player:SetAttribute("ResetResultMsg", "Reset complete")
 
-    -- Always reload character to get a clean slate after reset
-    print("[ResetProgressService] Loading character for", player.Name, "after reset …")
+    -- Fresh character after reset
     player:LoadCharacter()
 
-    -- Brief wait for new character and profile rehydrate, then update progress
+    -- Recompute progress once data rehydrates
     task.spawn(function()
-        -- allow data to reappear (ProfileService flush can take a few frames)
-        local data = waitForDataAvailable(player, 3)
-        if not data then
-            warn("[ResetProgressService] Data did not rehydrate quickly for", player.Name, "continuing anyway")
-        end
-
+        local _ = waitForDataAvailable(player, 3)
         local progressService = Knit.GetService("ProgressBarService")
         if progressService and progressService.UpdatePlayerNow then
             progressService:UpdatePlayerNow(player)
-            print("[ResetProgressService] ProgressBar updated post-reset for", player.Name)
         end
 
-        -- Make sure they are considered alive again (for any death gating)
         local deathService = Knit.GetService("DeathService")
         if deathService and deathService.SetAlive then
             deathService:SetAlive(player)
         end
     end)
 
-    print("[ResetProgressService] Reset completed for", player.Name)
     return true
 end
 

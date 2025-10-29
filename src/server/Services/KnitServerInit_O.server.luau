@@ -16,6 +16,9 @@ require(script.Parent:WaitForChild("CurrencyService"))
 print("[KnitServerInit] Requiring ProgressBarService")
 require(script.Parent:WaitForChild("ProgressBarService"))
 
+print("[KnitServerInit] Requiring DeathService")
+require(script.Parent:WaitForChild("WorldRouterService"))
+
 print("[KnitServerInit] Requiring CheckpointService")
 require(script.Parent:WaitForChild("CheckpointService"))
 
@@ -24,6 +27,9 @@ require(script.Parent:WaitForChild("DeathService"))
 
 print("[KnitServerInit] Requiring DeathService")
 require(script.Parent:WaitForChild("ObstacleSyncService"))
+
+print("[KnitServerInit] Requiring DeathService")
+require(script.Parent:WaitForChild("PortalService"))
 
 -- Optional/other services you use — ensure these exist in the folder
 if script.Parent:FindFirstChild("ResetProgressService") then
