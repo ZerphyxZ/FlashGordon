@@ -1,7 +1,7 @@
 local Hoverboards = {
 	DefaultRider = {
 		TopSpeed = 45,
-		Acceleration = 0.8,
+		Acceleration = 0.6,
 		Deceleration = 1.5,
 		JumpPower = 70,
 		Boost = {
@@ -16,7 +16,7 @@ local Hoverboards = {
 	},
 	PlasmaRider = {
 		TopSpeed = 55,
-		Acceleration = 1.0,
+		Acceleration = 0.7,
 		Deceleration = 1.25,
 		JumpPower = 60,
 		Boost = {
