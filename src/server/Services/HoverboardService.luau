@@ -4,11 +4,11 @@ local Global =
 local Knit = Global.Knit
 local ReplicatedStorage = Global.ReplicatedStorage
 local RunService = Global.RunService
-local Hoverboards = require(ReplicatedStorage.Shared.Modules.Hoverboards)
+local Hoverboards = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Hoverboard"):WaitForChild("Hoverboards"))
 local Players = Global.Players
 
 local HoverboardModels = ReplicatedStorage:WaitForChild("Models"):WaitForChild("Hoverboards")
-local DEFAULT_BOARD = "BoostRider" -- Fallback hoverboard model name
+local DEFAULT_BOARD = "PlasmaRider" -- Fallback hoverboard model name
 local playerHoverboards = {}
 local hoverboardDataService
 local hoverboard
@@ -33,23 +33,6 @@ local function cleanupCharacterHoverboard(character)
 	if existing then
 		existing:Destroy()
 	end
-
-	-- -- Destroy server-owned constraints on HRP
-	-- local hrp = character:FindFirstChild("HumanoidRootPart")
-	-- if hrp then
-	-- 	local bv = hrp:FindFirstChild("HoverBodyVelocity")
-	-- 	if bv then
-	-- 		bv:Destroy()
-	-- 	end
-	-- 	local bg = hrp:FindFirstChild("HoverBodyGyro")
-	-- 	if bg then
-	-- 		bg:Destroy()
-	-- 	end
-	-- 	local motor = hrp:FindFirstChild("HoverboardMotor")
-	-- 	if motor then
-	-- 		motor:Destroy()
-	-- 	end
-	-- end
 end
 
 -- Calculate offset such that the hoverboard sits flush to player's feet
@@ -101,57 +84,6 @@ local function calculateBoardOffset(character, boardModel)
 
 	-- Keep the same visual tweak as client (-0.7)
 	return (footOffset + (boardSizeY / 2)) - 0.7
-end
-
--- Create server-owned physics constraints on HRP & BodyPosition on the board primary part
-local function createServerConstraints(character, primaryPart)
-	if not character or not primaryPart then
-		return
-	end
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if not hrp then
-		return
-	end
-
-	-- BodyPosition on the board primary part to maintain hover height (server-owned)
-	local bp = primaryPart:FindFirstChild("HoverPosition")
-	if bp then
-		bp:Destroy()
-	end
-	local bodyPosition = Instance.new("BodyPosition")
-	bodyPosition.Name = "HoverPosition"
-	bodyPosition.MaxForce = Vector3.new(0, 1e6, 0)
-	bodyPosition.Position = primaryPart.Position
-	bodyPosition.P = 7000
-	bodyPosition.D = 500
-	bodyPosition.Parent = primaryPart
-
-	-- BodyVelocity on HRP (server-owned authority; client will update .Velocity)
-	local bv = hrp:FindFirstChild("HoverBodyVelocity")
-	if bv then
-		bv:Destroy()
-	end
-	bv = Instance.new("BodyVelocity")
-	bv.Name = "HoverBodyVelocity"
-	bv.MaxForce = Vector3.new(1e5, 0, 1e5)
-	bv.Velocity = Vector3.new(0, 0, 0)
-	bv.P = 8e3
-	bv.Parent = hrp
-
-	-- BodyGyro on HRP (server-owned)
-	local bg = hrp:FindFirstChild("HoverBodyGyro")
-	if bg then
-		bg:Destroy()
-	end
-	bg = Instance.new("BodyGyro")
-	bg.Name = "HoverBodyGyro"
-	bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-	bg.P = 8e3
-	bg.D = 300
-	bg.CFrame = hrp.CFrame
-	bg.Parent = hrp
-
-	return true
 end
 
 ----------------------------------------------------------
@@ -354,26 +286,6 @@ function HoverboardService:KnitStart()
 		hoverboardDataService:SetEquippedHoverboard(player, playerHoverboards, Hoverboards)
 		playerHoverboards[player.UserId] = nil
 	end)
-
-	-- Fall death check loop
-    -- RunService.Heartbeat:Connect(function()
-    --     for userId, data in pairs(playerHoverboards) do
-    --         local player = Players:GetPlayerByUserId(userId)
-    --         if player and player.Character then
-    --             local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-    --             local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-	-- 			print("falling")
-    --             if hrp and humanoid and humanoid.Health > 0 then
-	-- 				print("falling 2")
-    --                 -- Adjust -100 to your desired death height
-    --                 if hrp.Position.Y < -100 then
-	-- 					print("killing")
-    --                     humanoid.Health = 0
-    --                 end
-    --             end
-    --         end
-    --     end
-    -- end)
 end
 
 return HoverboardService

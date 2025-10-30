@@ -16,8 +16,8 @@ local Hoverboards = {
 	},
 	PlasmaRider = {
 		TopSpeed = 55,
-		Acceleration = 0.7,
-		Deceleration = 1.25,
+		Acceleration = 0.8,
+		Deceleration = 3,
 		JumpPower = 60,
 		Boost = {
 			RefillTime = 5,
