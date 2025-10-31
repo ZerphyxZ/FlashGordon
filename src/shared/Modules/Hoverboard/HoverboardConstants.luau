@@ -28,14 +28,14 @@ HoverboardConstants.Collision = {
 }
 
 HoverboardConstants.Jumping = {
-	JUMP_POWER = 60,
-	MIN_JUMP_HEIGHT = 10,
-	MAX_JUMP_HEIGHT = 25,
-	STEP_MULTIPLIER = 1,
-	STUDS_MULTIPLIER = 5,
+	-- STEP_MULTIPLIER = grid step (studs) — all jump heights snap to multiples of this
+	MIN_JUMP_HEIGHT = 5,     -- 5 studs at 0 speed
+	MAX_JUMP_HEIGHT = 20,    -- 20 studs at max speed
+	STEP_MULTIPLIER = 5,     -- grid steps of 5 studs
 	JUMP_COOLDOWN = 0.35,
-	JUMP_VELOCITY_Y = 50,
-	HOVER_DISABLE_TIME = 0.5,
+	HOVER_DISABLE_TIME = 0.5, -- time to disable body position after jump
+	-- AttemptJump will compute a physics-correct velocity instead of using this value.
+	JUMP_POWER = 60,
 }
 
 HoverboardConstants.Hover = {
