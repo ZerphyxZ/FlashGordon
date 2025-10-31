@@ -1511,88 +1511,75 @@ end
 
 function HoverManager.UpdateHover(dt)
 	if not hoverboard or not hoverboard.PrimaryPart or State.isJumping then
-        return
-    end
+		return
+	end
 
-    local primary = hoverboard.PrimaryPart
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = { character, hoverboard }
+	local primary = hoverboard.PrimaryPart
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character, hoverboard }
 
-    local size = primary.Size
-    local rayLength = HOVER.RAYCAST_DISTANCE
-    local rayOffsets = {
-        Vector3.new(size.X / 2, 0, size.Z / 2),
-        Vector3.new(-size.X / 2, 0, size.Z / 2),
-        Vector3.new(size.X / 2, 0, -size.Z / 2),
-        Vector3.new(-size.X / 2, 0, -size.Z / 2),
-    }
+	local size = primary.Size
+	local rayLength = HOVER.RAYCAST_DISTANCE
+	local rayOffsets = {
+		Vector3.new(size.X / 2, 0, size.Z / 2),
+		Vector3.new(-size.X / 2, 0, size.Z / 2),
+		Vector3.new(size.X / 2, 0, -size.Z / 2),
+		Vector3.new(-size.X / 2, 0, -size.Z / 2),
+	}
 
-    local hitPositions, hitNormals = {}, {}
+	local hitPositions, hitNormals = {}, {}
 
-    for _, offset in ipairs(rayOffsets) do
-        local origin = primary.CFrame:PointToWorldSpace(offset + Vector3.new(0, 0.2, 0))
-        local direction = Vector3.new(0, -rayLength, 0)
-        local result = workspace:Raycast(origin, direction, params)
-        if result then
-            table.insert(hitPositions, result.Position)
-            table.insert(hitNormals, result.Normal)
-        end
-    end
+	for _, offset in ipairs(rayOffsets) do
+		local origin = primary.CFrame:PointToWorldSpace(offset + Vector3.new(0, 0.2, 0))
+		local direction = Vector3.new(0, -rayLength, 0)
+		local result = workspace:Raycast(origin, direction, params)
+		if result then
+			table.insert(hitPositions, result.Position)
+			table.insert(hitNormals, result.Normal)
+		end
+	end
 
-    if #hitPositions > 0 then
-        local avgPos, avgNormal = Vector3.zero, Vector3.zero
-        for i = 1, #hitPositions do
-            avgPos = avgPos + hitPositions[i]
-            avgNormal = avgNormal + hitNormals[i]
-        end
-        avgPos = avgPos / #hitPositions
-        avgNormal = avgNormal.Unit
+	if #hitPositions > 0 then
+		local avgPos, avgNormal = Vector3.zero, Vector3.zero
+		for i = 1, #hitPositions do
+			avgPos = avgPos + hitPositions[i]
+			avgNormal = avgNormal + hitNormals[i]
+		end
+		avgPos = avgPos / #hitPositions
+		avgNormal = avgNormal.Unit
 
-        local hoverT = math.clamp(1 - math.exp(-HOVER.HOVER_SMOOTHNESS * dt * 10), 0, 1)
-        State.smoothedGroundNormal = State.smoothedGroundNormal and State.smoothedGroundNormal:Lerp(avgNormal, hoverT)
-            or avgNormal
+		local hoverT = math.clamp(1 - math.exp(-HOVER.HOVER_SMOOTHNESS * dt * 10), 0, 1)
+		State.smoothedGroundNormal = State.smoothedGroundNormal and State.smoothedGroundNormal:Lerp(avgNormal, hoverT)
+			or avgNormal
 
-        local finalNormal = State.smoothedGroundNormal.Unit
-        
-        -- ========== UPDATED BOBBING EFFECT CODE ==========
-        -- Update bobbing time (very slow - 0.8 seconds per full cycle)
-        State.bobTime = State.bobTime + (dt * 0.4)
-        
-        -- Calculate bobbing offset using sine wave
-        -- Very subtle bobbing: 0.15 studs amplitude, slow frequency
-        local bobOffset = math.sin(State.bobTime * math.pi * 2) * 0.15
-        
-        -- Apply bobbing ONLY to hoverboard, NOT to the player's position
-        local targetY = avgPos.Y + State.baseHoverHeight + bobOffset
-        
-        if hoverBodyPosition then
-            -- Only move the hoverboard with bobbing, keep player position stable
-            local currentBP = hoverBodyPosition.Position
-            local targetBP = Vector3.new(primary.Position.X, targetY, primary.Position.Z)
-            local posT = math.clamp(dt * 8, 0, 1) -- Slightly slower for smoother bobbing
-            hoverBodyPosition.Position = currentBP:Lerp(targetBP, posT)
-        end
-        
-        -- Keep player at stable height (no bobbing for player)
-        local playerTargetY = avgPos.Y + State.baseHoverHeight
-        if humanoidRootPart then
-            -- Smoothly maintain player at stable height without bobbing
-            local currentPlayerPos = humanoidRootPart.Position
-            local targetPlayerPos = Vector3.new(currentPlayerPos.X, playerTargetY, currentPlayerPos.Z)
-            local playerPosT = math.clamp(dt * 12, 0, 1)
-            humanoidRootPart.Position = currentPlayerPos:Lerp(targetPlayerPos, playerPosT)
-        end
-        -- ========== END UPDATED CODE ==========
+		local finalNormal = State.smoothedGroundNormal.Unit
 
-        HoverManager.AlignHoverboard(primary, finalNormal, dt)
-    else
-        if hoverBodyPosition then
-            hoverBodyPosition.MaxForce = Vector3.zero
-        end
-    end
+		-- ========== UPDATED BOBBING EFFECT CODE ==========
+		-- Update bobbing time (very slow - 0.5 seconds per full cycle)
+		State.bobTime = State.bobTime + (dt * 2)
 
+		-- Calculate bobbing offset using sine wave
+		-- Very subtle bobbing: 0.1 studs amplitude, slow frequency
+		local bobOffset = math.sin(State.bobTime * math.pi * 2) * 0.1
 
+		-- Apply bobbing to hover height
+		local targetY = avgPos.Y + State.baseHoverHeight + bobOffset
+		-- ========== END UPDATED CODE ==========
+
+		if hoverBodyPosition then
+			local currentBP = hoverBodyPosition.Position
+			local targetBP = Vector3.new(primary.Position.X, targetY, primary.Position.Z)
+			local posT = math.clamp(dt * 10, 0, 1)
+			hoverBodyPosition.Position = currentBP:Lerp(targetBP, posT)
+		end
+
+		HoverManager.AlignHoverboard(primary, finalNormal, dt)
+	else
+		if hoverBodyPosition then
+			hoverBodyPosition.MaxForce = Vector3.zero
+		end
+	end
 
 	-- if not hoverboard or not hoverboard.PrimaryPart or State.isJumping then
 	-- 	return
@@ -1638,18 +1625,7 @@ function HoverManager.UpdateHover(dt)
 	-- 		or avgNormal
 
 	-- 	local finalNormal = State.smoothedGroundNormal.Unit
-
-	-- 	-- ========== UPDATED BOBBING EFFECT CODE ==========
-	-- 	-- Update bobbing time (very slow - 0.5 seconds per full cycle)
-	-- 	State.bobTime = State.bobTime + (dt * HOVER.BOBBING_DURATION)
-
-	-- 	-- Calculate bobbing offset using sine wave
-	-- 	-- Very subtle bobbing: 0.1 studs amplitude, slow frequency
-	-- 	local bobOffset = math.sin(State.bobTime * math.pi * 2) * HOVER.BOBBING_FREQUENCY
-
-	-- 	-- Apply bobbing to hover height
-	-- 	local targetY = avgPos.Y + State.baseHoverHeight + bobOffset
-	-- 	-- ========== END UPDATED CODE ==========
+	-- 	local targetY = avgPos.Y + HOVER.HOVER_HEIGHT
 
 	-- 	if hoverBodyPosition then
 	-- 		local currentBP = hoverBodyPosition.Position
@@ -1728,38 +1704,32 @@ function HoverManager.AlignHoverboard(primary, finalNormal, dt)
 	-- ---------- 3) Apply player tilt to match hoverboard ----------
 	-- This makes the player lean with the hoverboard for a more natural feel
 	if bodyGyro and bodyGyro.Parent then
-        local currentPlayerCF = bodyGyro.CFrame
-        local playerTargetCF = CFrame.lookAt(
-            humanoidRootPart.Position, 
-            humanoidRootPart.Position + forwardOnPlane, 
-            finalNormal
-        )
-        
-        -- Apply the same tilt to the player (but NO vertical bobbing)
-        if math.abs(State.smoothedTilt) > 1e-5 then
-            local rightVector = finalNormal:Cross(forwardOnPlane)
-            if rightVector.Magnitude > 1e-5 then
-                rightVector = rightVector.Unit
-                local playerTiltCF = CFrame.fromAxisAngle(rightVector, State.smoothedTilt * 0.7) -- Slightly less tilt for player
-                playerTargetCF = playerTargetCF * playerTiltCF
-            end
-        end
-        
-        -- ========== UPDATED: Smoothly apply orientation WITHOUT affecting position ==========
-        -- Only rotate the player, don't change their vertical position
-        local playerSmooth = math.clamp(dt * 6, 0, 1)
-        local currentRotation = (currentPlayerCF - currentPlayerCF.Position)
-        local targetRotation = (playerTargetCF - playerTargetCF.Position)
-        local newRotation = currentRotation:Lerp(targetRotation, playerSmooth)
-        
-        -- Maintain the player's current position (no bobbing transfer)
-        bodyGyro.CFrame = CFrame.new(humanoidRootPart.Position) * newRotation
-        -- ========== END UPDATED CODE ==========
-    end
+		local currentPlayerCF = bodyGyro.CFrame
+		local playerTargetCF =
+			CFrame.lookAt(humanoidRootPart.Position, humanoidRootPart.Position + forwardOnPlane, finalNormal)
 
-    -- ---------- 4) Smoothly lerp hoverboard CFrame to target ----------
-    local primaryT = math.clamp(dt * HOVER.HOVER_SMOOTHNESS, 0, 1)
-    primary.CFrame = primary.CFrame:Lerp(targetHoverCF, primaryT)
+		-- Apply the same tilt to the player
+		if math.abs(State.smoothedTilt) > 1e-5 then
+			local rightVector = finalNormal:Cross(forwardOnPlane)
+			if rightVector.Magnitude > 1e-5 then
+				rightVector = rightVector.Unit
+				local playerTiltCF = CFrame.fromAxisAngle(rightVector, State.smoothedTilt * 0.7) -- Slightly less tilt for player
+				playerTargetCF = playerTargetCF * playerTiltCF
+			end
+		end
+
+		-- Smoothly apply the tilted orientation to the player
+		local playerSmooth = math.clamp(dt * 6, 0, 1)
+		local newPlayerRot = (currentPlayerCF - currentPlayerCF.Position):Lerp(
+			playerTargetCF - playerTargetCF.Position,
+			playerSmooth
+		)
+		bodyGyro.CFrame = CFrame.new(humanoidRootPart.Position) * newPlayerRot
+	end
+
+	-- ---------- 4) Smoothly lerp hoverboard CFrame to target ----------
+	local primaryT = math.clamp(dt * HOVER.HOVER_SMOOTHNESS, 0, 1)
+	primary.CFrame = primary.CFrame:Lerp(targetHoverCF, primaryT)
 
 	--Old Code
 	-- local playerForward = humanoidRootPart.CFrame.LookVector
