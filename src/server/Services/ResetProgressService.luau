@@ -1,230 +1,208 @@
--- ServerScriptService/Server/Services/ResetProgressService.lua
--- Server-side Knit service that handles full progress resets safely.
--- UPDATED: Finds Reset parts anywhere under Workspace (not just Workspace.Reset)
--- and hooks them dynamically as worlds are loaded/changed.
+-- ServerScriptService/Server/Services/ResetProgressService.luau
+-- Place-only reset: clears *current world's* checkpoint + visited set.
+-- Opens ResetProgress UI when the player touches ResetProgress_%d+ parts
+-- under Workspace.World_###.Reset (and compatible fallbacks).
+-- Distinct attributes from global reset:
+--   ResetProgressUI, ResetProgressResult, ResetProgressResultMsg
 
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
+local Players           = game:GetService("Players")
+local Workspace         = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 
-local PlayerDataHandler   = require(game.ReplicatedStorage.Shared.Modules.PlayerDataHandler)
-local PlayerDataTemplate  = require(game.ReplicatedStorage.Shared.Modules.PlayerDataTemplate)
+local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
+local PlayerDataHandler = require(ReplicatedStorage.Shared.Modules.PlayerDataHandler)
 
 local ResetProgressService = Knit.CreateService {
     Name = "ResetProgressService";
     Client = {};
 }
 
-print("[ResetProgressService] Loaded (server)")
+print("[ResetProgressService] Loaded (server, place-only)")
 
--- Debounce table keyed by player → touched part keys (for Reset parts)
-local debounceMap = {}
+-- ---------- Helpers ----------------------------------------------------------
 
--- ==== UI attribute helpers ====
+local TOUCH_DEBOUNCE = 0.6
+local UI_TIMEOUT     = 30
+local uiDebounce : {[Player]: number} = {}
+local touchMap  : {[Player]: {[string]: number}} = {}
 
-local function showResetUIForPlayer(player, part)
-    if not player or not player:IsA("Player") then return end
-    -- Open instantly, every time
-    player:SetAttribute("ResetUI", true)
-    player:SetAttribute("ResetUIFromPart", tostring(part and part.Name or "Reset"))
-    player:SetAttribute("ResetResult", nil)
-    player:SetAttribute("ResetResultMsg", nil)
+local function isWorldContainer(inst: Instance?): boolean
+    return inst
+        and (inst:IsA("Folder") or inst:IsA("Model"))
+        and tostring(inst.Name):match("^World_%d+")
+end
 
-    -- Auto-close after 10s if ignored
-    task.delay(30, function()
-        if player and player.Parent and player:GetAttribute("ResetUI") == true then
-            player:SetAttribute("ResetUI", false)
-            player:SetAttribute("ResetUIFromPart", nil)
+local function isResetProgressPart(inst: Instance?): boolean
+    return inst
+        and inst:IsA("BasePart")
+        and tostring(inst.Name):match("^ResetProgress_%d+$") ~= nil
+end
+
+local function getCurrentWorldIndex(player: Player): number
+    local idx = player and player:GetAttribute("WorldIndex")
+    if typeof(idx) ~= "number" then
+        idx = ReplicatedStorage:GetAttribute("WorldIndex")
+    end
+    if typeof(idx) ~= "number" or idx < 1 then idx = 1 end
+    return idx
+end
+
+local function showUI(player: Player, partName: string)
+    -- guard tiny re-open spam
+    local now = os.clock()
+    if uiDebounce[player] and now - uiDebounce[player] < 0.25 then
+        print("[ResetProgressService] UI reopen debounced for", player.Name)
+        return
+    end
+    uiDebounce[player] = now
+
+    print(("[ResetProgressService] Opening ResetProgress UI for %s (from %s)")
+        :format(player.Name, partName))
+
+    player:SetAttribute("ResetProgressUI", true)
+    player:SetAttribute("ResetProgressResult", nil)
+    player:SetAttribute("ResetProgressResultMsg", nil)
+
+    task.delay(UI_TIMEOUT, function()
+        if player and player.Parent and player:GetAttribute("ResetProgressUI") == true then
+            print("[ResetProgressService] Auto-closing ResetProgress UI for", player.Name)
+            player:SetAttribute("ResetProgressUI", false)
         end
     end)
 end
 
--- ==== Touch wiring ====
+local function bindResetProgressPart(part: BasePart)
+    if not part or not part:IsA("BasePart") then return end
+    print("[ResetProgressService] Binding part:", part:GetFullName())
 
-local CONNECTED = setmetatable({}, { __mode = "k" }) -- weak keys: BasePart → true
-
-local function isResetTouchPart(inst: Instance?): boolean
-    if not (inst and inst:IsA("BasePart")) then return false end
-    return tostring(inst.Name):match("^Reset_%d+$") ~= nil
-end
-
-local function connectResetPart(part: BasePart)
-    if not (part and part:IsA("BasePart")) then return end
-    if CONNECTED[part] then return end
-    CONNECTED[part] = true
-
-    print("[ResetProgressService] Connecting Reset part:", part:GetFullName())
     part.Touched:Connect(function(hit)
-        local character = hit and hit.Parent
-        if not (character and character:FindFirstChild("Humanoid")) then return end
-        local player = Players:GetPlayerFromCharacter(character)
+        local char = hit and hit.Parent
+        if not (char and char:FindFirstChildOfClass("Humanoid")) then return end
+        local player = Players:GetPlayerFromCharacter(char)
         if not player then return end
 
-        -- very small per-part debounce so Touched spam doesn’t flicker UI,
-        -- but lets the player close and immediately re-open on a fresh step
-        debounceMap[player] = debounceMap[player] or {}
-        local partKey = part:GetFullName()
-        if debounceMap[player][partKey] then return end
-        debounceMap[player][partKey] = true
-        task.delay(0.4, function()
-            if debounceMap[player] then debounceMap[player][partKey] = nil end
-        end)
+        -- per-player *per-part* debounce
+        local map = touchMap[player]
+        if not map then map = {}; touchMap[player] = map end
+        local key = part:GetFullName()
+        local last = map[key]
+        local now  = os.clock()
+        if last and (now - last) < TOUCH_DEBOUNCE then return end
+        map[key] = now
 
-        showResetUIForPlayer(player, part)
+        showUI(player, part.Name)
     end)
 end
 
-local function connectAllResetUnder(container: Instance)
-    -- 1) Any folder named "Reset" at any depth
-    for _, desc in ipairs(container:GetDescendants()) do
-        if desc:IsA("Folder") and desc.Name == "Reset" then
-            for _, d in ipairs(desc:GetDescendants()) do
-                if isResetTouchPart(d) then
-                    connectResetPart(d)
-                end
+local function scanWorld(world: Instance)
+    -- look for a "Reset" folder and parts named ResetProgress_%d+
+    local resetFolder = world:FindFirstChild("Reset")
+    if resetFolder then
+        print("[ResetProgressService] Reset folder added:", resetFolder:GetFullName())
+        for _, d in ipairs(resetFolder:GetDescendants()) do
+            if isResetProgressPart(d) then
+                bindResetProgressPart(d :: BasePart)
             end
-            desc.DescendantAdded:Connect(function(newInst)
-                if isResetTouchPart(newInst) then
-                    connectResetPart(newInst)
-                end
-            end)
         end
+        resetFolder.DescendantAdded:Connect(function(desc)
+            if isResetProgressPart(desc) then
+                bindResetProgressPart(desc :: BasePart)
+            end
+        end)
     end
 
-    -- 2) Or any stray Reset_%d+ parts anywhere
-    for _, desc in ipairs(container:GetDescendants()) do
-        if isResetTouchPart(desc) then
-            connectResetPart(desc)
+    -- also bind any stray ResetProgress_%d+ anywhere inside the world
+    for _, d in ipairs(world:GetDescendants()) do
+        if isResetProgressPart(d) then
+            bindResetProgressPart(d :: BasePart)
         end
     end
+    world.DescendantAdded:Connect(function(desc)
+        if isResetProgressPart(desc) then
+            bindResetProgressPart(desc :: BasePart)
+        end
+    end)
 end
+
+-- ---------- Knit lifecycle ---------------------------------------------------
 
 function ResetProgressService:KnitStart()
-    print("[ResetProgressService] KnitStart scanning Reset nodes across Workspace")
+    print("[ResetProgressService] KnitStart → scanning Workspace for ResetProgress_%d+ parts …")
 
-    -- Initial sweep
-    connectAllResetUnder(Workspace)
+    -- Bind existing worlds
+    for _, ch in ipairs(Workspace:GetChildren()) do
+        if isWorldContainer(ch) then
+            scanWorld(ch)
+        end
+    end
 
-    -- Live hook for worlds streamed/inserted later
-    Workspace.DescendantAdded:Connect(function(inst)
-        if inst:IsA("Folder") and inst.Name == "Reset" then
-            for _, d in ipairs(inst:GetDescendants()) do
-                if isResetTouchPart(d) then
-                    connectResetPart(d)
-                end
-            end
-            inst.DescendantAdded:Connect(function(d)
-                if isResetTouchPart(d) then
-                    connectResetPart(d)
-                end
-            end)
-        elseif isResetTouchPart(inst) then
-            connectResetPart(inst)
+    -- Bind future worlds
+    Workspace.ChildAdded:Connect(function(child)
+        if isWorldContainer(child) then
+            scanWorld(child)
         end
     end)
 
-    Players.PlayerRemoving:Connect(function(player)
-        debounceMap[player] = nil
+    Players.PlayerRemoving:Connect(function(plr)
+        touchMap[plr] = nil
+        uiDebounce[plr] = nil
     end)
 end
 
--- ==== Deep copy fallback ====
+-- ---------- Client API -------------------------------------------------------
 
-local function deepCopy(orig)
-    if type(orig) ~= "table" then return orig end
-    local copy = {}
-    for k, v in next, orig do
-        copy[deepCopy(k)] = deepCopy(v)
+-- Called by ResetProgressController when the player confirms the place-only reset
+function ResetProgressService.Client:RequestReset(player: Player)
+    if not (player and player:IsA("Player")) then
+        print("[ResetProgressService] RequestReset called without valid player")
+        return false
     end
-    return copy
-end
 
-local function fallbackResetProfileToTemplate(player)
+    print("[ResetProgressService] RequestReset by", player.Name)
+
     local profile = PlayerDataHandler:GetProfile(player)
-    if not profile then
-        return false, "No active profile"
+    if not (profile and profile:IsActive()) then
+        print("[ResetProgressService] No active profile for", player.Name)
+        player:SetAttribute("ResetProgressResult", "Failure")
+        player:SetAttribute("ResetProgressResultMsg", "Profile not active")
+        player:SetAttribute("ResetProgressUI", false)
+        return false
     end
-    if not profile:IsActive() then
-        return false, "Profile not active"
+
+    -- Clear ONLY the *current world* progress
+    local data = profile.Data
+    data.LastCheckpointByWorld = data.LastCheckpointByWorld or {}
+    data.VisitedCheckpointsByWorld = data.VisitedCheckpointsByWorld or {}
+
+    local w = getCurrentWorldIndex(player)
+    data.LastCheckpointByWorld[w] = nil
+    data.VisitedCheckpointsByWorld[w] = {}
+
+    -- Mirror legacy view to reflect the current (now-empty) world
+    if PlayerDataHandler.SyncFlatToWorldSnapshot then
+        PlayerDataHandler:SyncFlatToWorldSnapshot(player)
+    else
+        data.LastCheckpoint = nil
+        data.VisitedCheckpoints = {}
     end
-    profile.Data = deepCopy(PlayerDataTemplate)
+
+    -- Save
     local ok, err = pcall(function() profile:Save() end)
     if not ok then
-        return false, "Save failed: " .. tostring(err)
-    end
-    return true, "Reset via fallback succeeded"
-end
-
-local function waitForDataAvailable(player, timeout)
-    timeout = timeout or 3
-    local t = 0
-    while t < timeout do
-        local d = PlayerDataHandler:GetData(player)
-        if d then return d end
-        task.wait(0.1)
-        t += 0.1
-    end
-    return nil
-end
-
--- ==== Client API ====
-
-function ResetProgressService.Client:RequestReset(player)
-    if not (player and player:IsA("Player")) then return false end
-    print("[ResetProgressService] Reset requested by", player.Name)
-
-    -- Wait briefly for profile
-    local timeout = 5
-    local waited  = 0
-    while not PlayerDataHandler:GetProfile(player) and waited < timeout do
-        task.wait(0.25)
-        waited += 0.25
-    end
-
-    local profile = PlayerDataHandler:GetProfile(player)
-    if not profile then
-        warn("[ResetProgressService] No active profile for", player.Name)
-        player:SetAttribute("ResetResult", "Failure")
-        player:SetAttribute("ResetResultMsg", "Profile not active")
-        player:SetAttribute("ResetUI", false)
+        warn("[ResetProgressService] Save failed:", err)
+        player:SetAttribute("ResetProgressResult", "Failure")
+        player:SetAttribute("ResetProgressResultMsg", "Save failed")
+        player:SetAttribute("ResetProgressUI", false)
         return false
     end
 
-    -- (optional analytics) count visited before reset
-    local dataBefore = PlayerDataHandler:GetData(player)
-    local visitedCount = 0
-    if dataBefore and dataBefore.VisitedCheckpoints then
-        for _, v in pairs(dataBefore.VisitedCheckpoints) do
-            if v then visitedCount += 1 end
-        end
-    end
-    print("[ResetProgressService] Visited before reset:", visitedCount)
-
-    -- Perform reset
-    local success, msg
-    if PlayerDataHandler.ResetProfileToTemplate then
-        success, msg = PlayerDataHandler:ResetProfileToTemplate(player)
-    else
-        success, msg = fallbackResetProfileToTemplate(player)
-    end
-
-    if not success then
-        warn("[ResetProgressService] Reset FAILED for", player.Name, tostring(msg))
-        player:SetAttribute("ResetResult", "Failure")
-        player:SetAttribute("ResetResultMsg", tostring(msg))
-        player:SetAttribute("ResetUI", false)
-        return false
-    end
-    print("[ResetProgressService] Profile reset OK for", player.Name, "-", tostring(msg))
-
-    -- Clear session flags so the very next checkpoint counts again
+    -- Clear session flags so next checkpoint awards again
     local cpService = Knit.GetService("CheckpointService")
     if cpService and cpService.ClearPlayerSessionFlags then
         cpService:ClearPlayerSessionFlags(player)
     end
 
-    -- Clear client-facing attrs (progress + checkpoints)
+    -- Clear UI-facing attributes for this place
     player:SetAttribute("CheckpointX", nil)
     player:SetAttribute("CheckpointY", nil)
     player:SetAttribute("CheckpointZ", nil)
@@ -233,7 +211,7 @@ function ResetProgressService.Client:RequestReset(player)
     player:SetAttribute("ProgressPercent", 0)
     player:SetAttribute("VisitedCount", 0)
 
-    -- Pulse for repaint (LOCAL player only)
+    -- Tell color controller to repaint flags (per-player)
     player:SetAttribute("ResetProgressColours", true)
     task.delay(0.1, function()
         if player and player.Parent == Players then
@@ -241,28 +219,27 @@ function ResetProgressService.Client:RequestReset(player)
         end
     end)
 
-    -- Hide UI and flag success
-    player:SetAttribute("ResetUI", false)
-    player:SetAttribute("ResetResult", "Success")
-    player:SetAttribute("ResetResultMsg", "Reset complete")
+    -- Recompute progress bar for this place
+    local progressService = Knit.GetService("ProgressBarService")
+    if progressService and progressService.UpdatePlayerNow then
+        progressService:UpdatePlayerNow(player)
+    end
 
-    -- Fresh character after reset
+    -- Ensure IsDead is cleared if they had died previously
+    local deathService = Knit.GetService("DeathService")
+    if deathService and deathService.SetAlive then
+        deathService:SetAlive(player)
+    end
+
+    -- Optionally refresh character to remove any physics state
     player:LoadCharacter()
 
-    -- Recompute progress once data rehydrates
-    task.spawn(function()
-        local _ = waitForDataAvailable(player, 3)
-        local progressService = Knit.GetService("ProgressBarService")
-        if progressService and progressService.UpdatePlayerNow then
-            progressService:UpdatePlayerNow(player)
-        end
+    -- Close UI, report success
+    player:SetAttribute("ResetProgressUI", false)
+    player:SetAttribute("ResetProgressResult", "Success")
+    player:SetAttribute("ResetProgressResultMsg", "Progress reset for this world")
 
-        local deathService = Knit.GetService("DeathService")
-        if deathService and deathService.SetAlive then
-            deathService:SetAlive(player)
-        end
-    end)
-
+    print("[ResetProgressService] Place-only reset OK for", player.Name, "in world", w)
     return true
 end
 

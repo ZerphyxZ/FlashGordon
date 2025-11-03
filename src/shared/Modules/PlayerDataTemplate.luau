@@ -1,28 +1,29 @@
---[[
-    PlayerDataTemplate.luau
-
-    Defines the default data structure for a player's profile.  This table
-    should be passed to ProfileService when creating a ProfileStore.  When
-    loading profiles, missing keys will be reconciled automatically
-    using this template【31138390420226†L39-L46】.  Clients and other
-    server modules can require this module to access the schema.
-
-    Fields:
-      * Coins         – Number of coins the player has earned.
-      * Playtime      – Total accumulated playtime in seconds.
-      * LastCheckpoint – Table containing the last checkpoint position as
-                         {x, y, z}; nil if the player has not reached a
-                         checkpoint yet.
-]]
+-- ReplicatedStorage/Shared/Modules/PlayerDataTemplate.luau
+-- Adds per-world stores + spin fields while keeping legacy fields for back-compat.
 
 local PlayerDataTemplate = {
     Coins = 0,
     Playtime = 0,
-    LastCheckpoint = nil,
-    -- Tracks checkpoints that the player has visited.  Keys are
-    -- checkpoint names and values are true.  This prevents players
-    -- from repeatedly triggering the same checkpoint across sessions.
-    VisitedCheckpoints = {},
+
+    -- Legacy (kept for back-compat; mirrors the *current* world)
+    LastCheckpoint = nil,            -- {x,y,z} or nil
+    VisitedCheckpoints = {},         -- { [checkpointKeyLower]=true }
+
+    -- NEW: per-world stores (keyed by numeric WorldIndex)
+    --   LastCheckpointByWorld[worldIndex] = {x,y,z}
+    --   VisitedCheckpointsByWorld[worldIndex] = { [checkpointKeyLower]=true }
+    LastCheckpointByWorld = {},
+    VisitedCheckpointsByWorld = {},
+
+    -- === Spins system (used by SpinService) =================================
+    -- SpinsAvailable     : how many spins the player currently has
+    -- SpinRefillUnix     : next refill time (unix) when spins < MAX; nil/0 when at cap
+    -- LastResetBonusUnix : guard timestamp when granting spins on global reset (optional)
+    -- __spinsInitialized : internal flag so first-join grant happens once (managed at runtime)
+    SpinsAvailable = 0,
+    SpinRefillUnix = nil,
+    LastResetBonusUnix = nil,
+    __spinsInitialized = nil,
 }
 
 return PlayerDataTemplate

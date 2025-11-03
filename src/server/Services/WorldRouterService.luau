@@ -1,4 +1,4 @@
--- WorldRouterService.luau
+-- ServerScriptService/Server/Services/WorldRouterService.luau
 -- Loads exactly one world (World_###) directly into Workspace based on the *actual* PlaceId.
 
 local Players           = game:GetService("Players")
@@ -14,12 +14,20 @@ local WorldRouterService = Knit.CreateService {
 
 -- === CONFIG: PlaceId ↔ World Info (UPDATE: real PlaceIds) ====================
 local WORLD_REGISTRY = {
-    [84612540807662]   = { Index = 1, Name = "Central City Ruins" }, -- Place 1
-    [78474746786969]   = { Index = 2, Name = "Vortex Corridor"    }, -- Place 2
-    [114974911901623]  = { Index = 3, Name = "Surface of Mongo"   }, -- Place 3
+    [95954065660891]   = { Index = 1, Name = "Central City Ruins" }, -- Place 1
+    [90678723238530]   = { Index = 2, Name = "Vortex Corridor"    }, -- Place 2
+    [127054520314978]  = { Index = 3, Name = "Surface of Mongo"   }, -- Place 3
 }
 
 local DEFAULT_WORLD = { Index = 1, Name = "Central City Ruins" }
+
+-- === PRE-PUBLISH (ensure early availability for other services) ==============
+do
+    local info = WORLD_REGISTRY[game.PlaceId] or DEFAULT_WORLD
+    ReplicatedStorage:SetAttribute("WorldIndex", info.Index)
+    ReplicatedStorage:SetAttribute("WorldName",  info.Name)
+    ReplicatedStorage:SetAttribute("PlaceId",    game.PlaceId)
+end
 
 -- === INTERNAL HELPERS ========================================================
 
@@ -94,9 +102,11 @@ function WorldRouterService:KnitStart()
     local info = getWorldInfoForPlace(game.PlaceId)
     self.WorldInfo = info
 
+    -- Re-publish (idempotent) and load world into Workspace
     publishGlobal(info)
     activateWorld(info.Index)
 
+    -- Publish to players
     for _, plr in ipairs(Players:GetPlayers()) do
         publishToPlayer(plr, info)
     end

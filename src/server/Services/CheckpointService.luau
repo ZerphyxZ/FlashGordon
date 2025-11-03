@@ -1,6 +1,6 @@
--- CheckpointService.luau
--- Server-side logic for checkpoints.
--- Works with new structure: Workspace.World_###.Checkpoints
+-- ServerScriptService/Server/Services/CheckpointService.luau
+-- Server-side logic for checkpoints (per-world aware).
+-- Works with Workspace.World_###.Checkpoints
 -- Never paints flags; only updates player data & attributes.
 
 local Players = game:GetService("Players")
@@ -36,6 +36,16 @@ local function isCheckpointName(name)
 	return name and name:lower():match("^checkpoint_l%d+_i%d+$") ~= nil
 end
 
+-- === Per-world helpers =======================================================
+local function getCurrentWorldIndex(player: Player): number
+	local idx = player and player:GetAttribute("WorldIndex")
+	if typeof(idx) ~= "number" then
+		idx = ReplicatedStorage:GetAttribute("WorldIndex")
+	end
+	if typeof(idx) ~= "number" or idx < 1 then idx = 1 end
+	return idx
+end
+
 -- === Locate current world's Checkpoints folder ==============================
 local function locateCheckpointsFolder(): Instance?
 	for _, ch in ipairs(Workspace:GetChildren()) do
@@ -61,12 +71,14 @@ local function findCheckpointPartByKey(key)
 	return nil
 end
 
--- === Data persistence =======================================================
+-- === Data persistence (per-world via PlayerDataHandler) =====================
 local function persistMarkCheckpointVisited(player, checkpointKey)
+	-- Prefer the dedicated API (which writes into the *current* world)
 	if PlayerDataHandler.MarkCheckpointVisited then
 		PlayerDataHandler:MarkCheckpointVisited(player, checkpointKey)
 		return
 	end
+	-- Legacy fallback (shouldn't be used now, but kept for safety)
 	local profile = PlayerDataHandler:GetProfile(player)
 	if profile and profile:IsActive() then
 		profile.Data.VisitedCheckpoints = profile.Data.VisitedCheckpoints or {}
@@ -78,11 +90,16 @@ end
 local function publishVisitedBlobForPlayer(player)
 	local data = PlayerDataHandler:GetData(player)
 	local csv = ""
-	if data and data.VisitedCheckpoints then
-		local keys = {}
-		for k,v in pairs(data.VisitedCheckpoints) do if v then table.insert(keys,k:lower()) end end
-		table.sort(keys)
-		csv = table.concat(keys,",")
+	if data then
+		-- Prefer per-world visited; fall back to legacy field.
+		local w = getCurrentWorldIndex(player)
+		local set = (data.VisitedCheckpointsByWorld and data.VisitedCheckpointsByWorld[w]) or data.VisitedCheckpoints
+		if set then
+			local keys = {}
+			for k,v in pairs(set) do if v then table.insert(keys, tostring(k):lower()) end end
+			table.sort(keys)
+			csv = table.concat(keys,",")
+		end
 	end
 	player:SetAttribute("VisitedCheckpointsBlob", csv)
 	local count = 0
@@ -94,9 +111,13 @@ end
 function CheckpointService.Client:GetVisitedCheckpointKeys(player)
 	local data = PlayerDataHandler:GetData(player)
 	local t = {}
-	if data and data.VisitedCheckpoints then
-		for k,v in pairs(data.VisitedCheckpoints) do
-			if v then table.insert(t,k:lower()) end
+	if data then
+		local w = getCurrentWorldIndex(player)
+		local set = (data.VisitedCheckpointsByWorld and data.VisitedCheckpointsByWorld[w]) or data.VisitedCheckpoints
+		if set then
+			for k,v in pairs(set) do
+				if v then table.insert(t, tostring(k):lower()) end
+			end
 		end
 	end
 	table.sort(t)
@@ -118,12 +139,16 @@ function CheckpointService:ConnectCheckpointPart(part)
 		sessionCheckpointFlags[player] = sessionCheckpointFlags[player] or {}
 		if sessionCheckpointFlags[player][checkpointKey] then return end
 
-		if (data.VisitedCheckpoints and data.VisitedCheckpoints[checkpointKey]) then return end
+		-- Use per-world visited if present
+		local w = getCurrentWorldIndex(player)
+		local visitedSet = (data.VisitedCheckpointsByWorld and data.VisitedCheckpointsByWorld[w]) or data.VisitedCheckpoints
+		if visitedSet and visitedSet[checkpointKey] then return end
+
 		sessionCheckpointFlags[player][checkpointKey] = true
 
 		local pos = vectorToTable(part.Position)
 		persistMarkCheckpointVisited(player, checkpointKey)
-		PlayerDataHandler:SetLastCheckpoint(player, pos)
+		PlayerDataHandler:SetLastCheckpoint(player, pos) -- per-world save + legacy mirror
 
 		player:SetAttribute("CheckpointX", pos[1])
 		player:SetAttribute("CheckpointY", pos[2])
@@ -199,7 +224,7 @@ function CheckpointService.Client:RequestRespawn(player)
 		if spawn and spawn:IsA("BasePart") then
 			local char=player.Character
 			if char and char:FindFirstChild("HumanoidRootPart") then
-				char.HumanoidRootPart.CFrame = spawn.CFrame + Vector3.new(0,3,0)
+				char.HumanoidRootPart.CFrame = spawn.CFrame + Vector3.new(3,3,0)
 				teleported=true
 			end
 		end

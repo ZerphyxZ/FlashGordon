@@ -1,5 +1,6 @@
--- ProgressBarService.luau
--- Computes per-player progress; supports Workspace.World_### structure.
+-- ServerScriptService/Server/Services/ProgressBarService.luau
+-- Computes per-player progress; supports Workspace.World_### structure
+-- and reads the *current world's* visited set (per-world aware).
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -39,14 +40,30 @@ local function countCheckpoints()
 	return total
 end
 
+local function getCurrentWorldIndex(player: Player): number
+	local idx = player and player:GetAttribute("WorldIndex")
+	if typeof(idx) ~= "number" then
+		idx = ReplicatedStorage:GetAttribute("WorldIndex")
+	end
+	if typeof(idx) ~= "number" or idx < 1 then idx = 1 end
+	return idx
+end
+
 function ProgressBarService:UpdatePlayerNow(player)
 	if not player then return end
 	local total = self.TotalCheckpoints or countCheckpoints()
 	local data = PlayerDataHandler:GetData(player)
+
+	-- Read visited ONLY for the current world (fallback to legacy)
 	local visited = 0
-	if data and data.VisitedCheckpoints then
-		for _ in pairs(data.VisitedCheckpoints) do visited += 1 end
+	if data then
+		local w = getCurrentWorldIndex(player)
+		local set = (data.VisitedCheckpointsByWorld and data.VisitedCheckpointsByWorld[w]) or data.VisitedCheckpoints
+		if set then
+			for _, v in pairs(set) do if v then visited += 1 end end
+		end
 	end
+
 	local percent = 0
 	if total > 0 then
 		percent = math.clamp(math.floor((visited / total) * 100 + 0.5), 0, 100)
@@ -57,7 +74,7 @@ function ProgressBarService:UpdatePlayerNow(player)
 end
 
 function ProgressBarService:UpdateAllNow()
-	local total = self.TotalCheckpoints or countCheckpoints()
+	local _ = self.TotalCheckpoints or countCheckpoints()
 	for _, pl in ipairs(Players:GetPlayers()) do
 		self:UpdatePlayerNow(pl)
 	end

@@ -52,8 +52,8 @@ local function captureUiRefs(): boolean
 		return false
 	end
 
-	YesPortalButton = findDescendantByNames(SurePortalFrame, { "YesPortalButton", "YesRestartProgressButton", "YesRestartButton" }) :: TextButton
-	NoPortalButton  = findDescendantByNames(SurePortalFrame, { "NoPortalButton", "NoPortalProgressButton", "NoRestartProgressButton" }) :: TextButton
+	YesPortalButton = findDescendantByNames(SurePortalFrame, { "YesPortalButton", "YesResetProgressButton", "YesResetProgressButton" }) :: TextButton
+	NoPortalButton  = findDescendantByNames(SurePortalFrame, { "NoPortalButton", "NoPortalProgressButton", "NoResetProgressButton" }) :: TextButton
 	SureCloseButton = findDescendantByNames(SurePortalFrame, { "SureCloseButton" }) :: TextButton
 	PortalText      = findDescendantByNames(SurePortalFrame, { "PortalText" }) :: TextLabel
 

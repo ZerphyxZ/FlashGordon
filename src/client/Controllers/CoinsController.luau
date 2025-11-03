@@ -136,4 +136,9 @@ function CoinsController:KnitStart()
     end
 end
 
+function CoinsController:RefreshDisplay()
+    -- Public: lets other controllers force a HUD refresh on demand
+    updateCoinsDisplay()
+end
+
 return CoinsController

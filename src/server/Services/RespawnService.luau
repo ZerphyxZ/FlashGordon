@@ -1,22 +1,35 @@
--- RespawnService.lua
--- Slightly more robust: small post-LoadCharacter wait before updating progress.
+-- ServerScriptService/Server/Services/RespawnService.luau
+-- Applies the *current world's* saved checkpoint to player attributes,
+-- then respawns (LoadCharacter) and restores state/progress.
 
-local Players = game:GetService("Players")
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 
-local PlayerDataHandler = require(game.ReplicatedStorage.Shared.Modules.PlayerDataHandler)
+local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
+local PlayerDataHandler = require(ReplicatedStorage.Shared.Modules.PlayerDataHandler)
 
 local RespawnService = Knit.CreateService {
     Name = "RespawnService";
     Client = {};
 }
 
-print("[RespawnService] Service module loaded (improved)")
+print("[RespawnService] Service module loaded (per-world aware)")
 
-local function applyProfileToPlayer(player, data)
+-- ---------- helpers ----------------------------------------------------------
+
+local function getCurrentWorldIndex(player: Player): number
+    local idx = player and player:GetAttribute("WorldIndex")
+    if typeof(idx) ~= "number" then
+        idx = ReplicatedStorage:GetAttribute("WorldIndex")
+    end
+    if typeof(idx) ~= "number" or idx < 1 then idx = 1 end
+    return idx
+end
+
+local function applyProfileToPlayer(player: Player, data: table)
     if not player or not data then return end
 
+    -- Coins/leaderstats (unchanged)
     local leaderstats = player:FindFirstChild("leaderstats")
     if not leaderstats then
         leaderstats = Instance.new("Folder")
@@ -35,19 +48,26 @@ local function applyProfileToPlayer(player, data)
     coinsVal.Value = coins
     player:SetAttribute("Coins", coins)
 
-    if data.LastCheckpoint and type(data.LastCheckpoint) == "table" and data.LastCheckpoint[1] then
-        local cx, cy, cz = data.LastCheckpoint[1], data.LastCheckpoint[2], data.LastCheckpoint[3]
-        player:SetAttribute("CheckpointX", cx)
-        player:SetAttribute("CheckpointY", cy)
-        player:SetAttribute("CheckpointZ", cz)
+    -- Per-world checkpoint → attributes
+    local w  = getCurrentWorldIndex(player)
+    data.LastCheckpointByWorld = data.LastCheckpointByWorld or {}
+    local cp = data.LastCheckpointByWorld[w]
+
+    if cp and type(cp) == "table" and cp[1] ~= nil then
+        player:SetAttribute("CheckpointX", cp[1])
+        player:SetAttribute("CheckpointY", cp[2])
+        player:SetAttribute("CheckpointZ", cp[3])
+        print(("[RespawnService] Using saved checkpoint for %s in world %d → (%.2f, %.2f, %.2f)")
+            :format(player.Name, w, cp[1], cp[2], cp[3]))
     else
         player:SetAttribute("CheckpointX", nil)
         player:SetAttribute("CheckpointY", nil)
         player:SetAttribute("CheckpointZ", nil)
+        print(("[RespawnService] No saved checkpoint for %s in world %d"):format(player.Name, w))
     end
 end
 
-local function waitForProfileData(player, timeout)
+local function waitForProfileData(player: Player, timeout: number?)
     timeout = timeout or 3
     local elapsed  = 0
     local interval = 0.15
@@ -60,7 +80,9 @@ local function waitForProfileData(player, timeout)
     return nil
 end
 
-function RespawnService.Client:Respawn(player)
+-- ---------- client RPC -------------------------------------------------------
+
+function RespawnService.Client:Respawn(player: Player)
     if not (player and player:IsA("Player")) then
         warn("[RespawnService] Respawn called without a valid player")
         return false
@@ -76,14 +98,14 @@ function RespawnService.Client:Respawn(player)
 
     if pdata then
         applyProfileToPlayer(player, pdata)
-        print("[RespawnService] Applied profile values BEFORE LoadCharacter for", player.Name, "Coins:", tostring(pdata.Coins))
+        print("[RespawnService] Applied profile BEFORE LoadCharacter for", player.Name, "Coins:", tostring(pdata.Coins))
     else
         warn("[RespawnService] Could not find profile data to apply before respawn for", player.Name)
     end
 
     player:LoadCharacter()
 
-    -- brief stabilization
+    -- small settle, then clear death flag and update progress for this world
     task.delay(0.1, function()
         local deathService = Knit.GetService("DeathService")
         if deathService and deathService.SetAlive then

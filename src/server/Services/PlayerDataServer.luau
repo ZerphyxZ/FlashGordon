@@ -1,28 +1,11 @@
---[[
-    PlayerDataServer.luau
-
-    A Knit service responsible for managing player data using the
-    PlayerDataHandler module and handling checkpoint logic.  This
-    service loads and releases profiles on player join/leave, creates
-    a `leaderstats` folder with a `Coins` IntValue for each player to
-    replicate the coin amount to the client, exposes methods to clients
-    for retrieving their data, and ensures players spawn at their last
-    checkpoint when rejoining.
-
-    It also connects to checkpoint parts in the workspace.  When a
-    player's character touches a checkpoint part (a BasePart named
-    "checkpoint" in the `workspace.Checkpoints` folder), the
-    service awards the player 5 coins and saves the checkpoint
-    position.  Checkpoints are only rewarded once per session to
-    prevent exploiting the reward system.
-
-    Place this script in `ServerScriptService -> Server -> Services`.
-]]
+-- ServerScriptService/Server/Services/PlayerDataServer.luau
+-- Reads/writes per-world progress; mirrors current world to legacy fields,
+-- and sets player attributes from the current world’s saved checkpoint.
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Knit = require(game:GetService("ReplicatedStorage").Packages:WaitForChild("Knit"))
--- Load the PlayerDataHandler module from the shared modules folder
+local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 local PlayerDataHandler = require(game.ReplicatedStorage.Shared.Modules.PlayerDataHandler)
 
 local PlayerDataServer = Knit.CreateService {
@@ -30,117 +13,152 @@ local PlayerDataServer = Knit.CreateService {
     Client = {};
 }
 
--- Emit a debug message when the service module is first required.
 print("[PlayerDataServer] Service module loaded")
 
--- When the service starts, set up player listeners and load existing profiles
+-- === helpers ================================================================
+
+local function getCurrentWorldIndex(player: Player): number
+    local idx = player:GetAttribute("WorldIndex")
+    if typeof(idx) ~= "number" then
+        idx = ReplicatedStorage:GetAttribute("WorldIndex")
+    end
+    if typeof(idx) ~= "number" then idx = 1 end
+    if idx < 1 then idx = 1 end
+    return idx
+end
+
+local function applyCheckpointAttributesFromWorld(player: Player)
+    local data = PlayerDataHandler:GetData(player)
+    if not data then return end
+
+    -- Ensure containers + mirror legacy view to *current* world
+    PlayerDataHandler:SyncFlatToWorldSnapshot(player)
+
+    local w = getCurrentWorldIndex(player)
+    data.LastCheckpointByWorld = data.LastCheckpointByWorld or {}
+    local cp = data.LastCheckpointByWorld[w]
+
+    if cp and type(cp) == "table" and cp[1] then
+        player:SetAttribute("CheckpointX", cp[1])
+        player:SetAttribute("CheckpointY", cp[2])
+        player:SetAttribute("CheckpointZ", cp[3])
+    else
+        player:SetAttribute("CheckpointX", nil)
+        player:SetAttribute("CheckpointY", nil)
+        player:SetAttribute("CheckpointZ", nil)
+    end
+end
+
+-- Only mirror the *current* world into the flat (legacy) snapshot so
+-- existing systems see the correct per-place view. Do NOT migrate flats
+-- back into a different world's slot on join (prevents cross-place bleed).
+local function mirrorCurrentWorldToLegacy(player: Player)
+    local data = PlayerDataHandler:GetData(player)
+    if not data then return end
+    PlayerDataHandler:SyncFlatToWorldSnapshot(player)
+end
+
+-- Teleport helper (used on CharacterAdded to spawn at last checkpoint for world)
+local function teleportToLastCheckpointIfAny(player: Player, character: Model)
+    local hrp = character:WaitForChild("HumanoidRootPart", 5)
+    if not hrp then return end
+
+    applyCheckpointAttributesFromWorld(player)
+
+    local x = player:GetAttribute("CheckpointX")
+    local y = player:GetAttribute("CheckpointY")
+    local z = player:GetAttribute("CheckpointZ")
+    if typeof(x) == "number" and typeof(y) == "number" and typeof(z) == "number" then
+        hrp.CFrame = CFrame.new(x, y, z)
+        print(string.format("[PlayerDataServer] Teleported %s to World %d checkpoint at (%.2f, %.2f, %.2f)",
+            player.Name, getCurrentWorldIndex(player), x, y, z))
+    else
+        print(string.format("[PlayerDataServer] No saved checkpoint for %s in World %d",
+            player.Name, getCurrentWorldIndex(player)))
+    end
+end
+
+-- === Knit lifecycle =========================================================
+
 function PlayerDataServer:KnitStart()
-    -- Debug: indicate that the service is starting up
     print("[PlayerDataServer] KnitStart called, initializing service and loading existing players")
-    -- Load profiles for players already in server before Knit started
     for _, player in ipairs(Players:GetPlayers()) do
         task.spawn(function()
             self:PlayerAdded(player)
         end)
     end
 
-    -- Set up listeners for players joining/leaving
     Players.PlayerAdded:Connect(function(player)
-        -- Debug: player joined
         print("[PlayerDataServer] PlayerAdded event for", player.Name)
         self:PlayerAdded(player)
     end)
     Players.PlayerRemoving:Connect(function(player)
-        -- Debug: player leaving
         print("[PlayerDataServer] PlayerRemoving event for", player.Name)
         self:PlayerRemoving(player)
     end)
 end
 
--- This service no longer manages checkpoint touches; see CheckpointService
-function PlayerDataServer:ConnectCheckpoint() end
+function PlayerDataServer:ConnectCheckpoint() end -- (legacy no-op)
 
--- Called when a player joins.  Loads their data and sets up spawn behavior
-function PlayerDataServer:PlayerAdded(player)
-    -- Debug: notify that we're loading data for this player
+function PlayerDataServer:PlayerAdded(player: Player)
     print("[PlayerDataServer] Loading data for", player.Name)
-    -- Load or create the player's profile
     PlayerDataHandler:LoadProfile(player)
 
-    -- After loading, retrieve the player's data and set replicated attributes
     local data = PlayerDataHandler:GetData(player)
     if data then
-        -- Create leaderstats folder and Coins IntValue for leaderboard replication
+        -- leaderstats + coins attribute (unchanged)
         local leaderstats = Instance.new("Folder")
         leaderstats.Name = "leaderstats"
         leaderstats.Parent = player
+
         local coinsVal = Instance.new("IntValue")
         coinsVal.Name = "Coins"
         coinsVal.Value = data.Coins or 0
         coinsVal.Parent = leaderstats
 
-        -- Store coin balance in a replicated attribute
         player:SetAttribute("Coins", data.Coins or 0)
-        -- Store last checkpoint coordinates in replicated attributes if present
-        if data.LastCheckpoint then
-            local cx, cy, cz = data.LastCheckpoint[1], data.LastCheckpoint[2], data.LastCheckpoint[3]
-            player:SetAttribute("CheckpointX", cx)
-            player:SetAttribute("CheckpointY", cy)
-            player:SetAttribute("CheckpointZ", cz)
-            -- If the character has already spawned by the time the profile is
-            -- loaded, teleport it immediately to the saved checkpoint.  This
-            -- ensures that players who join quickly after the server starts
-            -- are placed at their last checkpoint even if CharacterAdded
-            -- fired before this script connected the event.
-            local char = player.Character
-            if char then
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    hrp.CFrame = CFrame.new(cx, cy, cz)
-                end
-            end
+
+        -- Mirror ONLY current world into legacy fields & set checkpoint attrs
+        mirrorCurrentWorldToLegacy(player)
+        applyCheckpointAttributesFromWorld(player)
+
+        -- If character already exists, place it now
+        local char = player.Character
+        if char then
+            teleportToLastCheckpointIfAny(player, char)
         end
     end
 
-    -- Listen for character spawns to teleport to last checkpoint
+    -- React to character spawns using per-world data only
     player.CharacterAdded:Connect(function(character)
         print("[PlayerDataServer] CharacterAdded for", player.Name)
-        -- Attempt to teleport the player to their saved checkpoint using attributes
-        local cx = player:GetAttribute("CheckpointX")
-        local cy = player:GetAttribute("CheckpointY")
-        local cz = player:GetAttribute("CheckpointZ")
-        if cx and cy and cz then
-            print("[PlayerDataServer] Teleporting", player.Name, "to last checkpoint at", cx, cy, cz)
-            local hrp = character:WaitForChild("HumanoidRootPart", 5)
-            if hrp then
-                hrp.CFrame = CFrame.new(cx, cy, cz)
-            end
-        else
-            print("[PlayerDataServer] No checkpoint attributes found for", player.Name)
-        end
+        -- Keep legacy view mirrored to the *current* world only
+        mirrorCurrentWorldToLegacy(player)
+        teleportToLastCheckpointIfAny(player, character)
+    end)
+
+    -- If the current WorldIndex changes (rare on server; mostly on new place),
+    -- keep legacy view mirrored so other systems see the right set.
+    player:GetAttributeChangedSignal("WorldIndex"):Connect(function()
+        print("[PlayerDataServer] WorldIndex changed for", player.Name, "→", tostring(player:GetAttribute("WorldIndex")))
+        mirrorCurrentWorldToLegacy(player)
+        applyCheckpointAttributesFromWorld(player)
     end)
 end
 
--- Called when a player leaves.  Releases their profile and cleans up
-function PlayerDataServer:PlayerRemoving(player)
-    -- Debug: releasing player's data
+function PlayerDataServer:PlayerRemoving(player: Player)
     print("[PlayerDataServer] Releasing data for", player.Name)
-    -- Save playtime and release the profile
     PlayerDataHandler:ReleaseProfile(player)
 end
 
--- Client‑accessible method to get a copy of the player's data.  Do not
--- expose the actual Profile object to the client.
-function PlayerDataServer.Client:GetPlayerData(player)
-    -- Debug: client is requesting their data
+function PlayerDataServer.Client:GetPlayerData(player: Player)
     print("[PlayerDataServer] Client.GetPlayerData called by", player.Name)
     local data = PlayerDataHandler:GetData(player)
     if data then
-        -- Return a shallow copy to avoid exposing internal references
         return {
             Coins = data.Coins,
             Playtime = data.Playtime,
-            LastCheckpoint = data.LastCheckpoint and {data.LastCheckpoint[1], data.LastCheckpoint[2], data.LastCheckpoint[3]} or nil,
+            LastCheckpoint = data.LastCheckpoint and { data.LastCheckpoint[1], data.LastCheckpoint[2], data.LastCheckpoint[3] } or nil,
         }
     end
     return nil

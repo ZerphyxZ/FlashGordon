@@ -1,208 +1,170 @@
--- ResetProgressController.luau (CLIENT)
--- Robust controller for Reset UI confirmation flow (RestartFrame → SureRestartFrame)
+-- StarterPlayer/StarterPlayerScripts/Client/Controllers/ResetProgressController.luau
+-- Client controller for PLACE-ONLY reset UI.
+-- Listens to both ResetProgressUI (new) and ResetUI (legacy).
+-- Shows ResetProgressFrame; confirmation in SureResetProgressFrame.
 
-local Players = game:GetService("Players")
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
+local Knit              = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 
-local ResetProgressController = Knit.CreateController { Name = "ResetProgressController" }
+local Controller = Knit.CreateController { Name = "ResetProgressController" }
 
 local player = Players.LocalPlayer
 
--- Dynamic UI refs
-local RestartFrame, RestartButtonFrame, RestartProgressButton, CloseButton
-local SureRestartFrame, SureCloseButton, YesRestartProgressButton, NoRestartProgressButton
+-- UI refs
+local FramePrimary  : Frame?      -- ResetProgressFrame
+local FrameConfirm  : Frame?      -- SureResetProgressFrame
+local BtnPrimary    : TextButton? -- ResetProgressButton
+local BtnClosePrim  : TextButton?
+local BtnYes        : TextButton?
+local BtnNo         : TextButton?
+local BtnCloseConf  : TextButton?
 
--- When server flips ResetUI=true while GUI isn't bound yet, we cache this to open ASAP
-local pendingShow = false
-local boundOk = false
+local _bound = false
+local _bindConn
 
--- ==== UI binding ====
+-- ---------- helpers ----------------------------------------------------------
 
-local function tryGetMainGui(): Instance?
-	local pg = player:FindFirstChild("PlayerGui")
-	if not pg then return nil end
-	return pg:FindFirstChild("MainGui")
+local function findDesc(root: Instance?, names: {string}): Instance?
+	if not root then return nil end
+	for _, n in ipairs(names) do
+		local inst = root:FindFirstChild(n, true)
+		if inst then return inst end
+	end
+	return nil
 end
 
-local function bindGui()
-	local mainGui = tryGetMainGui()
-	if not mainGui then
-		boundOk = false
+local function bindUi(): boolean
+	local pg = player:FindFirstChild("PlayerGui")
+	if not pg then print("[ResetProgressController] MainGui not ready"); return false end
+	local main = pg:FindFirstChild("MainGui")
+	if not main then print("[ResetProgressController] MainGui not ready"); return false end
+
+	FramePrimary = (findDesc(main, { "ResetProgressFrame", "RestartFrame" })) :: Frame
+	FrameConfirm = (findDesc(main, { "SureResetProgressFrame", "SureRestartFrame" })) :: Frame
+
+	if not (FramePrimary and FrameConfirm) then
+		print("[ResetProgressController] MainGui not ready")
 		return false
 	end
 
-	RestartFrame = mainGui:FindFirstChild("RestartFrame")
-	SureRestartFrame = mainGui:FindFirstChild("SureRestartFrame")
+	BtnPrimary   = (findDesc(FramePrimary, { "ResetProgressButton", "RestartProgressButton" })) :: TextButton
+	BtnClosePrim = (findDesc(FramePrimary, { "CloseButton", "CloseRestartButton" })) :: TextButton
+	BtnYes       = (findDesc(FrameConfirm, { "YesResetProgressButton", "YesRestartProgressButton" })) :: TextButton
+	BtnNo        = (findDesc(FrameConfirm, { "NoResetProgressButton", "NoRestartProgressButton" })) :: TextButton
+	BtnCloseConf = (findDesc(FrameConfirm, { "SureCloseButton", "CloseButton" })) :: TextButton
 
-	if not (RestartFrame and SureRestartFrame) then
-		boundOk = false
-		return false
-	end
+	FramePrimary.Visible = false
+	FrameConfirm.Visible = false
 
-	RestartButtonFrame      = RestartFrame:FindFirstChild("RestartButtonFrame")
-	RestartProgressButton   = RestartButtonFrame and RestartButtonFrame:FindFirstChild("RestartProgressButton")
-	local closeFrame        = RestartFrame:FindFirstChild("CloseButtonFrame")
-	CloseButton             = closeFrame and closeFrame:FindFirstChild("CloseButton")
-
-	local sureCloseFrame    = SureRestartFrame:FindFirstChild("SureCloseButtonFrame")
-	SureCloseButton         = sureCloseFrame and sureCloseFrame:FindFirstChild("SureCloseButton")
-	local yesFrame          = SureRestartFrame:FindFirstChild("YesRestartButtonFrame")
-	YesRestartProgressButton= yesFrame and yesFrame:FindFirstChild("YesRestartProgressButton")
-	local noFrame           = SureRestartFrame:FindFirstChild("NoRestartButtonFrame")
-	NoRestartProgressButton = noFrame and noFrame:FindFirstChild("NoRestartProgressButton")
-
-	-- default hidden
-	RestartFrame.Visible = false
-	SureRestartFrame.Visible = false
-
-	-- Buttons
-	if CloseButton then
-		CloseButton.MouseButton1Click:Connect(function()
-			RestartFrame.Visible = false
-			SureRestartFrame.Visible = false
+	if BtnPrimary then
+		BtnPrimary.MouseButton1Click:Connect(function()
+			print("[ResetProgressController] Primary clicked → open confirm")
+			if FramePrimary then FramePrimary.Visible = false end
+			if FrameConfirm then FrameConfirm.Visible = true end
 		end)
 	end
-
-	if RestartProgressButton then
-		RestartProgressButton.MouseButton1Click:Connect(function()
-			if RestartFrame and SureRestartFrame then
-				RestartFrame.Visible = false
-				SureRestartFrame.Visible = true
+	if BtnClosePrim then
+		BtnClosePrim.MouseButton1Click:Connect(function()
+			if FramePrimary then FramePrimary.Visible = false end
+			if FrameConfirm then FrameConfirm.Visible = false end
+			player:SetAttribute("ResetProgressUI", false)
+			player:SetAttribute("ResetUI", false)
+		end)
+	end
+	if BtnNo then
+		BtnNo.MouseButton1Click:Connect(function()
+			print("[ResetProgressController] NO clicked")
+			if FrameConfirm then FrameConfirm.Visible = false end
+			if FramePrimary then FramePrimary.Visible = false end
+			player:SetAttribute("ResetProgressUI", false)
+			player:SetAttribute("ResetUI", false)
+		end)
+	end
+	if BtnCloseConf then
+		BtnCloseConf.MouseButton1Click:Connect(function()
+			if FrameConfirm then FrameConfirm.Visible = false end
+			if FramePrimary then FramePrimary.Visible = false end
+			player:SetAttribute("ResetProgressUI", false)
+			player:SetAttribute("ResetUI", false)
+		end)
+	end
+	if BtnYes then
+		BtnYes.MouseButton1Click:Connect(function()
+			print("[ResetProgressController] YES clicked → ConfirmPlaceReset()")
+			local svc = Knit.GetService("ResetProgressService")
+			if not svc then
+				warn("[ResetProgressController] ResetProgressService missing")
+				return
 			end
-		end)
-	end
-
-	if SureCloseButton then
-		SureCloseButton.MouseButton1Click:Connect(function()
-			RestartFrame.Visible = false
-			SureRestartFrame.Visible = false
-		end)
-	end
-
-	if NoRestartProgressButton then
-		NoRestartProgressButton.MouseButton1Click:Connect(function()
-			RestartFrame.Visible = false
-			SureRestartFrame.Visible = false
-		end)
-	end
-
-	if YesRestartProgressButton then
-		YesRestartProgressButton.MouseButton1Click:Connect(function()
-			YesRestartProgressButton.Active = false
-			YesRestartProgressButton.AutoButtonColor = false
-
-			local resetService = Knit.GetService("ResetProgressService")
-			if resetService then
-				local ok = resetService:RequestReset()
-				if ok then
-					print("[ResetProgressController] Reset requested.")
-				else
-					warn("[ResetProgressController] Reset request failed.")
-				end
+			if svc.ConfirmPlaceReset then
+				local r = svc:ConfirmPlaceReset()
+				print("[ResetProgressController] ConfirmPlaceReset returned:", r)
+			elseif svc.RequestReset then
+				local r = svc:RequestReset()
+				print("[ResetProgressController] RequestReset returned:", r)
 			else
-				warn("[ResetProgressController] ResetProgressService missing.")
+				warn("[ResetProgressController] No confirm/reset method on service")
 			end
-
-			task.delay(3, function()
-				if YesRestartProgressButton then
-					YesRestartProgressButton.Active = true
-					YesRestartProgressButton.AutoButtonColor = true
-				end
-			end)
 		end)
 	end
 
-	boundOk = true
-	print("[ResetProgressController] Bound Restart + SureRestart UI successfully.")
-
-	-- If server already told us to show, open now
-	if pendingShow then
-		pendingShow = false
-		RestartFrame.Visible = true
-		SureRestartFrame.Visible = false
-	end
-
+	_bound = true
+	print("[ResetProgressController] UI bound successfully")
 	return true
 end
 
--- Try repeatedly for a short while (useful on slow streams)
-local function ensureBoundShortBurst()
-	if bindGui() then return end
-	for _ = 1, 10 do
-		task.wait(0.15)
-		if bindGui() then return end
-	end
-end
-
--- Watch for MainGui recreation
-local function watchGuiRecreation()
-	local pg = player:FindFirstChild("PlayerGui")
-	local function attach(guiRoot)
-		guiRoot.ChildAdded:Connect(function(ch)
-			if ch.Name == "MainGui" then
-				task.delay(0.05, ensureBoundShortBurst)
-			end
-		end)
-	end
-	if pg then
-		attach(pg)
-	else
-		task.spawn(function()
-			local g = player:WaitForChild("PlayerGui")
-			attach(g)
-		end)
-	end
-end
-
--- ==== Attribute reactions ====
-
-local function onResetUIChanged()
-	local val = player:GetAttribute("ResetUI")
-	if val == true then
-		if boundOk and RestartFrame and SureRestartFrame then
-			RestartFrame.Visible = true
-			SureRestartFrame.Visible = false
-		else
-			pendingShow = true
-			ensureBoundShortBurst()
+local function watchGui()
+	if _bindConn then _bindConn:Disconnect() end
+	local pg = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
+	_bindConn = pg.ChildAdded:Connect(function(ch)
+		if ch.Name == "MainGui" then
+			task.delay(0.05, bindUi)
 		end
-	else
-		if RestartFrame then RestartFrame.Visible = false end
-		if SureRestartFrame then SureRestartFrame.Visible = false end
+	end)
+end
+
+-- ---------- attribute reactions ---------------------------------------------
+
+local function applyVisibility(open: boolean)
+	if not _bound then
+		if not bindUi() then return end
+	end
+	if FramePrimary and FrameConfirm then
+		FramePrimary.Visible = open
+		FrameConfirm.Visible = false
 	end
 end
 
-local function onResetResultChanged()
-	local result = player:GetAttribute("ResetResult")
-	local msg = player:GetAttribute("ResetResultMsg")
-	if result == "Success" then
-		if RestartFrame then RestartFrame.Visible = false end
-		if SureRestartFrame then SureRestartFrame.Visible = false end
-		print("[ResetProgressController] Reset succeeded:", msg)
-	elseif result == "Failure" then
-		if RestartFrame then RestartFrame.Visible = false end
-		if SureRestartFrame then SureRestartFrame.Visible = false end
-		warn("[ResetProgressController] Reset failed:", msg)
+local function onNewAttr()
+	local v = player:GetAttribute("ResetProgressUI")
+	print("[ResetProgressController] ResetProgressUI changed →", v)
+	applyVisibility(v == true)
+end
+
+local function onLegacyAttr()
+	local v = player:GetAttribute("ResetUI")
+	print("[ResetProgressController] ResetUI (legacy) changed →", v)
+	applyVisibility(v == true)
+end
+
+-- ---------- Knit lifecycle ---------------------------------------------------
+
+function Controller:KnitStart()
+	print("[ResetProgressController] KnitStart (client/place-only)")
+	bindUi()
+	watchGui()
+
+	-- Listen to both names, so either server spelling opens the UI
+	player:GetAttributeChangedSignal("ResetProgressUI"):Connect(onNewAttr)
+	player:GetAttributeChangedSignal("ResetUI"):Connect(onLegacyAttr)
+
+	-- If server already set before we bound, honor it
+	if player:GetAttribute("ResetProgressUI") == true then
+		onNewAttr()
+	elseif player:GetAttribute("ResetUI") == true then
+		onLegacyAttr()
 	end
 end
 
--- ==== Knit lifecycle ====
-
-function ResetProgressController:KnitStart()
-	print("[ResetProgressController] KnitStart (client)")
-
-	ensureBoundShortBurst()
-	watchGuiRecreation()
-
-	player:GetAttributeChangedSignal("ResetUI"):Connect(onResetUIChanged)
-	player:GetAttributeChangedSignal("ResetResult"):Connect(onResetResultChanged)
-
-	-- Handle the case where ResetUI was already set before we bound.
-	if player:GetAttribute("ResetUI") == true then
-		pendingShow = true
-		onResetUIChanged() 
-	end
-end
-
-return ResetProgressController
+return Controller
