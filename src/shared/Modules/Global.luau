@@ -1,23 +1,17 @@
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local ContextActionService = game:GetService("ContextActionService")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
-local PackagesFolder = ReplicatedStorage:WaitForChild("Packages")
-local SharedFolder = ReplicatedStorage:WaitForChild("Shared")
-local SharedModules = SharedFolder:WaitForChild("Modules")
-local Knit = require(PackagesFolder:WaitForChild("Knit"))
-
-return {
-    Players = Players,
-    ReplicatedStorage = ReplicatedStorage,
-    Workspace = Workspace,
-    Knit = Knit,
-    TweenService = TweenService,
-    ContextActionService = ContextActionService,
-    RunService = RunService,
-    UserInputService = UserInputService,
+return{
+	ReplicatedStorage = ReplicatedStorage,
+	Players = Players,
+	TweenService = TweenService,
+	UserInputService = UserInputService,
+	RunService = RunService,
+	Knit = require(ReplicatedStorage.Packages.Knit),
+	Workspace = Workspace
 }
+
