@@ -323,4 +323,23 @@ function PlayerDataHandler:SetResetBonusStamp(player: Player, unix: number)
     pcall(function() prof:Save() end)
 end
 
+-- === Hoverboard storage ================================================
+
+function PlayerDataHandler:GetEquippedHoverboard(player: Player): string
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		return profile.Data.HoverboardName or "Default"
+	end
+	return "Default"
+end
+
+function PlayerDataHandler:SetEquippedHoverboard(player: Player, boardName: string)
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		profile.Data.HoverboardName = boardName
+		pcall(function() profile:Save() end)
+		print("[PlayerDataHandler] Hoverboard saved for", player.Name, "→", boardName)
+	end
+end
+
 return PlayerDataHandler

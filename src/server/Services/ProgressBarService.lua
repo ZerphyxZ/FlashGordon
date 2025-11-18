@@ -35,12 +35,12 @@ local function countCheckpoints()
 	if not folder then return 0 end
 	local total = 0
 	for _, d in ipairs(folder:GetDescendants()) do
-		if isCheckpointPart(d) then total += 1 end
+		if isCheckpointPart(d) then total = total + 1 end
 	end
 	return total
 end
 
-local function getCurrentWorldIndex(player: Player): number
+local function getCurrentWorldIndex(player)
 	local idx = player and player:GetAttribute("WorldIndex")
 	if typeof(idx) ~= "number" then
 		idx = ReplicatedStorage:GetAttribute("WorldIndex")
@@ -60,7 +60,7 @@ function ProgressBarService:UpdatePlayerNow(player)
 		local w = getCurrentWorldIndex(player)
 		local set = (data.VisitedCheckpointsByWorld and data.VisitedCheckpointsByWorld[w]) or data.VisitedCheckpoints
 		if set then
-			for _, v in pairs(set) do if v then visited += 1 end end
+			for _, v in pairs(set) do if v then visited = visited + 1 end end
 		end
 	end
 

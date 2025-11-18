@@ -46,10 +46,12 @@ function CollisionManager.DetectWallCollision(humanoidRootPart, character, hover
 end
 
 function CollisionManager.HandleWallCollision(humanoidRootPart, wallNormal, wallDistance, moveDir, State, bodyVelocity, bodyGyro, currentSpeed, MOVEMENT, dt)
-    local stopDistance = Constants.Collision.STOP_DISTANCE or 3
+	local stopDistance = Constants.Collision.STOP_DISTANCE or 3
+	local slowDownDistance = Constants.Collision.SLOW_DOWN_DISTANCE or 10
+	local slideThreshold = Constants.Collision.SLIDE_START_DISTANCE or 4
 
-	-- Reset if no nearby wall
-	if not wallNormal or wallDistance > Constants.Collision.SLOW_DOWN_DISTANCE then
+	-- Reset if far from wall
+	if not wallNormal or wallDistance > slowDownDistance then
 		State.isCollidingWithWall = false
 		State.collisionNormal = Vector3.zero
 		State.collisionRecoveryTimer = 0
@@ -57,179 +59,87 @@ function CollisionManager.HandleWallCollision(humanoidRootPart, wallNormal, wall
 		return
 	end
 
-	-- Check if player is pressing into the wall
+	-- Check if moving toward wall
 	local isPressingIntoWall = false
 	if moveDir and moveDir.Magnitude > 0 then
 		local moveDirection = moveDir.Unit
 		local dot = moveDirection:Dot(wallNormal)
-		isPressingIntoWall = dot < -0.35 -- means pressing toward wall
+		isPressingIntoWall = dot < -0.35 -- facing into wall
 	end
 
+	-- Maintain state
 	State.isCollidingWithWall = wallDistance < Constants.Collision.CLAMP_DISTANCE
 	State.collisionNormal = wallNormal
-	State.collisionRecoveryTimer = State.collisionRecoveryTimer + dt
+	State.collisionRecoveryTimer += dt
 
-	if isPressingIntoWall and wallDistance <= stopDistance then
-		if currentSpeed > 20 then
-			-- SLIDE along wall (sideways at 90°)
-			State.inputBlocked = false -- don't freeze input
+	-- Compute wall tangent (right-hand rule)
+	local worldUp = Vector3.new(0, 1, 0)
+	local tangent = wallNormal:Cross(worldUp)
+	if tangent.Magnitude < 1e-3 then
+		tangent = wallNormal:Cross(Vector3.new(1, 0, 0))
+	end
+	tangent = tangent.Unit
 
-			local wallTangent = wallNormal:Cross(Vector3.new(0, 1, 0))
-			if wallTangent.Magnitude < 0.001 then
-				wallTangent = Vector3.new(0, 0, 0)
-			else
-				wallTangent = wallTangent.Unit
-			end
+	-- Pick slide direction: whichever is closer to current moveDir
+	local tangentLeft = tangent
+	local tangentRight = -tangent
+	local leftDot = (moveDir or Vector3.zero):Dot(tangentLeft)
+	local rightDot = (moveDir or Vector3.zero):Dot(tangentRight)
+	local slideDir = (leftDot > rightDot) and tangentLeft or tangentRight
 
-			-- Smoothly redirect velocity to slide sideways along wall
+	-- === PHASE 1: Rotate smoothly toward slide direction ===
+	if bodyGyro then
+		local currentCF = humanoidRootPart.CFrame
+		local targetCF = CFrame.lookAt(
+			humanoidRootPart.Position,
+			humanoidRootPart.Position + slideDir,
+			worldUp
+		)
+		local rotSpeed = 0.5 -- smooth rotation speed
+		local rotT = 1 - math.exp(-rotSpeed * dt)
+		bodyGyro.CFrame = currentCF:Lerp(targetCF, rotT)
+	end
+
+	-- === PHASE 2: Movement handling ===
+	if isPressingIntoWall then
+		if wallDistance <= slideThreshold then
+			-- Begin sliding naturally along wall
+			State.inputBlocked = false
+
 			if bodyVelocity then
 				local currentVel = humanoidRootPart.AssemblyLinearVelocity
-				local slideVelocity = wallTangent * currentSpeed
-				local velT = math.clamp(dt * 8, 0, 1)
-				local newVel = Vector3.new(
-					currentVel.X, currentVel.Y, currentVel.Z
-				):Lerp(Vector3.new(slideVelocity.X, currentVel.Y, slideVelocity.Z), velT)
-				bodyVelocity.Velocity = newVel
-			end
+				local targetVel = slideDir * math.clamp(currentSpeed, 30, MOVEMENT.MAX_SPEED)
+				targetVel = Vector3.new(targetVel.X, currentVel.Y, targetVel.Z)
 
-			-- Smoothly rotate player to face the slide direction
-			if bodyGyro then
-				local targetCFrame = CFrame.lookAt(
-					humanoidRootPart.Position,
-					humanoidRootPart.Position + wallTangent,
-					Vector3.new(0, 1, 0)
-				)
-				local currentCF = humanoidRootPart.CFrame
-				local rotT = math.clamp(dt * 6, 0, 1)
-				bodyGyro.CFrame = currentCF:Lerp(targetCFrame, rotT)
+				local velSmooth = 1 - math.exp(-4 * dt)
+				bodyVelocity.Velocity = currentVel:Lerp(targetVel, velSmooth)
 			end
-
-			return
-		else
-			-- speed <= 20 → STOP movement normally
+		elseif wallDistance <= stopDistance then
+			-- Too close — stop moving forward but allow slow sideways drift
 			State.inputBlocked = true
 
 			if bodyVelocity then
 				local curVel = humanoidRootPart.AssemblyLinearVelocity
-				local tangential = wallNormal:Cross(Vector3.new(0, 1, 0))
-				if tangential.Magnitude < 1e-3 then tangential = Vector3.new(0, 0, 0) end
-
-				local projected = curVel:Dot(tangential) * tangential
-				local targetVel = Vector3.new(projected.X, curVel.Y, projected.Z)
-
-				local velT = math.clamp(dt * 10, 0, 1)
-				bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(targetVel, velT)
+				local sideVel = slideDir * math.min(currentSpeed * 0.3, 8)
+				local targetVel = Vector3.new(sideVel.X, curVel.Y, sideVel.Z)
+				local velT = 1 - math.exp(-5 * dt)
+				bodyVelocity.Velocity = curVel:Lerp(targetVel, velT)
 			end
-
-			-- Rotate slightly along wall to avoid jitter
-			local wallTangent = wallNormal:Cross(Vector3.new(0, 1, 0))
-			if wallTangent.Magnitude > 0.001 then
-				local targetCFrame = CFrame.lookAt(
-					humanoidRootPart.Position,
-					humanoidRootPart.Position + wallTangent.Unit,
-					Vector3.new(0, 1, 0)
-				)
-				local currentCF = humanoidRootPart.CFrame
-				local rotT = math.clamp(dt * 8, 0, 1)
-				local newRot = currentCF:Lerp(targetCFrame, rotT)
-				bodyGyro.CFrame = newRot
+		else
+			-- Gently slow down when nearing wall
+			if bodyVelocity then
+				local curVel = humanoidRootPart.AssemblyLinearVelocity
+				local slowFactor = math.clamp((wallDistance - stopDistance) / (slowDownDistance - stopDistance), 0, 1)
+				local newVel = curVel * (0.8 + 0.2 * slowFactor)
+				local velT = 1 - math.exp(-2 * dt)
+				bodyVelocity.Velocity = curVel:Lerp(newVel, velT)
 			end
-
-			return
+			State.inputBlocked = false
 		end
+	else
+		-- Not pressing into wall → normal movement resumes
+		State.inputBlocked = false
 	end
-
-	State.inputBlocked = false
-
-	-- Slight smoothing when approaching a wall
-	if bodyVelocity and isPressingIntoWall then
-		local normalizedDist = math.clamp(
-			(wallDistance - stopDistance) / (Constants.Collision.SLOW_DOWN_DISTANCE - stopDistance),
-			0, 1
-		)
-		local smoothFactor = 1 - normalizedDist
-		local curVel = humanoidRootPart.AssemblyLinearVelocity
-		local velT = math.clamp(dt * 8, 0, 1)
-		local horiz = Vector3.new(curVel.X, 0, curVel.Z)
-		local newHoriz = horiz:Lerp(horiz * (1 - smoothFactor * 0.15), velT)
-		bodyVelocity.Velocity = Vector3.new(newHoriz.X, curVel.Y, newHoriz.Z)
-	end
-
-
-
-
-    -- local stopDistance = Constants.COLLISION.STOP_DISTANCE or 3
-
-	-- if not wallNormal or wallDistance > Constants.COLLISION.SLOW_DOWN_DISTANCE then
-	-- 	State.isCollidingWithWall = false
-	-- 	State.collisionNormal = Vector3.zero
-	-- 	State.collisionRecoveryTimer = 0
-	-- 	State.inputBlocked = false
-	-- 	return
-	-- end
-
-	-- -- Detect if player is pressing movement keys toward wall
-	-- local isPressingIntoWall = false
-	-- if moveDir and moveDir.Magnitude > 0 then
-	-- 	local moveDirection = moveDir.Unit
-	-- 	local dot = moveDirection:Dot(wallNormal)
-	-- 	isPressingIntoWall = dot < -0.35 -- only if moving *into* wall
-	-- end
-
-	-- State.isCollidingWithWall = wallDistance < Constants.COLLISION.CLAMP_DISTANCE
-	-- State.collisionNormal = wallNormal
-	-- State.collisionRecoveryTimer = State.collisionRecoveryTimer + dt
-
-	-- -- Only block input when actually trying to move into the wall and close enough
-	-- if isPressingIntoWall and wallDistance <= stopDistance then
-	-- 	State.inputBlocked = true
-
-	-- 	-- stop only if moving directly toward wall
-	-- 	if bodyVelocity then
-	-- 		local curVel = humanoidRootPart.AssemblyLinearVelocity
-	-- 		local tangential = wallNormal:Cross(Vector3.new(0, 1, 0))
-	-- 		if tangential.Magnitude < 1e-3 then tangential = Vector3.new(0, 0, 0) end
-
-	-- 		-- keep horizontal velocity only in tangential direction
-	-- 		local projected = curVel:Dot(tangential) * tangential
-	-- 		local targetVel = Vector3.new(projected.X, curVel.Y, projected.Z)
-
-	-- 		local velT = math.clamp(dt * 10, 0, 1)
-	-- 		bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(targetVel, velT)
-	-- 	end
-
-	-- 	-- Rotate player 90 degrees smoothly along wall
-	-- 	local wallTangent = wallNormal:Cross(Vector3.new(0, 1, 0))
-	-- 	if wallTangent.Magnitude > 0.001 then
-	-- 		local targetCFrame = CFrame.lookAt(
-	-- 			humanoidRootPart.Position,
-	-- 			humanoidRootPart.Position + wallTangent.Unit,
-	-- 			Vector3.new(0, 1, 0)
-	-- 		)
-	-- 		local currentCF = humanoidRootPart.CFrame
-	-- 		local rotT = math.clamp(dt * 8, 0, 1)
-	-- 		local newRot = currentCF:Lerp(targetCFrame, rotT)
-	-- 		bodyGyro.CFrame = newRot
-	-- 	end
-
-	-- 	return
-	-- else
-	-- 	State.inputBlocked = false
-	-- end
-
-	-- -- Slight smoothing near wall but not stopping
-	-- if bodyVelocity and isPressingIntoWall then
-	-- 	local normalizedDist = math.clamp(
-	-- 		(wallDistance - stopDistance) / (Constants.COLLISION.SLOW_DOWN_DISTANCE - stopDistance),
-	-- 		0, 1
-	-- 	)
-	-- 	local smoothFactor = 1 - normalizedDist
-	-- 	local curVel = humanoidRootPart.AssemblyLinearVelocity
-	-- 	local velT = math.clamp(dt * 8, 0, 1)
-	-- 	local horiz = Vector3.new(curVel.X, 0, curVel.Z)
-	-- 	local newHoriz = horiz:Lerp(horiz * (1 - smoothFactor * 0.15), velT)
-	-- 	bodyVelocity.Velocity = Vector3.new(newHoriz.X, curVel.Y, newHoriz.Z)
-	-- end
 end
 
 function CollisionManager.ApplyGentleBackwardForce(humanoidRootPart, wallNormal, bodyGyro, State, dt)
@@ -254,7 +164,7 @@ function CollisionManager.ApplyGentleBackwardForce(humanoidRootPart, wallNormal,
 end
 
 function CollisionManager.CanMoveInDirection(direction, State)
-    -- If input is blocked (pressing into wall), no movement
+	-- If input is blocked (pressing into wall), no movement
 	if State.inputBlocked then
 		return false
 	end
@@ -270,24 +180,6 @@ function CollisionManager.CanMoveInDirection(direction, State)
 	end
 
 	return true
-
-
-	-- -- If no Constants.COLLISION is active, allow all movement
-	-- if not State.isCollidingWithWall then
-	-- 	return true
-	-- end
-
-	-- -- Only prevent movement if we're trying to move directly into the Constants.COLLISION normal
-	-- if direction.Magnitude > 0 then
-	-- 	local moveDirection = direction.Unit
-	-- 	local dotProduct = moveDirection:Dot(State.collisionNormal)
-
-	-- 	-- Allow movement if we're moving away from the wall or at an angle
-	-- 	-- Only block movement that's directly into the wall
-	-- 	return dotProduct > -0.7 -- More permissive threshold
-	-- end
-
-	-- return true
 end
 
 function CollisionManager.UpdateCollisionState(State, dt)
