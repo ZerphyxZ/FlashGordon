@@ -1,23 +1,8 @@
 local Hoverboards = {
-	DefaultRider = {
-		TopSpeed = 45,
-		Acceleration = 0.6,
-		Deceleration = 1.5,
-		JumpPower = 70,
-		Boost = {
-			RefillTime = 6,
-			Power = 2,
-		},
-		Flash = {
-			Speed = 120,
-			Duration = 0.5,
-			VFX = "FlashEffect2",
-		},
-	},
-	PlasmaRider = {
+	Default = {
 		TopSpeed = 55,
-		Acceleration = 0.8,
-		Deceleration = 3,
+		Acceleration = 0.7,
+		Deceleration = 3.5,
 		JumpPower = 60,
 		Boost = {
 			RefillTime = 5,
@@ -30,9 +15,9 @@ local Hoverboards = {
 		},
 	},
 	BoostRider = {
-		TopSpeed = 70,
+		TopSpeed = 50,
 		Acceleration = 1.5,
-		Deceleration = 1,
+		Deceleration = 1.2,
 		JumpPower = 70,
 		Boost = {
 			RefillTime = 6,
@@ -51,3 +36,4 @@ function Hoverboards.GetConfig(name)
 end
 
 return Hoverboards
+
