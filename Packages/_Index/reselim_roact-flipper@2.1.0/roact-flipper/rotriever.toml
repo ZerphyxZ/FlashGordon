@@ -1,6 +1,0 @@
-[package]
-name = "Reselim/roact-flipper"
-author = "Reselim"
-content_root = "src"
-version = "2.1.0"
-license = "MIT"
