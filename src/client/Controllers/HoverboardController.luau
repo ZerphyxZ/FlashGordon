@@ -11,15 +11,11 @@ local ReplicatedStorage = Global.ReplicatedStorage
 local HoverboardModules = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Hoverboard")
 
 local HoverboardData = require(HoverboardModules:WaitForChild("Hoverboards"))
-local HoverboardConstants = require(HoverboardModules:WaitForChild("HoverboardConstants"))
 local HoverboardMovement = require(HoverboardModules:WaitForChild("HoverboardMovement"))
 local HoverboardJump = require(HoverboardModules:WaitForChild("HoverboardJump"))
 local HoverboardPhysics = require(HoverboardModules:WaitForChild("HoverboardPhysics"))
 local GameHUD = require(HoverboardModules:WaitForChild("GameHUD"))
 local HoverboardUtils = require(HoverboardModules:WaitForChild("HoverboardUtils"))
-local HoverboardAnimation = require(HoverboardModules:WaitForChild("HoverboardAnimations"))
-local HoverboardAttach = require(HoverboardModules:WaitForChild("HoverboardAttach"))
-
 
 -- Create controller
 local HoverboardController = Knit.CreateController({ Name = "HoverboardController" })
@@ -39,11 +35,15 @@ local HOVERBOARD_OFFSET = Vector3.new(0, 0, 0)
 --
 
 function HoverboardController:StartHoverboard(humanoid)
-	if runningConnection then runningConnection:Disconnect() end
+	if runningConnection then
+		runningConnection:Disconnect()
+	end
 
 	GameHUD.CreateHUD()
 	runningConnection = RunService.Heartbeat:Connect(function(dt)
-		if not rootPart or not character then return end
+		if not rootPart or not character then
+			return
+		end
 		local moveDir = HoverboardMovement.HandleMovement(humanoid, rootPart, bodyVelocity, dt)
 		HoverboardMovement.HandleRotation(rootPart, bodyGyro, moveDir, dt)
 		HoverboardMovement.HandleLeaning(rootPart, hoverboard, dt, HOVERBOARD_OFFSET)
@@ -51,14 +51,13 @@ function HoverboardController:StartHoverboard(humanoid)
 		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, dt)
 		HoverboardMovement.UpdateHoverboardOrientation(character, hoverboard, rootPart, dt)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
-		HoverboardJump.UpdateLanding(dt)	--Check for the ground detection
+		HoverboardJump.UpdateLanding(dt) --Check for the ground detection
 	end)
 
 	GameHUD.UpdateSpeed(function()
 		return HoverboardMovement.CurrentSpeed
 	end)
 end
-
 
 function HoverboardController:SetActiveHoverboard(boardName)
 	local config = HoverboardData.GetConfig(boardName)
@@ -92,7 +91,7 @@ end
     State Management
 ]]
 --
-local function ResetStates()	
+local function ResetStates()
 	hoverboard = nil
 	bodyVelocity = nil
 	bodyGyro = nil
@@ -111,12 +110,16 @@ end
 --
 local function DisableAnimations(char)
 	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not hum then return end
+	if not hum then
+		return
+	end
 	for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
 		track:Stop()
 	end
 	local animate = char:FindFirstChild("Animate")
-	if animate then animate.Disabled = true end
+	if animate then
+		animate.Disabled = true
+	end
 	hum:ChangeState(Enum.HumanoidStateType.Physics)
 end
 
@@ -131,7 +134,7 @@ local function OnCharacterAdded(char)
 	task.defer(function()
 		if hoverboard and rootPart then
 			bodyVelocity, bodyGyro, bodyPosition = HoverboardPhysics.AttachPhysics(rootPart)
-			HoverboardJump.SetReferences(hoverboard,character,rootPart,bodyPosition)
+			HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition)
 			HoverboardJump.SetHoverHeight(5)
 		end
 	end)
@@ -148,7 +151,9 @@ local function OnCharacterRemoving()
 end
 
 local function OnPlayerAdded(plr)
-	if plr ~= player then return end
+	if plr ~= player then
+		return
+	end
 	plr.CharacterAdded:Connect(OnCharacterAdded)
 	plr.CharacterRemoving:Connect(OnCharacterRemoving)
 	if plr.Character then
@@ -170,13 +175,13 @@ function HoverboardController:KnitStart()
 	HoverboardService.HoverboardSpawned:Connect(function(_, owner, boardName)
 		if owner == player then
 			self:SetActiveHoverboard(boardName)
-			task.defer(function() 
+			task.defer(function()
 				local offsetY = HoverboardService:GetBoardOffset():expect()
 				if typeof(offsetY) == "number" then
 					HOVERBOARD_OFFSET = Vector3.new(0, -offsetY, 0)
 					print("Client received board offset:", offsetY)
 				end
-				self:WaitForHoverboard() 
+				self:WaitForHoverboard()
 			end)
 		end
 	end)
