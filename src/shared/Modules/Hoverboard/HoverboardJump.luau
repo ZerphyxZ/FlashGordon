@@ -14,8 +14,8 @@ local JUMPING = {
 	JUMP_COOLDOWN = 0.25,
 	MIN_AIR_TIME = 0.12,
 	STUDS_MULTIPLIER = 5,
-	MIN_JUMP_HEIGHT = 25,
-	MAX_JUMP_HEIGHT = 40,
+	MIN_JUMP_HEIGHT = 10,
+	MAX_JUMP_HEIGHT = 25,
 	MAX_AIR_TIME = 5
 }
 local HOVER = {
@@ -75,7 +75,7 @@ end
 -- GROUND CHECK
 --------------------------------------------------------------------------------
 function HoverboardJump.IsGrounded()
-	if not hoverboard then
+	if not hoverboard or not hoverboard.PrimaryPart then
 		return false, nil, nil
 	end
 
@@ -102,7 +102,7 @@ function HoverboardJump.IsGrounded()
 	local result = workspace:Raycast(rayOrigin, rayDir, params)
 	if result then
 		local distance = primary.Position.Y - result.Position.Y
-		local tolerance = (HOVER.HOVER_HEIGHT or 5) + 1.5
+		local tolerance = (HOVER.HOVER_HEIGHT or 4) + 1.5
 		if distance <= tolerance then
 			return true, result.Position, result.Normal
 		end
@@ -115,21 +115,20 @@ end
 -- ATTEMPT JUMP
 --------------------------------------------------------------------------------
 function HoverboardJump.AttemptJump()
-	if not Jump.isJumpHeld then
-		Jump.isJumpHeld = true
-	end
-
 	local grounded = HoverboardJump.IsGrounded()
 	if not grounded or Jump.isJumping then
 		print("Grounded. Returning") return
 	end
+	if not Jump.isJumpHeld then
+		Jump.isJumpHeld = true
+	end
+
+	-- Disable vertical hover force
+	if hoverBodyPosition then
+		hoverBodyPosition.MaxForce = Vector3.zero
+	end
 
 	local now = tick()
-	--if (now - Jump.lastJumpTime) < JUMPING.JUMP_COOLDOWN then
-	--	return
-	--end
-	
-	
 	Jump.lastJumpTime = now
 	Jump.jumpStartTime = now
 	Jump.isJumping = true
@@ -138,11 +137,8 @@ function HoverboardJump.AttemptJump()
 	Jump.canJump = false
 
 	-- Store the current hover height as the starting point for the jump
-	Jump.jumpStartHeight = hoverboard.PrimaryPart.Position.Y
-
-	-- Disable vertical hover force
-	if hoverBodyPosition then
-		hoverBodyPosition.MaxForce = Vector3.zero
+	if hoverboard.PrimaryPart then
+		Jump.jumpStartHeight = hoverboard.PrimaryPart.Position.Y 
 	end
 
 	-- Calculate jump height based on speed (grid system)
@@ -163,7 +159,7 @@ function HoverboardJump.AttemptJump()
 	local levelIndex = math.clamp(speedIndex, 0, math.max(0, levelCount - 1))
 
 	-- Always use maximum jump height for single press
-	Jump.targetJumpHeight = Jump.jumpStartHeight + minStuds + (levelIndex * studsMult)
+	Jump.targetJumpHeight = Jump.jumpStartHeight + maxStuds  	--minStuds + (levelIndex * studsMult)
 	print("Jump started with target height: ", Jump.targetJumpHeight)
 end
 
@@ -331,7 +327,7 @@ end
 -- LANDING LOGIC
 --------------------------------------------------------------------------------
 function HoverboardJump.UpdateLanding(dt)
-	if not hoverboard then return end
+	if not hoverboard and not hoverboard.PrimaryPart then return end
 	-- If jumping: check if landed
 	if Jump.isJumping then
 		local grounded = HoverboardJump.IsGrounded()

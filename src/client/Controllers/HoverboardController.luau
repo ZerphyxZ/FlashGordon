@@ -45,8 +45,9 @@ function HoverboardController:StartHoverboard(humanoid)
 			return
 		end
 		local moveDir = HoverboardMovement.HandleMovement(humanoid, rootPart, bodyVelocity, dt)
-		HoverboardMovement.HandleRotation(rootPart, bodyGyro, moveDir, dt)
-		HoverboardMovement.HandleLeaning(rootPart, hoverboard, dt, HOVERBOARD_OFFSET)
+		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HOVERBOARD_OFFSET, dt)
+		--HoverboardMovement.HandleRotation(rootPart, bodyGyro, moveDir, dt)
+		--HoverboardMovement.HandleLeaning(rootPart, hoverboard, dt, HOVERBOARD_OFFSET)
 		HoverboardMovement.HandleHovering(character, rootPart, bodyPosition)
 		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, dt)
 		HoverboardMovement.UpdateHoverboardOrientation(character, hoverboard, rootPart, dt)
