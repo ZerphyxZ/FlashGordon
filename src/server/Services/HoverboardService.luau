@@ -82,8 +82,8 @@ local function CalculateBoardOffset(character, boardModel)
 	local footOffset = rootY - lowestY
 	local boardSizeY = boardModel:GetExtentsSize().Y
 
-	-- Keep the same visual tweak as client (-0.7)
-	return (footOffset + (boardSizeY / 2)) - 0.7
+	-- Keep the same visual tweak as client
+	return (footOffset + (boardSizeY / 2))
 end
 
 function HoverboardService.Client:GetBoardOffset(player)
