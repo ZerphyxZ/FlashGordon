@@ -6,6 +6,21 @@
     "ReplicatedStorage": {
       "Shared": {
         "$path": "src/shared"
+      },
+      "Utility": {
+        "$path": "src/Utility"
+      },
+      "Library": {
+        "$path": "src/Library"
+      },
+      "EnumsAndContants": {
+        "$path": "src/EnumsAndContants"
+      },
+      "Configuration": {
+        "$path": "src/Configuration"
+      },
+      "Packages": {
+        "$path": "Packages"
       }
     },
 

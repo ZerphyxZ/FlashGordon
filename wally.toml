@@ -14,5 +14,6 @@ roduxhooks = "solarhorizon/rodux-hooks@0.3.1"
 sift = "csqrl/sift@0.0.8"
 roact-hooks = "kampfkarren/roact-hooks@0.5.1"
 roact-flipper = "reselim/roact-flipper@2.1.0"
+trove = "sleitnick/trove@1.8.0"
 
 
