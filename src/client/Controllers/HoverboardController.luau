@@ -67,8 +67,7 @@ function HoverboardController:StartHoverboard(humanoid)
 		if not rootPart or not character then
 			return
 		end
-		local moveDir = HoverboardMovement.HandleMovement(
-			humanoid, hoverboard, rootPart, bodyVelocity, 
+		local moveDir = HoverboardMovement.HandleMovement(humanoid, hoverboard, rootPart, bodyVelocity, 
 			MAX_SPEED, ACCELERATION, DECELERATION, MOVEMENT_SMOOTHNESS, MIN_MOVEMENT_THRESHOLD, State,
 			dt)
 		
