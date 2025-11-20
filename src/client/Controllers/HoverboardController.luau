@@ -77,7 +77,6 @@ function HoverboardController:StartHoverboard(humanoid)
 		dt)
 
 		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, RAY_DISTANCE, ORIENTATION_SMOOTHNESS, State, HoverboardJump, hoverboard, dt)
-		HoverboardMovement.HandleHovering(character, rootPart, bodyPosition, hoverboard, RAY_DISTANCE, HOVER_HEIGHT, MAX_BODY_FORCE, HoverboardJump, dt)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
 		HoverboardJump.UpdateLanding(dt) --Check for the ground detection
 	end)

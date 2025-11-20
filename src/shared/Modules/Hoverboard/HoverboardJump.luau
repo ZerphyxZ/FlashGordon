@@ -449,7 +449,7 @@ function HoverboardJump.UpdateLanding(dt)
 			params.FilterType = Enum.RaycastFilterType.Exclude
 			params.FilterDescendantsInstances = { character, hoverboard }
 
-			local result = workspace:Raycast(origin, Vector3.new(0, -(HOVER.RAYCAST_DISTANCE + 1), 0), params)
+			local result = workspace:Raycast(origin, Vector3.new(0, -(HOVER.RAYCAST_DISTANCE), 0), params)
 			if result then
 				local groundY = result.Position.Y
 				local targetY = groundY + Jump.baseHoverHeight
