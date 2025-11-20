@@ -5,17 +5,24 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage: ServerStorage = game:GetService("ServerStorage")
+local ServerScriptService: ServerScriptService = game:GetService("ServerScriptService")
+
+local ServerPackages = ServerScriptService:WaitForChild("ServerPackages")
 
 local PlayerDataTemplate = require(script.Parent:WaitForChild("PlayerDataTemplate"))
-local ProfileService = require(game.ServerScriptService.Server.Services.ProfileService)
+local ProfileStoreModule = require(ServerPackages:WaitForChild("Profilestore"))
+
+local Configuration = ServerStorage:WaitForChild("Configuration")
+local DataStoreName = Configuration:WaitForChild("DataStoreName")
+local DataStoreVersion = Configuration:WaitForChild("DataStoreVersion")
+
+local DataStoreKey: string = `{DataStoreName.Value}_{DataStoreVersion.Value}`
+local PlayerStore = ProfileStoreModule.New(DataStoreKey, PlayerDataTemplate)
 
 local PlayerDataHandler = {}
 
-print("[PlayerDataHandler] Module loaded")
-
-local ProfileStore = ProfileService.GetProfileStore("PlayerData", PlayerDataTemplate)
-
-local Profiles: { [Player]: any } = {}
+local Profiles: { [Player]: typeof(PlayerStore:StartSessionAsync()) } = {}
 local JoinTimes: { [Player]: number } = {}
 
 -- Internal key used to tag which world the *flat snapshot* reflects.
@@ -126,42 +133,46 @@ function PlayerDataHandler:MigrateFlatToWorldForCurrent(player: Player)
 end
 
 -- === lifecycle ===============================================================
+function PlayerDataHandler:LoadProfile(player)
+	-- Start a profile session for this player's data:
 
-function PlayerDataHandler:LoadProfile(player: Player)
-	print("[PlayerDataHandler] Loading profile for", player.Name)
-	local key = "Player_v6_" .. tostring(player.UserId)
-	local profile = ProfileStore:LoadProfileAsync(key)
-	if profile then
-		print("[PlayerDataHandler] Profile loaded for", player.Name)
-		profile:AddUserId(player.UserId)
-		profile:Reconcile()
+	local profile = PlayerStore:StartSessionAsync(`{player.UserId}`, {
+		Cancel = function()
+			return player.Parent ~= Players
+		end,
+	})
+
+	-- Handling new profile session or failure to start it:
+
+	if profile ~= nil then
+		profile:AddUserId(player.UserId) -- GDPR compliance
+		profile:Reconcile() -- Fill in missing variables from PROFILE_TEMPLATE (optional)
 		ensurePerWorldContainers(profile.Data)
 
-		profile:ListenToRelease(function()
+		profile.OnSessionEnd:Connect(function()
 			Profiles[player] = nil
 			JoinTimes[player] = nil
-			if player and player.Parent then
-				player:Kick("Data conflict: profile released elsewhere")
-			end
+			player:Kick(`Profile session end - Please rejoin`)
 		end)
 
-		if player:IsDescendantOf(Players) then
+		if player.Parent == Players then
 			Profiles[player] = profile
 			JoinTimes[player] = os.time()
-			print("[PlayerDataHandler] Active profile data for", player.Name, profile.Data)
+			print(`Profile loaded for {player.DisplayName}!`)
 		else
-			profile:Release()
+			-- The player has left before the profile session started
+			profile:EndSession()
 		end
 	else
-		warn("[PlayerDataHandler] Failed to load profile for", player.Name)
-		player:Kick("Failed to load your data. Please rejoin later.")
+		-- This condition should only happen when the Roblox server is shutting down
+		player:Kick(`Profile load fail - Please rejoin`)
 	end
 end
 
 function PlayerDataHandler:ReleaseProfile(player: Player)
 	print("[PlayerDataHandler] Releasing profile for", player.Name)
 	local profile = Profiles[player]
-	if profile then
+	if profile ~= nil then
 		local joinStamp = JoinTimes[player]
 		if joinStamp then
 			local elapsed = os.time() - joinStamp
@@ -169,12 +180,8 @@ function PlayerDataHandler:ReleaseProfile(player: Player)
 			print("[PlayerDataHandler] Added playtime", elapsed, "seconds for", player.Name)
 		end
 		JoinTimes[player] = nil
-		pcall(function()
-			profile:Save()
-		end)
-		profile:Release()
-		print("[PlayerDataHandler] Profile released for", player.Name)
-		Profiles[player] = nil
+
+		profile:EndSession()
 	end
 end
 
@@ -327,8 +334,54 @@ function PlayerDataHandler:ResetProfileToTemplate(player: Player)
 	return true
 end
 
--- === SPINS HELPERS (used by SpinService) =====================================
+-- === Hoverboard storage ================================================
 
+function PlayerDataHandler:GetEquippedHoverboard(player: Player): string
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		return profile.Data.HoverboardName or "Default"
+	end
+	return "Default"
+end
+
+function PlayerDataHandler:SetEquippedHoverboard(player: Player, boardName: string)
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		profile.Data.HoverboardName = boardName
+		pcall(function()
+			profile:Save()
+		end)
+		print("[PlayerDataHandler] Hoverboard saved for", player.Name, "→", boardName)
+	end
+end
+
+--[Daily Reward Helpers]
+function PlayerDataHandler:SetLastDailyClaim(player: Player)
+	local now = os.time()
+	local playerData = self:GetData(player)
+	if playerData then
+		self:SetPlayerData(player, { LastDailyReward = now })
+	end
+end
+
+function PlayerDataHandler:IncrementStreak(player: Player, incrementValue: number)
+	local playerData = self:GetData(player)
+	if playerData then
+		local oldValue = playerData.DailyStreak
+		local newValue = oldValue + math.clamp(tonumber(incrementValue) or 0, 0, 1)
+		self:SetPlayerData(player, { DailyStreak = newValue })
+	end
+end
+
+function PlayerDataHandler:ResetStreak(player: Player)
+	local playerData = self:GetData(player)
+
+	if playerData then
+		self:SetPlayerData(player, { DailyStreak = 0 })
+	end
+end
+
+--[Daily Reward Helpers]
 function PlayerDataHandler:IncrementSpins(player: Player, incrementValue: number)
 	local playerData = self:GetData(player)
 	--print(playerData,"Increment spin player data")
@@ -363,27 +416,6 @@ function PlayerDataHandler:SetLastSpinnerClaim(player: Player)
 	local playerData = self:GetData(player)
 	if playerData then
 		self:SetPlayerData(player, { LastSpinReward = now })
-	end
-end
-
--- === Hoverboard storage ================================================
-
-function PlayerDataHandler:GetEquippedHoverboard(player: Player): string
-	local profile = Profiles[player]
-	if profile and profile:IsActive() then
-		return profile.Data.HoverboardName or "Default"
-	end
-	return "Default"
-end
-
-function PlayerDataHandler:SetEquippedHoverboard(player: Player, boardName: string)
-	local profile = Profiles[player]
-	if profile and profile:IsActive() then
-		profile.Data.HoverboardName = boardName
-		pcall(function()
-			profile:Save()
-		end)
-		print("[PlayerDataHandler] Hoverboard saved for", player.Name, "→", boardName)
 	end
 end
 

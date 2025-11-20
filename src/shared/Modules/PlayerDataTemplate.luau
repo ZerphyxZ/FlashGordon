@@ -15,8 +15,12 @@ local PlayerDataTemplate = {
 	LastCheckpointByWorld = {},
 	VisitedCheckpointsByWorld = {},
 
-	-- === Spins system (used by SpinService) =================================
-	AvailableSpin = 1,
+	-- Daily Rewards
+	DailyStreak = 0,
+	LastDailyReward = 0,
+
+	--Spins system
+	AvailableSpin = 0,
 	LastSpinReward = 0,
 }
 

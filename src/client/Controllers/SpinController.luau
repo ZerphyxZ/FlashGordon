@@ -88,7 +88,7 @@ local function UpdateUiState()
 	SpinTimerText.RichText = true
 
 	if TimeLeft == 0 then
-		SpinTimerText.Text = "Spin now!"
+		SpinTimerText.Text = `Spin now! ( x{Spins} )`
 	else
 		SpinTimerText.Text = "Come back tomorrow for a new spin! (<font color='rgb(255,0,0)'>"
 			.. timeLeftString
