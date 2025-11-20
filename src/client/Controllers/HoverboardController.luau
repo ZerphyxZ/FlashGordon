@@ -68,15 +68,43 @@ function HoverboardController:StartHoverboard(humanoid)
 			return
 		end
 		local moveDir = HoverboardMovement.HandleMovement(
-			humanoid, rootPart, bodyVelocity, 
-			MAX_SPEED, ACCELERATION, DECELERATION, MOVEMENT_SMOOTHNESS, MIN_MOVEMENT_THRESHOLD, State,
-			dt)
-		
-		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HOVERBOARD_OFFSET, HoverboardJump,
-		ROTATION_SPEED, ROTATION_SMOOTHNESS, MAX_LEAN, LEAN_SMOOTH, State,
-		dt)
+			humanoid,
+			rootPart,
+			bodyVelocity,
+			MAX_SPEED,
+			ACCELERATION,
+			DECELERATION,
+			MOVEMENT_SMOOTHNESS,
+			MIN_MOVEMENT_THRESHOLD,
+			State,
+			dt
+		)
 
-		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, RAY_DISTANCE, ORIENTATION_SMOOTHNESS, State, HoverboardJump, dt)
+		HoverboardMovement.UpdateOrientation(
+			rootPart,
+			bodyGyro,
+			hoverboard,
+			moveDir,
+			HOVERBOARD_OFFSET,
+			HoverboardJump,
+			ROTATION_SPEED,
+			ROTATION_SMOOTHNESS,
+			MAX_LEAN,
+			LEAN_SMOOTH,
+			State,
+			dt
+		)
+
+		HoverboardMovement.UpdateSurfaceAlignment(
+			character,
+			rootPart,
+			bodyGyro,
+			RAY_DISTANCE,
+			ORIENTATION_SMOOTHNESS,
+			State,
+			HoverboardJump,
+			dt
+		)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
 		HoverboardJump.UpdateLanding(dt) --Check for the ground detection
 	end)
