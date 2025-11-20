@@ -4,7 +4,12 @@ local Global =
 local Knit = Global.Knit
 local ReplicatedStorage = Global.ReplicatedStorage
 local RunService = Global.RunService
-local Hoverboards = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Hoverboard"):WaitForChild("Hoverboards"))
+local Hoverboards = require(
+	ReplicatedStorage:WaitForChild("Shared")
+		:WaitForChild("Modules")
+		:WaitForChild("Hoverboard")
+		:WaitForChild("Hoverboards")
+)
 local Players = Global.Players
 local PlayerDataHandler = require(ReplicatedStorage.Shared.Modules.PlayerDataHandler)
 
@@ -94,11 +99,15 @@ end
 
 function HoverboardService.Client:GetBoardOffset(player)
 	local character = player.Character
-	if not character then return 0 end
+	if not character then
+		return 0
+	end
 
 	local hoverboard = character:FindFirstChild("Hoverboard")
-	if not hoverboard then return 0 end
-	
+	if not hoverboard then
+		return 0
+	end
+
 	return CalculateBoardOffset(character, hoverboard)
 end
 ----------------------------------------------------------
@@ -119,9 +128,7 @@ function HoverboardService:GiveDefaultHoverboard(player)
 
 	self.Client.EquipHoverboard:Fire(player, saved, config)
 	self:SpawnHoverboard(player, saved)
-	
-	
-	
+
 	-- OLD CODE USING DATA STORE
 	---- Only set default if no record exists (so we don't overwrite purchased choices)
 	--if playerHoverboards[player.UserId] and playerHoverboards[player.UserId].Name then
@@ -257,9 +264,9 @@ function HoverboardService.Client:RequestEquipHoverboard(player, boardName)
 		Name = boardName,
 		Config = Hoverboards.GetConfig(boardName),
 	}
-	
+
 	PlayerDataHandler:SetEquippedHoverboard(player, boardName)
-	
+
 	HoverboardService:RemoveHoverboard(player)
 	HoverboardService:SpawnHoverboard(player, boardName)
 
