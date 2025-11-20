@@ -24,7 +24,7 @@ local JUMPING = {
 }
 
 local HOVER = {
-	HOVER_HEIGHT = 4,
+	HOVER_HEIGHT = 1.5,
 	RAYCAST_DISTANCE = 20,
 	MAX_OBSTACLE_HEIGHT = 50
 }
@@ -92,7 +92,7 @@ function HoverboardJump.IsGrounded()
 	end
 
 	-- Still rising? → not grounded
-	if humanoidRootPart and humanoidRootPart.Velocity.Y > HOVER.MAX_OBSTACLE_HEIGHT then
+	if hoverboard.PrimaryPart and hoverboard.PrimaryPart.Velocity.Y > HOVER.MAX_OBSTACLE_HEIGHT then
 		return false
 	end
 
@@ -270,10 +270,10 @@ function HoverboardJump.AttemptJump()
 end
 
 function HoverboardJump.UpdateJump(dt)
-	if not hoverboard or not humanoidRootPart then
+	if not hoverboard or not hoverboard.PrimaryPart or not humanoidRootPart then
 		return
 	end
-
+	local primary = hoverboard.PrimaryPart
 	local grounded = HoverboardJump.IsGrounded()
 	-- If grounded and jump key is still held → auto-jump again
 	if grounded and Jump.isJumpHeld and not Jump.isJumping then
@@ -283,7 +283,7 @@ function HoverboardJump.UpdateJump(dt)
 	if grounded then
 		return
 	end
-	local vel = humanoidRootPart.Velocity
+	local vel = primary.Velocity
 
 	--Handle upward jump animation
 	if Jump.isJumping then
@@ -295,13 +295,13 @@ function HoverboardJump.UpdateJump(dt)
 			local smoothT = t * t * (3 - 2 * t) -- Smoothstep interpolation
 			--local smoothT = t
 			local targetHeight = Jump.jumpStartHeight + (Jump.targetJumpHeight - Jump.jumpStartHeight) * smoothT
-			local currentHeight = hoverboard.PrimaryPart.Position.Y
+			local currentHeight = primary.Position.Y
 
 			-- Calculate velocity needed to reach target height
 			local heightDiff = targetHeight - currentHeight
 			local jumpVel = heightDiff / dt
 
-			humanoidRootPart.Velocity = Vector3.new(vel.X, jumpVel, vel.Z)
+			primary.Velocity = Vector3.new(vel.X, jumpVel, vel.Z)
 		else
 			-- Jump phase complete, start falling
 			Jump.isJumping = false
@@ -309,7 +309,7 @@ function HoverboardJump.UpdateJump(dt)
 
 			-- Apply downward velocity for smooth fall
 			local fallPull = 5
-			humanoidRootPart.Velocity = Vector3.new(vel.X, vel.Y - fallPull, vel.Z)
+			primary.Velocity = Vector3.new(vel.X, vel.Y - fallPull, vel.Z)
 		end
 	end
 end

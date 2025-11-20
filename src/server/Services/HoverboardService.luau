@@ -37,6 +37,14 @@ end
 
 -- Calculate offset such that the hoverboard sits flush to player's feet
 local function CalculateBoardOffset(character, boardModel)
+	-- -- Board sits visually under HRP at a fixed distance
+	-- local boardHeight = boardModel:GetExtentsSize().Y
+	-- print("board height: ", boardHeight)
+	-- return boardHeight   -- consistent for all rigs
+
+
+
+
 	if not character or not boardModel then
 		return 0
 	end
@@ -81,9 +89,7 @@ local function CalculateBoardOffset(character, boardModel)
 	local rootY = hrp.Position.Y
 	local footOffset = rootY - lowestY
 	local boardSizeY = boardModel:GetExtentsSize().Y
-
-	-- Keep the same visual tweak as client
-	return (footOffset + (boardSizeY / 2))
+	return (footOffset + (boardSizeY / 2)) - 0.75
 end
 
 function HoverboardService.Client:GetBoardOffset(player)
@@ -192,6 +198,8 @@ function HoverboardService:SpawnHoverboard(player, boardName)
 	local hrp = character.HumanoidRootPart
 	local offset = CalculateBoardOffset(character, newBoard)
 
+	local torso = character:FindFirstChild("LowerTorso") or character:FindFirstChild("Torso")
+
 	-- Position the board primary part relative to HRP so Motor6D can weld exactly
 	primary.CFrame = hrp.CFrame * CFrame.new(0, -offset, 0)
 	print("Offset: ", offset)
@@ -199,7 +207,7 @@ function HoverboardService:SpawnHoverboard(player, boardName)
 	-- Create Motor6D (server-owned) between HRP and board primary for exact visuals
 	local motor = Instance.new("Motor6D")
 	motor.Name = "HoverboardMotor"
-	motor.Part0 = hrp
+	motor.Part0 = torso
 	motor.Part1 = primary
 	motor.C0 = CFrame.new(0, -offset, 0)
 	motor.Parent = hrp
