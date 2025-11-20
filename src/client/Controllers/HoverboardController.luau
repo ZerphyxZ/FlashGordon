@@ -35,11 +35,11 @@ local ACCELERATION = 8
 local DECELERATION = 20
 local MOVEMENT_SMOOTHNESS = 0.1
 local MIN_MOVEMENT_THRESHOLD = 0.1
-local ROTATION_SPEED = 250
+local ROTATION_SPEED = 500
 local ROTATION_SMOOTHNESS = 0.006
 local LEAN_SMOOTH = 10
 local MAX_LEAN = 2
-local HOVER_HEIGHT = 4
+local HOVER_HEIGHT = 1.5
 local RAY_DISTANCE = 20
 local MAX_BODY_FORCE = 100000
 local HOVER_SMOOTHNESS = 8
@@ -47,7 +47,7 @@ local ORIENTATION_SMOOTHNESS = 6
 
 local State = {
 	lastMoveDir = Vector3.zero,
-	smoothedGroundNormal = Vector3.new(0, 4, 0),
+	smoothedGroundNormal = Vector3.new(0, HOVER_HEIGHT, 0),
 	baseHoverHeight = HOVER_HEIGHT,
 	bobTime = 0,
 }
@@ -67,44 +67,15 @@ function HoverboardController:StartHoverboard(humanoid)
 		if not rootPart or not character then
 			return
 		end
-		local moveDir = HoverboardMovement.HandleMovement(
-			humanoid,
-			rootPart,
-			bodyVelocity,
-			MAX_SPEED,
-			ACCELERATION,
-			DECELERATION,
-			MOVEMENT_SMOOTHNESS,
-			MIN_MOVEMENT_THRESHOLD,
-			State,
-			dt
-		)
+		local moveDir = HoverboardMovement.HandleMovement(humanoid, hoverboard, rootPart, bodyVelocity, 
+			MAX_SPEED, ACCELERATION, DECELERATION, MOVEMENT_SMOOTHNESS, MIN_MOVEMENT_THRESHOLD, State,
+			dt)
+		
+		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HOVERBOARD_OFFSET, HoverboardJump,
+		ROTATION_SPEED, ROTATION_SMOOTHNESS, MAX_LEAN, LEAN_SMOOTH, State,
+		dt)
 
-		HoverboardMovement.UpdateOrientation(
-			rootPart,
-			bodyGyro,
-			hoverboard,
-			moveDir,
-			HOVERBOARD_OFFSET,
-			HoverboardJump,
-			ROTATION_SPEED,
-			ROTATION_SMOOTHNESS,
-			MAX_LEAN,
-			LEAN_SMOOTH,
-			State,
-			dt
-		)
-
-		HoverboardMovement.UpdateSurfaceAlignment(
-			character,
-			rootPart,
-			bodyGyro,
-			RAY_DISTANCE,
-			ORIENTATION_SMOOTHNESS,
-			State,
-			HoverboardJump,
-			dt
-		)
+		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, RAY_DISTANCE, ORIENTATION_SMOOTHNESS, State, HoverboardJump, hoverboard, dt)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
 		HoverboardJump.UpdateLanding(dt) --Check for the ground detection
 	end)
@@ -188,7 +159,7 @@ local function OnCharacterAdded(char)
 	-- Attach physics AFTER hoverboard arrives
 	task.defer(function()
 		if hoverboard and rootPart then
-			bodyVelocity, bodyGyro, bodyPosition = HoverboardPhysics.AttachPhysics(rootPart)
+			bodyVelocity, bodyGyro, bodyPosition = HoverboardPhysics.AttachPhysics(rootPart, hoverboard)
 			HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition)
 			HoverboardJump.SetHoverHeight(HOVER_HEIGHT)
 		end
