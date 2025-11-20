@@ -29,6 +29,29 @@ local inputVector = Vector3.zero
 local isOnHoverboard = false
 local HOVERBOARD_OFFSET = Vector3.new(0, 0, 0)
 
+--Constants
+local MAX_SPEED = 50
+local ACCELERATION = 8
+local DECELERATION = 20
+local MOVEMENT_SMOOTHNESS = 0.1
+local MIN_MOVEMENT_THRESHOLD = 0.1
+local ROTATION_SPEED = 250
+local ROTATION_SMOOTHNESS = 0.006
+local LEAN_SMOOTH = 10
+local MAX_LEAN = 2
+local HOVER_HEIGHT = 4
+local RAY_DISTANCE = 20
+local MAX_BODY_FORCE = 100000
+local HOVER_SMOOTHNESS = 8
+local ORIENTATION_SMOOTHNESS = 6
+
+local State = {
+	lastMoveDir = Vector3.zero,
+	smoothedGroundNormal = Vector3.new(0, 4, 0),
+	baseHoverHeight = HOVER_HEIGHT,
+	bobTime = 0,
+}
+
 --[[
    	Hoverboard Setup
 ]]
@@ -44,13 +67,16 @@ function HoverboardController:StartHoverboard(humanoid)
 		if not rootPart or not character then
 			return
 		end
-		local moveDir = HoverboardMovement.HandleMovement(humanoid, rootPart, bodyVelocity, dt)
-		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HOVERBOARD_OFFSET, dt)
-		--HoverboardMovement.HandleRotation(rootPart, bodyGyro, moveDir, dt)
-		--HoverboardMovement.HandleLeaning(rootPart, hoverboard, dt, HOVERBOARD_OFFSET)
-		HoverboardMovement.HandleHovering(character, rootPart, bodyPosition)
-		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, dt)
-		HoverboardMovement.UpdateHoverboardOrientation(character, hoverboard, rootPart, dt)
+		local moveDir = HoverboardMovement.HandleMovement(
+			humanoid, rootPart, bodyVelocity, 
+			MAX_SPEED, ACCELERATION, DECELERATION, MOVEMENT_SMOOTHNESS, MIN_MOVEMENT_THRESHOLD, State,
+			dt)
+		
+		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HOVERBOARD_OFFSET, HoverboardJump,
+		ROTATION_SPEED, ROTATION_SMOOTHNESS, MAX_LEAN, LEAN_SMOOTH, State,
+		dt)
+
+		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, RAY_DISTANCE, ORIENTATION_SMOOTHNESS, State, HoverboardJump, dt)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
 		HoverboardJump.UpdateLanding(dt) --Check for the ground detection
 	end)
@@ -136,7 +162,7 @@ local function OnCharacterAdded(char)
 		if hoverboard and rootPart then
 			bodyVelocity, bodyGyro, bodyPosition = HoverboardPhysics.AttachPhysics(rootPart)
 			HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition)
-			HoverboardJump.SetHoverHeight(5)
+			HoverboardJump.SetHoverHeight(HOVER_HEIGHT)
 		end
 	end)
 end
@@ -191,7 +217,7 @@ function HoverboardController:KnitStart()
 		CleanupHoverboard()
 	end)
 	OnPlayerAdded(player)
-	HoverboardUtils.BindInput(player)
+	HoverboardUtils.BindInput(player, MAX_SPEED)
 end
 
 return HoverboardController
