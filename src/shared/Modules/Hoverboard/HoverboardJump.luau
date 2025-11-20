@@ -16,7 +16,7 @@ local JUMPING = {
 	STUDS_MULTIPLIER = 5,
 	JUMP_HEIGHT = 20,
 	MAX_FORWARD_DISTANCE = 50, -- Maximum forward distance at max speed
-    MIN_SPEED_FOR_FORWARD = 0, -- Minimum speed to start getting forward distance
+	MIN_SPEED_FOR_FORWARD = 0, -- Minimum speed to start getting forward distance
 	MIN_JUMP_HEIGHT = 5,
 	MAX_JUMP_HEIGHT = 15,
 	MAX_AIR_TIME = 5,
@@ -26,7 +26,7 @@ local JUMPING = {
 local HOVER = {
 	HOVER_HEIGHT = 4,
 	RAYCAST_DISTANCE = 20,
-	MAX_OBSTACLE_HEIGHT = 50
+	MAX_OBSTACLE_HEIGHT = 50,
 }
 local PHYSICS = {
 	BODY_POSITION_MAX_FORCE = Vector3.new(0, 100000, 0),
@@ -106,15 +106,15 @@ function HoverboardJump.IsGrounded()
 
 	-- Cast multiple rays in a wider pattern for better ramp detection
 	local rayOffsets = {
-		Vector3.new(0, 0, 0),    -- Center
-		Vector3.new(2, 0, 2),    -- Front-right
-		Vector3.new(-2, 0, 2),   -- Front-left
-		Vector3.new(2, 0, -2),   -- Back-right
-		Vector3.new(-2, 0, -2),  -- Back-left
-		Vector3.new(3, 0, 0),    -- Right
-		Vector3.new(-3, 0, 0),   -- Left
-		Vector3.new(0, 0, 3),    -- Front
-		Vector3.new(0, 0, -3),   -- Back
+		Vector3.new(0, 0, 0), -- Center
+		Vector3.new(2, 0, 2), -- Front-right
+		Vector3.new(-2, 0, 2), -- Front-left
+		Vector3.new(2, 0, -2), -- Back-right
+		Vector3.new(-2, 0, -2), -- Back-left
+		Vector3.new(3, 0, 0), -- Right
+		Vector3.new(-3, 0, 0), -- Left
+		Vector3.new(0, 0, 3), -- Front
+		Vector3.new(0, 0, -3), -- Back
 	}
 
 	local hitCount = 0
@@ -130,12 +130,12 @@ function HoverboardJump.IsGrounded()
 			totalHits = totalHits + 1
 			local distance = (origin - result.Position).Magnitude -- Use actual distance, not just Y difference
 			avgNormal = avgNormal + result.Normal
-			
+
 			if distance < closestDistance then
 				closestDistance = distance
 				closestPosition = result.Position
 			end
-			
+
 			-- Consider grounded if within hover height + tolerance (increased for ramps)
 			local tolerance = (HOVER.HOVER_HEIGHT or 4) + 0.5 -- Increased tolerance for ramps
 			if distance <= tolerance then
@@ -148,7 +148,7 @@ function HoverboardJump.IsGrounded()
 	if hitCount < 2 then
 		local shortRayLength = (HOVER.HOVER_HEIGHT or 4) + 1
 		local shortRayDir = (rayDir.Unit * shortRayLength)
-		
+
 		for _, offset in ipairs(rayOffsets) do
 			local origin = rayOrigin + offset
 			local result = workspace:Raycast(origin, shortRayDir, params)
@@ -175,10 +175,6 @@ function HoverboardJump.IsGrounded()
 	end
 
 	return false, nil, nil
-
-
-
-
 
 	-- if not hoverboard or not hoverboard.PrimaryPart then
 	-- 	return false, nil, nil
