@@ -14,7 +14,7 @@ local Players = Global.Players
 local PlayerDataHandler = require(ReplicatedStorage.Shared.Modules.PlayerDataHandler)
 
 local HoverboardModels = ReplicatedStorage:WaitForChild("Models"):WaitForChild("Hoverboards")
-local DEFAULT_BOARD = "Default" -- Fallback hoverboard model name
+local DEFAULT_BOARD = "Hoverboard1" -- Fallback hoverboard model name
 local playerHoverboards = {}
 local hoverboard
 
@@ -46,9 +46,6 @@ local function CalculateBoardOffset(character, boardModel)
 	-- local boardHeight = boardModel:GetExtentsSize().Y
 	-- print("board height: ", boardHeight)
 	-- return boardHeight   -- consistent for all rigs
-
-
-
 
 	if not character or not boardModel then
 		return 0
@@ -128,39 +125,6 @@ function HoverboardService:GiveDefaultHoverboard(player)
 
 	self.Client.EquipHoverboard:Fire(player, saved, config)
 	self:SpawnHoverboard(player, saved)
-
-	-- OLD CODE USING DATA STORE
-	---- Only set default if no record exists (so we don't overwrite purchased choices)
-	--if playerHoverboards[player.UserId] and playerHoverboards[player.UserId].Name then
-	--	-- already have a hoverboard stored
-	--	return
-	--end
-
-	--local boardConfig = Hoverboards.GetConfig(DEFAULT_BOARD)
-	--if not boardConfig then
-	--	warn("[HoverboardService] Could not find config for: " .. DEFAULT_BOARD)
-	--	return
-	--end
-
-	--print("Giving default hoverboard to player:", player.Name)
-
-	--playerHoverboards[player.UserId] = {
-	--	Name = DEFAULT_BOARD,
-	--	Config = boardConfig,
-	--}
-
-	---- Notify only this player (client will wait for server-cloned Hoverboard)
-	--self.Client.EquipHoverboard:Fire(player, DEFAULT_BOARD, boardConfig)
-
-	---- Also notify other players to spawn visuals if they want
-	--for _, otherPlayer in ipairs(game.Players:GetPlayers()) do
-	--	if otherPlayer ~= player then
-	--		self.Client.SpawnOtherHoverboard:Fire(otherPlayer, player, DEFAULT_BOARD)
-	--	end
-	--end
-
-	---- Spawn server-side model immediately
-	--self:SpawnHoverboard(player, DEFAULT_BOARD)
 end
 
 ----------------------------------------------------------
@@ -214,7 +178,7 @@ function HoverboardService:SpawnHoverboard(player, boardName)
 	-- Create Motor6D (server-owned) between HRP and board primary for exact visuals
 	local motor = Instance.new("Motor6D")
 	motor.Name = "HoverboardMotor"
-	motor.Part0 = torso
+	motor.Part0 = hrp
 	motor.Part1 = primary
 	motor.C0 = CFrame.new(0, -offset, 0)
 	motor.Parent = hrp
@@ -224,8 +188,15 @@ function HoverboardService:SpawnHoverboard(player, boardName)
 		newBoard.PrimaryPart:SetNetworkOwner(player)
 	end
 
-	-- Notify all clients that hoverboard spawned
-	self.Client.HoverboardSpawned:FireAll(player, player, boardName)
+	local HoverboardPhysics = require(ReplicatedStorage.Shared.Modules.Hoverboard.HoverboardPhysics)
+	if HoverboardPhysics and newBoard then
+		HoverboardPhysics.AttachPhysics(newBoard)
+		newBoard:SetAttribute("HasPhysics", true)
+		-- Notify all clients that hoverboard spawned
+		self.Client.HoverboardSpawned:FireAll(player, player, boardName)
+	end
+
+	task.defer(function() end)
 end
 
 -- Server: remove hoverboard and constraints
@@ -248,7 +219,7 @@ end
 ----------------------------------------------------------
 function HoverboardService.Client:RequestEquipHoverboard(player, boardName)
 	if not player or not boardName then
-		print("returning from here")
+		print("returning from RequestEquipHoverboard")
 		return
 	end
 	local template = HoverboardModels:FindFirstChild(boardName)
@@ -257,7 +228,7 @@ function HoverboardService.Client:RequestEquipHoverboard(player, boardName)
 		return
 	end
 
-	print("Here")
+	print("RequestEquipHoverboard called.")
 
 	-- Update stored config (so spawn on next join will use this)
 	playerHoverboards[player.UserId] = {
@@ -269,14 +240,6 @@ function HoverboardService.Client:RequestEquipHoverboard(player, boardName)
 
 	HoverboardService:RemoveHoverboard(player)
 	HoverboardService:SpawnHoverboard(player, boardName)
-
-	---- Inform the client's GUI or other players if you want
-	--self.EquipHoverboard:Fire(player, boardName, playerHoverboards[player.UserId].Config)
-	--for _, otherPlayer in ipairs(game.Players:GetPlayers()) do
-	--	if otherPlayer ~= player then
-	--		self.SpawnOtherHoverboard:Fire(otherPlayer, player, boardName)
-	--	end
-	--end
 end
 
 function HoverboardService.Client:GetHoverboardData(player)
@@ -300,7 +263,7 @@ end
 ----------------------------------------------------------
 function HoverboardService:OnCharacterAdded(player)
 	-- slight delay to ensure character parts exist
-	--task.wait(1)
+	task.wait(1)
 
 	-- If player has no stored hoverboard, give default. Otherwise spawn stored board.
 	if not playerHoverboards[player.UserId] or not playerHoverboards[player.UserId].Name then

@@ -339,9 +339,9 @@ end
 function PlayerDataHandler:GetEquippedHoverboard(player: Player): string
 	local profile = Profiles[player]
 	if profile and profile:IsActive() then
-		return profile.Data.HoverboardName or "Default"
+		return profile.Data.HoverboardName or "Hoverboard1"
 	end
-	return "Default"
+	return "Hoverboard1"
 end
 
 function PlayerDataHandler:SetEquippedHoverboard(player: Player, boardName: string)
