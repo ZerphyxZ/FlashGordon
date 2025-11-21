@@ -80,102 +80,6 @@ end
 -- GROUND CHECK
 --------------------------------------------------------------------------------
 function HoverboardJump.IsGrounded()
-	if not hoverboard or not hoverboard.PrimaryPart then
-		return false, nil, nil
-	end
-
-	local now = tick()
-
-	-- Prevent immediate re-grounding after a jump
-	if Jump.isJumping and (now - Jump.jumpStartTime) < JUMPING.MIN_AIR_TIME then
-		return false
-	end
-
-	-- Still rising? → not grounded
-	if hoverboard.PrimaryPart and hoverboard.PrimaryPart.Velocity.Y > HOVER.MAX_OBSTACLE_HEIGHT then
-		return false
-	end
-
-	local primary = hoverboard.PrimaryPart
-	local rayOrigin = primary.Position --+ Vector3.new(0, 0.5, 0) -- Start slightly above
-	local rayDir = Vector3.new(0, -HOVER.RAYCAST_DISTANCE, 0)
-
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { character, hoverboard }
-
-	-- Cast multiple rays in a wider pattern for better ramp detection
-	local rayOffsets = {
-		Vector3.new(0, 0, 0), -- Center
-		Vector3.new(2, 0, 2), -- Front-right
-		Vector3.new(-2, 0, 2), -- Front-left
-		Vector3.new(2, 0, -2), -- Back-right
-		Vector3.new(-2, 0, -2), -- Back-left
-		Vector3.new(3, 0, 0), -- Right
-		Vector3.new(-3, 0, 0), -- Left
-		Vector3.new(0, 0, 3), -- Front
-		Vector3.new(0, 0, -3), -- Back
-	}
-
-	local hitCount = 0
-	local totalHits = 0
-	local avgNormal = Vector3.zero
-	local closestDistance = math.huge
-	local closestPosition = nil
-
-	for _, offset in ipairs(rayOffsets) do
-		local origin = rayOrigin + offset
-		local result = workspace:Raycast(origin, rayDir, params)
-		if result then
-			totalHits = totalHits + 1
-			local distance = (origin - result.Position).Magnitude -- Use actual distance, not just Y difference
-			avgNormal = avgNormal + result.Normal
-
-			if distance < closestDistance then
-				closestDistance = distance
-				closestPosition = result.Position
-			end
-
-			-- Consider grounded if within hover height + tolerance (increased for ramps)
-			local tolerance = (HOVER.HOVER_HEIGHT or 4) + 0.5 -- Increased tolerance for ramps
-			if distance <= tolerance then
-				hitCount = hitCount + 1
-			end
-		end
-	end
-
-	-- Also check if we're very close to any surface using a shorter, angled ray for ramps
-	if hitCount < 2 then
-		local shortRayLength = (HOVER.HOVER_HEIGHT or 4) + 1
-		local shortRayDir = (rayDir.Unit * shortRayLength)
-
-		for _, offset in ipairs(rayOffsets) do
-			local origin = rayOrigin + offset
-			local result = workspace:Raycast(origin, shortRayDir, params)
-			if result then
-				local distance = (origin - result.Position).Magnitude
-				if distance <= shortRayLength then
-					hitCount = hitCount + 1
-					if totalHits == 0 then
-						closestPosition = result.Position
-						avgNormal = result.Normal
-					else
-						avgNormal = avgNormal + result.Normal
-					end
-					totalHits = totalHits + 1
-				end
-			end
-		end
-	end
-
-	-- Require at least 2 rays to hit for stable ground detection
-	if hitCount >= 2 and totalHits > 0 then
-		avgNormal = (avgNormal / totalHits).Unit
-		return true, closestPosition, avgNormal
-	end
-
-	return false, nil, nil
-
 	-- if not hoverboard or not hoverboard.PrimaryPart then
 	-- 	return false, nil, nil
 	-- end
@@ -188,28 +92,130 @@ function HoverboardJump.IsGrounded()
 	-- end
 
 	-- -- Still rising? → not grounded
-	-- if humanoidRootPart and humanoidRootPart.Velocity.Y > 5 then
+	-- if hoverboard.PrimaryPart and hoverboard.PrimaryPart.Velocity.Y > HOVER.MAX_OBSTACLE_HEIGHT then
 	-- 	return false
 	-- end
 
 	-- local primary = hoverboard.PrimaryPart
-	-- local rayOrigin = primary.Position
+	-- local rayOrigin = primary.Position --+ Vector3.new(0, 0.5, 0) -- Start slightly above
 	-- local rayDir = Vector3.new(0, -HOVER.RAYCAST_DISTANCE, 0)
 
 	-- local params = RaycastParams.new()
 	-- params.FilterType = Enum.RaycastFilterType.Exclude
 	-- params.FilterDescendantsInstances = { character, hoverboard }
 
-	-- local result = workspace:Raycast(rayOrigin, rayDir, params)
-	-- if result then
-	-- 	local distance = primary.Position.Y - result.Position.Y
-	-- 	local tolerance = (HOVER.HOVER_HEIGHT or 4) + 0.5
-	-- 	if distance <= tolerance then
-	-- 		return true, result.Position, result.Normal
+	-- -- Cast multiple rays in a wider pattern for better ramp detection
+	-- local rayOffsets = {
+	-- 	Vector3.new(0, 0, 0), -- Center
+	-- 	Vector3.new(2, 0, 2), -- Front-right
+	-- 	Vector3.new(-2, 0, 2), -- Front-left
+	-- 	Vector3.new(2, 0, -2), -- Back-right
+	-- 	Vector3.new(-2, 0, -2), -- Back-left
+	-- 	Vector3.new(3, 0, 0), -- Right
+	-- 	Vector3.new(-3, 0, 0), -- Left
+	-- 	Vector3.new(0, 0, 3), -- Front
+	-- 	Vector3.new(0, 0, -3), -- Back
+	-- }
+
+	-- local hitCount = 0
+	-- local totalHits = 0
+	-- local avgNormal = Vector3.zero
+	-- local closestDistance = math.huge
+	-- local closestPosition = nil
+
+	-- for _, offset in ipairs(rayOffsets) do
+	-- 	local origin = rayOrigin + offset
+	-- 	local result = workspace:Raycast(origin, rayDir, params)
+	-- 	if result then
+	-- 		totalHits = totalHits + 1
+	-- 		local distance = (origin - result.Position).Magnitude -- Use actual distance, not just Y difference
+	-- 		avgNormal = avgNormal + result.Normal
+
+	-- 		if distance < closestDistance then
+	-- 			closestDistance = distance
+	-- 			closestPosition = result.Position
+	-- 		end
+
+	-- 		-- Consider grounded if within hover height + tolerance (increased for ramps)
+	-- 		local tolerance = (HOVER.HOVER_HEIGHT or 4) + 0.5 -- Increased tolerance for ramps
+	-- 		if distance <= tolerance then
+	-- 			hitCount = hitCount + 1
+	-- 		end
 	-- 	end
 	-- end
 
+	-- -- Also check if we're very close to any surface using a shorter, angled ray for ramps
+	-- if hitCount < 2 then
+	-- 	local shortRayLength = (HOVER.HOVER_HEIGHT or 4) + 1
+	-- 	local shortRayDir = (rayDir.Unit * shortRayLength)
+
+	-- 	for _, offset in ipairs(rayOffsets) do
+	-- 		local origin = rayOrigin + offset
+	-- 		local result = workspace:Raycast(origin, shortRayDir, params)
+	-- 		if result then
+	-- 			local distance = (origin - result.Position).Magnitude
+	-- 			if distance <= shortRayLength then
+	-- 				hitCount = hitCount + 1
+	-- 				if totalHits == 0 then
+	-- 					closestPosition = result.Position
+	-- 					avgNormal = result.Normal
+	-- 				else
+	-- 					avgNormal = avgNormal + result.Normal
+	-- 				end
+	-- 				totalHits = totalHits + 1
+	-- 			end
+	-- 		end
+	-- 	end
+	-- end
+
+	-- -- Require at least 2 rays to hit for stable ground detection
+	-- if hitCount >= 2 and totalHits > 0 then
+	-- 	avgNormal = (avgNormal / totalHits).Unit
+	-- 	return true, closestPosition, avgNormal
+	-- end
+
 	-- return false, nil, nil
+
+
+
+
+
+
+
+	if not hoverboard or not hoverboard.PrimaryPart then
+		return false, nil, nil
+	end
+
+	local now = tick()
+
+	-- Prevent immediate re-grounding after a jump
+	if Jump.isJumping and (now - Jump.jumpStartTime) < JUMPING.MIN_AIR_TIME then
+		return false
+	end
+
+	-- Still rising? → not grounded
+	if humanoidRootPart and humanoidRootPart.Velocity.Y > HOVER.MAX_OBSTACLE_HEIGHT then
+		return false
+	end
+
+	local primary = hoverboard.PrimaryPart
+	local rayOrigin = primary.Position
+	local rayDir = Vector3.new(0, -HOVER.RAYCAST_DISTANCE, 0)
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character, hoverboard }
+
+	local result = workspace:Raycast(rayOrigin, rayDir, params)
+	if result then
+		local distance = primary.Position.Y - result.Position.Y
+		local tolerance = (HOVER.HOVER_HEIGHT or 1.5) + 0.5
+		if distance <= tolerance then
+			return true, result.Position, result.Normal
+		end
+	end
+
+	return false, nil, nil
 end
 
 --------------------------------------------------------------------------------
@@ -310,108 +316,6 @@ function HoverboardJump.UpdateJump(dt)
 	end
 end
 
-function HoverboardJump.UpdateJumpAndFly(deltaTime)
-	if not hoverboard or not humanoidRootPart then
-		return
-	end
-
-	local grounded = HoverboardJump.IsGrounded()
-	local currentVelocity = humanoidRootPart.Velocity
-
-	-- Handle flying state
-	if Jump.isFlying then
-		-- Apply upward flying force
-		local flyVelocity = Vector3.new(currentVelocity.X, FLY.FLY_SPEED, currentVelocity.Z)
-		humanoidRootPart.Velocity = flyVelocity
-
-		-- Check if we've reached max fly height
-		if hoverboard.Position.Y >= FLY.MAX_FLY_HEIGHT then
-			-- Maintain position at max height
-			humanoidRootPart.Velocity = Vector3.new(currentVelocity.X, 0, currentVelocity.Z)
-		end
-
-		-- Keep hover force disabled during flight
-		if hoverBodyPosition then
-			hoverBodyPosition.MaxForce = Vector3.zero
-		end
-	elseif Jump.isJumping and not Jump.isFlying then
-		-- Handle smooth jump progression
-		Jump.jumpProgress = Jump.jumpProgress + (deltaTime / FLY.SMOOTH_JUMP_DURATION)
-
-		if Jump.jumpProgress < 1 then
-			-- Smooth upward motion during jump
-			local jumpT = Jump.jumpProgress
-			local smoothT = 1 - (1 - jumpT) * (1 - jumpT) -- Ease out quad
-			local currentJumpVelocity = Jump.targetJumpHeight * (1 - smoothT)
-
-			humanoidRootPart.Velocity = Vector3.new(currentVelocity.X, currentJumpVelocity, currentVelocity.Z)
-		else
-			-- Jump phase complete, start smooth landing if not flying
-			if grounded then
-				Jump.isJumping = false
-				Jump.jumpProgress = 0
-				-- Restore hover force
-				if hoverBodyPosition then
-					hoverBodyPosition.MaxForce = Vector3.new(0, HOVER.HOVER_FORCE or 10000, 0)
-				end
-			else
-				-- Apply gentle downward force for smooth landing
-				local landT = (Jump.jumpProgress - 1) * FLY.LAND_SMOOTHNESS
-				local downwardForce = math.min(landT * 20, 10) -- Gentle pull toward ground
-
-				humanoidRootPart.Velocity =
-					Vector3.new(currentVelocity.X, currentVelocity.Y - downwardForce, currentVelocity.Z)
-			end
-		end
-
-		-- Keep hover force disabled during jump
-		if hoverBodyPosition then
-			hoverBodyPosition.MaxForce = Vector3.zero
-		end
-	elseif not grounded and not Jump.isJumping and not Jump.isFlying then
-		-- Return to hover height when not jumping or flying
-		local currentHeight = hoverboard.Position.Y
-		local hoverHeight = Jump.originalHoverHeight
-
-		if currentHeight > hoverHeight + 1 then
-			-- Smoothly return to hover height
-			local heightDiff = currentHeight - hoverHeight
-			local returnStrength = math.min(heightDiff * FLY.RETURN_SPEED * deltaTime, heightDiff)
-
-			humanoidRootPart.Velocity =
-				Vector3.new(currentVelocity.X, currentVelocity.Y - returnStrength, currentVelocity.Z)
-		end
-	end
-
-	-- Auto-land if we've been in the air too long without flying
-	if Jump.isJumping and not Jump.isFlying and (tick() - Jump.jumpStartTime) > JUMPING.MAX_AIR_TIME then
-		Jump.isJumping = false
-		Jump.jumpProgress = 0
-	end
-end
-
---------------------------------------------------------------------------------
--- START FLYING (when jump button is held)
---------------------------------------------------------------------------------
-function HoverboardJump.StartFlying()
-	--if State.isJumping and not State.isFlying then
-	--	State.isFlying = true
-	--	State.flyStartTime = tick()
-	--	print("Flying started")
-	--end
-end
-
---------------------------------------------------------------------------------
--- STOP FLYING (when jump button is released)
---------------------------------------------------------------------------------
-function HoverboardJump.StopFlying()
-	--if State.isFlying then
-	--	State.isFlying = false
-	--	State.jumpStartTime = tick() -- Reset jump timer for smooth landing
-	--	print("Flying stopped, returning to hover height")
-	--end
-end
-
 --------------------------------------------------------------------------------
 -- LANDING LOGIC
 --------------------------------------------------------------------------------
@@ -419,9 +323,11 @@ function HoverboardJump.UpdateLanding(dt)
 	if not hoverboard and not hoverboard.PrimaryPart then
 		return
 	end
+	local primary = hoverboard.PrimaryPart
+	local grounded = HoverboardJump.IsGrounded()
+
 	-- If jumping: check if landed
 	if Jump.isJumping then
-		local grounded = HoverboardJump.IsGrounded()
 		if grounded then
 			Jump.isJumping = false
 			Jump.canJump = true
@@ -433,25 +339,22 @@ function HoverboardJump.UpdateLanding(dt)
 				hoverBodyPosition.MaxForce = PHYSICS.BODY_POSITION_MAX_FORCE
 			end
 		end
+		return
 	end
 
 	-- Always keep hover height consistent when NOT jumping
-	if not Jump.isJumping and hoverBodyPosition then
-		if hoverboard.PrimaryPart then
-			local primary = hoverboard.PrimaryPart
-			local origin = primary.Position
+	if not Jump.isJumping and hoverBodyPosition and grounded then
+		local origin = primary.Position
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { character, hoverboard }
 
-			local params = RaycastParams.new()
-			params.FilterType = Enum.RaycastFilterType.Exclude
-			params.FilterDescendantsInstances = { character, hoverboard }
-
-			local result = workspace:Raycast(origin, Vector3.new(0, -(HOVER.RAYCAST_DISTANCE), 0), params)
-			if result then
-				local groundY = result.Position.Y
-				local targetY = groundY + Jump.baseHoverHeight
-				hoverBodyPosition.Position = Vector3.new(origin.X, targetY, origin.Z)
-				hoverBodyPosition.MaxForce = PHYSICS.BODY_POSITION_MAX_FORCE
-			end
+		local result = workspace:Raycast(origin, Vector3.new(0, -HOVER.RAYCAST_DISTANCE, 0), params)
+		if result then
+			local groundY = result.Position.Y
+			local targetY = groundY + Jump.baseHoverHeight
+			hoverBodyPosition.Position = Vector3.new(origin.X, targetY, origin.Z)
+			hoverBodyPosition.MaxForce = PHYSICS.BODY_POSITION_MAX_FORCE
 		end
 	end
 end

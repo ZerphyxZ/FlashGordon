@@ -27,11 +27,18 @@ local hoverboard, bodyVelocity, bodyGyro, bodyPosition
 local runningConnection
 local inputVector = Vector3.zero
 local isOnHoverboard = false
+local isHoverboardInitialized = false
 local HOVERBOARD_OFFSET = Vector3.new(0, 0, 0)
 
+--UI References
+local mainGUI = player:WaitForChild("PlayerGui"):WaitForChild("MainGui")
+local speedGUI = mainGUI:WaitForChild("SpeedGUI")
+local speedLabel = speedGUI:WaitForChild("SpeedVal")
+local boostLabel = speedGUI:WaitForChild("BoostVal")
+
 --Constants
-local MAX_SPEED = 50
-local ACCELERATION = 8
+local MAX_SPEED = 80
+local ACCELERATION = 2
 local DECELERATION = 20
 local MOVEMENT_SMOOTHNESS = 0.1
 local MIN_MOVEMENT_THRESHOLD = 0.1
@@ -45,6 +52,14 @@ local MAX_BODY_FORCE = 100000
 local HOVER_SMOOTHNESS = 8
 local ORIENTATION_SMOOTHNESS = 6
 
+-- Boost System
+local BOOST_VALUE = 20
+local BOOST_DURATION = 0.5
+local BOOST_COOLDOWN = 5
+local isBoosting = false
+local boostReady = true
+local boostTimeLeft = 0
+
 local State = {
 	lastMoveDir = Vector3.zero,
 	smoothedGroundNormal = Vector3.new(0, HOVER_HEIGHT, 0),
@@ -57,45 +72,80 @@ local State = {
 ]]
 --
 
-function HoverboardController:StartHoverboard(humanoid)
+function HoverboardController:StartHoverboard(config)
 	if runningConnection then
 		runningConnection:Disconnect()
 	end
 
-	GameHUD.CreateHUD()
+	boostLabel.Text = "Boost Ready"
+	local acceleration = config.Acceleration or ACCELERATION
+	local topSpeed = config.TopSpeed or MAX_SPEED
+	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
+
 	runningConnection = RunService.Heartbeat:Connect(function(dt)
-		if not rootPart or not character then
+		if not rootPart or not character or not hoverboard or not isOnHoverboard then
 			return
 		end
-		local moveDir = HoverboardMovement.HandleMovement(humanoid, hoverboard, rootPart, bodyVelocity, 
-			MAX_SPEED, ACCELERATION, DECELERATION, MOVEMENT_SMOOTHNESS, MIN_MOVEMENT_THRESHOLD, State,
-			dt)
-		
-		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HOVERBOARD_OFFSET, HoverboardJump,
-		ROTATION_SPEED, ROTATION_SMOOTHNESS, MAX_LEAN, LEAN_SMOOTH, State,
-		dt)
+		local moveDir = HoverboardMovement.HandleMovement(
+			humanoid,
+			rootPart,
+			hoverboard,
+			bodyVelocity,
+			topSpeed,
+			acceleration,
+			DECELERATION,
+			MOVEMENT_SMOOTHNESS,
+			MIN_MOVEMENT_THRESHOLD,
+			State,
+			dt
+		)
 
-		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, RAY_DISTANCE, ORIENTATION_SMOOTHNESS, State, HoverboardJump, hoverboard, dt)
+		HoverboardMovement.UpdateOrientation(
+			rootPart,
+			bodyGyro,
+			hoverboard,
+			moveDir,
+			HoverboardJump,
+			ROTATION_SPEED,
+			ROTATION_SMOOTHNESS,
+			MAX_LEAN,
+			LEAN_SMOOTH,
+			State,
+			dt
+		)
+
+		--HoverboardMovement.UpdateHoverboardOrientation(character, hoverboard, rootPart, RAY_DISTANCE, HOVER_SMOOTHNESS, State, dt)
+		--HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, RAY_DISTANCE, ORIENTATION_SMOOTHNESS, State, HoverboardJump, hoverboard, dt)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
 		HoverboardJump.UpdateLanding(dt) --Check for the ground detection
 	end)
-
 	GameHUD.UpdateSpeed(function()
 		return HoverboardMovement.CurrentSpeed
 	end)
 end
 
-function HoverboardController:SetActiveHoverboard(boardName)
+function HoverboardController:SetActiveConfig(boardName)
+	if isHoverboardInitialized then
+		print("Hoverboard: Hoverboard already initialized, skipping SetActiveHoverboard")
+		return
+	end
 	local config = HoverboardData.GetConfig(boardName)
 	if not config then
-		warn("[HoverboardController] Could not find hoverboard config for " .. tostring(boardName))
+		warn("Hoverboard: Could not find hoverboard config for " .. tostring(boardName))
 		return
 	end
 	self.ActiveConfig = config
+	print("Hoverboard: Active config: ", self.ActiveConfig)
+	self:WaitForHoverboard(self.ActiveConfig)
 end
 
-function HoverboardController:WaitForHoverboard(humanoid)
+function HoverboardController:WaitForHoverboard(config)
 	if not character then
+		return
+	end
+
+	if isHoverboardInitialized then
+		print("Hoverboard: Hoverboard already initialized, skipping WaitForHoverboard")
 		return
 	end
 
@@ -109,8 +159,53 @@ function HoverboardController:WaitForHoverboard(humanoid)
 	if hb then
 		print("Hoverboard: Hoverboard is assigned.")
 		hoverboard = hb
-		HoverboardController:StartHoverboard(humanoid)
+		isOnHoverboard = true
+		isHoverboardInitialized = true
+		local primary = hoverboard:WaitForChild("PrimaryPart")
+		bodyVelocity = primary:WaitForChild("BodyVelocity")
+		bodyGyro = primary:WaitForChild("BodyGyro")
+		bodyPosition = primary:WaitForChild("BodyPosition")
+		HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition)
+		HoverboardJump.SetHoverHeight(HOVER_HEIGHT)
+		HoverboardController:StartHoverboard(config)
 	end
+end
+
+function HoverboardController:ApplyBoost()
+	if not boostReady then
+		return
+	end
+	if HoverboardMovement.CurrentSpeed < 20 then
+		return
+	end
+	print("Boost called.")
+	isBoosting = true
+	boostReady = false
+	boostTimeLeft = BOOST_COOLDOWN
+
+	-- Apply speed boost immediately
+	HoverboardMovement.CurrentSpeed = HoverboardMovement.CurrentSpeed + BOOST_VALUE
+
+	-- Temp acceleration boost
+	local originalAcceleration = ACCELERATION
+	ACCELERATION = 20
+
+	task.delay(BOOST_DURATION, function()
+		isBoosting = false
+		ACCELERATION = originalAcceleration
+	end)
+
+	-- Cooldown management
+	task.spawn(function()
+		while boostTimeLeft > 0 do
+			boostLabel.Text = "Boost CD: " .. string.format("%.1f", boostTimeLeft)
+			boostTimeLeft = boostTimeLeft - 0.1
+			task.wait(0.1)
+		end
+		boostReady = true
+		boostLabel.Text = "Boost Ready"
+	end)
+	print("Boost completed.")
 end
 
 --[[
@@ -134,7 +229,7 @@ end
     Character Setup
 ]]
 --
-local function DisableAnimations(char)
+function HoverboardController:DisableAnimations(char)
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hum then
 		return
@@ -146,24 +241,15 @@ local function DisableAnimations(char)
 	if animate then
 		animate.Disabled = true
 	end
-	hum:ChangeState(Enum.HumanoidStateType.Physics)
+	--hum:ChangeState(Enum.HumanoidStateType.Physics)
 end
 
 local function OnCharacterAdded(char)
 	character = char
-	local humanoid = char:WaitForChild("Humanoid")
+	humanoid = char:WaitForChild("Humanoid")
 	rootPart = char:WaitForChild("HumanoidRootPart")
-	DisableAnimations(char)
-	-- Physics must wait until hoverboard exists (server-created)
-	HoverboardController:WaitForHoverboard(humanoid)
-	-- Attach physics AFTER hoverboard arrives
-	task.defer(function()
-		if hoverboard and rootPart then
-			bodyVelocity, bodyGyro, bodyPosition = HoverboardPhysics.AttachPhysics(rootPart, hoverboard)
-			HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition)
-			HoverboardJump.SetHoverHeight(HOVER_HEIGHT)
-		end
-	end)
+	HoverboardController:DisableAnimations(character)
+	HoverboardUtils.BindInput(player)
 end
 
 local function OnCharacterRemoving()
@@ -171,9 +257,9 @@ local function OnCharacterRemoving()
 		runningConnection:Disconnect()
 		runningConnection = nil
 	end
-	HoverboardPhysics.Cleanup(hoverboard, bodyVelocity, bodyGyro, bodyPosition)
+	CleanupHoverboard()
+	ResetStates()
 	GameHUD.Cleanup()
-	hoverboard, bodyVelocity, bodyGyro, bodyPosition = nil, nil, nil, nil
 end
 
 local function OnPlayerAdded(plr)
@@ -199,24 +285,27 @@ end
 function HoverboardController:KnitStart()
 	HoverboardService = Knit.GetService("HoverboardService")
 	HoverboardService.HoverboardSpawned:Connect(function(_, owner, boardName)
-		if owner == player then
-			self:SetActiveHoverboard(boardName)
-			task.defer(function()
-				local offsetY = HoverboardService:GetBoardOffset():expect()
-				if typeof(offsetY) == "number" then
-					HOVERBOARD_OFFSET = Vector3.new(0, -offsetY, 0)
-					print("Client received board offset:", offsetY)
-				end
-				self:WaitForHoverboard()
-			end)
+		if owner ~= player then
+			return
 		end
+		if isHoverboardInitialized then
+			print("Hoverboard: Hoverboard already initialized, ignoring spawn event")
+			return
+		end
+		HoverboardController:SetActiveConfig(boardName)
 	end)
 	HoverboardService.HoverboardRemoved:Connect(function()
 		ResetStates()
 		CleanupHoverboard()
 	end)
 	OnPlayerAdded(player)
-	HoverboardUtils.BindInput(player, MAX_SPEED)
+	UserInputService.InputBegan:Connect(function(input, gpe)
+		if gpe then return end
+		if input.KeyCode == Enum.KeyCode.Q then
+			print("Hoverboard: Boost requested.")
+			HoverboardController:ApplyBoost()
+		end
+	end)
 end
 
 return HoverboardController

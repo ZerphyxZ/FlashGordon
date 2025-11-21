@@ -3,8 +3,8 @@ local HoverboardPhysics = {}
 
 local MAX_BODY_FORCE = 100000
 
-function HoverboardPhysics.AttachPhysics(rootPart, hoverboard)
-	if not rootPart or not hoverboard or not hoverboard.PrimaryPart then return end
+function HoverboardPhysics.AttachPhysics(hoverboard)
+	if not hoverboard or not hoverboard.PrimaryPart then return end
 	local primaryPart = hoverboard.PrimaryPart
 
 	local bv = Instance.new("BodyVelocity")
