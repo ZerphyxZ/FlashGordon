@@ -419,4 +419,12 @@ function PlayerDataHandler:SetLastSpinnerClaim(player: Player)
 	end
 end
 
+--[Redeem Codes Handler]
+function PlayerDataHandler:UpdateCodes(player: Player, claimedCodes: {})
+	local playerData = self:GetData(player)
+	if playerData then
+		self:SetPlayerData(player, { Codes = claimedCodes })
+	end
+end
+
 return PlayerDataHandler

@@ -38,6 +38,7 @@ local Frames = {}
 local days = {}
 
 local DailyRewardService = nil
+local CoinsController = nil
 
 local DailyRewardController = Knit.CreateController({
 	Name = "DailyRewardController",
@@ -135,6 +136,7 @@ function Initialize()
 						currentDay = payload.currentDay
 						streak = payload.streak
 						UpdateState(payload)
+						CoinsController:RefreshDisplay()
 					else
 						warn("No okServer")
 					end
@@ -230,6 +232,7 @@ end
 
 function DailyRewardController:KnitStart()
 	DailyRewardService = Knit.GetService("DailyRewardService")
+	CoinsController = Knit.GetController("CoinsController")
 
 	Initialize()
 	self:UpdateRewards()

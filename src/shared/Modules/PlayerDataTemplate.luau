@@ -1,6 +1,3 @@
--- ReplicatedStorage/Shared/Modules/PlayerDataTemplate.luau
--- Adds per-world stores + spin fields while keeping legacy fields for back-compat.
-
 local PlayerDataTemplate = {
 	Coins = 0,
 	Playtime = 0,
@@ -22,6 +19,9 @@ local PlayerDataTemplate = {
 	--Spins system
 	AvailableSpin = 0,
 	LastSpinReward = 0,
+
+	-- Claimed Redeem Codes
+	Codes = {},
 }
 
 return PlayerDataTemplate

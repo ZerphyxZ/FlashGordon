@@ -232,6 +232,7 @@ function SpinController:KnitStart()
 	-- LocalPlayer:GetAttributeChangedSignal("Coins"):Connect(AttributeChanged)
 
 	Initialize()
+	HandleSpinFrame()
 end
 
 -- Open button already handle in Lobbyhud

@@ -1,7 +1,5 @@
 -- [Services]				----
-local PlayerService: Players = game:GetService("Players")
 local ReplicatedStorage: ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService: ServerScriptService = game:GetService("ServerScriptService")
 
 -- [Modules]				-----
 local Knit = require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Knit"))
