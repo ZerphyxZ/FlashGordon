@@ -24,7 +24,6 @@ local SimpleParticleEmit = require(Utility:WaitForChild("SimpleParticleEmit"))
 local Assets: Folder = ReplicatedStorage:WaitForChild("Assets")
 local MonsterTemplates: Folder = Assets:WaitForChild("Obstacle")
 
-
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 local Controller = Knit.CreateController({ Name = "MonsterObstacleController" })
 
@@ -152,7 +151,7 @@ end
 function Attack(Monster: {})
 	print("Attack", Monster)
 
-	SimpleParticleEmit(Monster.Config.SpawnEffect, "Burst", CFrame.new(Monster.SpawnPoint.Position))  -- + (Vector3.yAxis * Monster.Size.Y / monsterSizeDivider)))
+	SimpleParticleEmit(Monster.Config.SpawnEffect, "Burst", CFrame.new(Monster.SpawnPoint.Position)) -- + (Vector3.yAxis * Monster.Size.Y / monsterSizeDivider)))
 	Monster.Model.Parent = workspace
 	Monster.Model:PivotTo(CFrame.new(Monster.SpawnPoint:GetPivot().Position, Monster.Hitbox:GetPivot().Position))
 	-- Monster.AnimationTrack:Play()
@@ -166,14 +165,14 @@ function Attack(Monster: {})
 	-- play animation
 	local animation = Instance.new("Animation")
 	animation.AnimationId = Monster.Config.AnimationId
-	
+
 	animation = Monster.Model.AnimationController.Animator:LoadAnimation(animation)
 	animation:Play()
 
 	-- play attack sequence
 	translation:Play()
 	translation.Completed:Wait()
-	
+
 	SimpleParticleEmit(Monster.Config.ImpactEffect, "Burst", Monster.Hitbox:GetPivot())
 	SimpleParticleEmit(Monster.Config.HitEffect, "Burst", Monster.Hitbox.Position)
 
