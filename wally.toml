@@ -15,6 +15,7 @@ sift = "csqrl/sift@0.0.8"
 roact-hooks = "kampfkarren/roact-hooks@0.5.1"
 roact-flipper = "reselim/roact-flipper@2.1.0"
 trove = "sleitnick/trove@1.8.0"
+Component = "azutreo/component@2.4.10"
 
 [server-dependencies]
 Profilestore = "detourious/loleris-profilestore@1.0.0"
