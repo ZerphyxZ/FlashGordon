@@ -25,6 +25,7 @@ local HoverboardService = Knit.CreateService({
 		HoverboardSpawned = Knit.CreateSignal(),
 		HoverboardRemoved = Knit.CreateSignal(),
 		SpawnOtherHoverboard = Knit.CreateSignal(),
+		ControlSignal = Knit.CreateSignal(),
 	},
 })
 
@@ -91,7 +92,7 @@ local function CalculateBoardOffset(character, boardModel)
 	local rootY = hrp.Position.Y
 	local footOffset = rootY - lowestY
 	local boardSizeY = boardModel:GetExtentsSize().Y
-	return (footOffset + (boardSizeY / 2)) - 0.75
+	return (footOffset + (boardSizeY / 2)) - 0.5
 end
 
 function HoverboardService.Client:GetBoardOffset(player)
@@ -133,14 +134,10 @@ end
 ----------------------------------------------------------
 function HoverboardService:SpawnHoverboard(player, boardName)
 	print("Spawn hoverboard called")
-
-	boardName = boardName
-		or (playerHoverboards[player.UserId] and playerHoverboards[player.UserId].Name)
-		or DEFAULT_BOARD
 	local character = player.Character
-	if not character or not character:FindFirstChild("HumanoidRootPart") then
-		return
-	end
+	if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
+	boardName = boardName or (playerHoverboards[player.UserId] and playerHoverboards[player.UserId].Name) or DEFAULT_BOARD	
 
 	-- Clean up any old hoverboard and constraints
 	CleanupCharacterHoverboard(character)
@@ -195,8 +192,6 @@ function HoverboardService:SpawnHoverboard(player, boardName)
 		-- Notify all clients that hoverboard spawned
 		self.Client.HoverboardSpawned:FireAll(player, player, boardName)
 	end
-
-	task.defer(function() end)
 end
 
 -- Server: remove hoverboard and constraints
@@ -261,10 +256,50 @@ end
 ----------------------------------------------------------
 -- Character Setup
 ----------------------------------------------------------
-function HoverboardService:OnCharacterAdded(player)
-	-- slight delay to ensure character parts exist
-	task.wait(1)
+local function HandleCharacterDeath(player)
+	local character = player.Character
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or not character then return end
+	
+	humanoid.BreakJointsOnDeath = false
+	
+	-- Prevent default death behavior
+	humanoid.Died:Connect(function()
+		print("Character would die, making invisible instead: ", player.Name)
 
+		-- Make all character parts invisible & non-collidable
+		for _, part in ipairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Transparency = 1
+				part.CanCollide = false
+			elseif part:IsA("Decal") or part:IsA("SurfaceGui") then
+				--part.Transparency = 1
+				--part.Visible = false
+				--part.CanCollide = false
+			end
+		end
+
+		-- Make hoverboard invisible & non-collidable
+		local hoverboard = character:FindFirstChild("Hoverboard")
+		if hoverboard then
+			for _, part in ipairs(hoverboard:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.Transparency = 1
+					part.CanCollide = false
+				end
+			end
+		end
+	end)
+end
+
+
+function HoverboardService:OnCharacterAdded(player)
+	
+	self.Client.ControlSignal:Fire(player, "Disable")
+	
+	-- slight delay to ensure character parts exist
+	task.wait(1.5)
+	
 	-- If player has no stored hoverboard, give default. Otherwise spawn stored board.
 	if not playerHoverboards[player.UserId] or not playerHoverboards[player.UserId].Name then
 		self:GiveDefaultHoverboard(player)
@@ -273,8 +308,13 @@ function HoverboardService:OnCharacterAdded(player)
 		local storedName = playerHoverboards[player.UserId].Name
 		self:SpawnHoverboard(player, storedName)
 	end
+	
+	self.Client.ControlSignal:Fire(player, "Enable")
 end
 
+function HoverboardService:OnCharacterRemoving(player)
+	HandleCharacterDeath(player)
+end
 ----------------------------------------------------------
 -- Player Handling
 ----------------------------------------------------------
@@ -286,7 +326,11 @@ function HoverboardService:KnitStart()
 			Config = Hoverboards.GetConfig(saved),
 		}
 		player.CharacterAdded:Connect(function()
+			HandleCharacterDeath(player)
 			self:OnCharacterAdded(player)
+		end)
+		player.CharacterRemoving:Connect(function()
+			--self:OnCharacterRemoving(player)
 		end)
 	end)
 

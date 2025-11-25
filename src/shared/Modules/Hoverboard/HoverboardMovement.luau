@@ -16,72 +16,44 @@ function HoverboardMovement.CalculateSpeed(
 	dt,
 	isMoving,
 	MAX_SPEED,
-	MOVEMENT_SMOOTHNESS
+	MOVEMENT_SMOOTHNESS,
+	allowedExceedMax
 )
 	local rate = isMoving and Acceleration or Deceleration
 	local smooth = 1 - math.exp(-rate * MOVEMENT_SMOOTHNESS * dt)
 	HoverboardMovement.CurrentSpeed = HoverboardMovement.CurrentSpeed
 		+ (targetSpeed - HoverboardMovement.CurrentSpeed) * smooth
-	HoverboardMovement.CurrentSpeed = math.clamp(HoverboardMovement.CurrentSpeed, 0, MAX_SPEED)
+	
+	if allowedExceedMax then
+		HoverboardMovement.CurrentSpeed = math.clamp(HoverboardMovement.CurrentSpeed, 0, MAX_SPEED)
+	end
 end
 
 function HoverboardMovement.ApplyVelocity(dt, hrp, moveDir, bodyVelocity, hoverboard, currentSpeed, State)
-	if not bodyVelocity or not hoverboard or not hoverboard.PrimaryPart then
-		return
-	end
+	if not bodyVelocity or not hoverboard or not hoverboard.PrimaryPart then return end
 
-	local primary = hoverboard.PrimaryPart
-	local currentVel = primary.AssemblyLinearVelocity
+	local effectiveDir = (currentSpeed > 0) and State.lastMoveDir or Vector3.zero
+	local velocity = effectiveDir * currentSpeed
+	local currentVel = hoverboard.PrimaryPart.AssemblyLinearVelocity
 
-	-- Determine the effective movement direction
-	local effectiveDir = (moveDir.Magnitude > 0.1) and moveDir.Unit or State.lastMoveDir
-	if effectiveDir.Magnitude > 0 then
-		State.lastMoveDir = effectiveDir
-	end
-
-	-- Calculate target velocity
-	local targetVelocity = Vector3.zero
-	if currentSpeed > 0 and effectiveDir.Magnitude > 0 then
-		targetVelocity = effectiveDir * currentSpeed
+	-- Only apply movement if allowed and we have input
+	if moveDir.Magnitude > 0 then
+		local horiz = Vector3.new(velocity.X, 0, velocity.Z)
+		local curHoriz = Vector3.new(currentVel.X, 0, currentVel.Z)
+		local velT = 1 - math.exp(-20 * dt)
+		local newHoriz = curHoriz:Lerp(horiz, velT)
+		bodyVelocity.Velocity = Vector3.new(newHoriz.X, currentVel.Y, newHoriz.Z)
+	elseif moveDir.Magnitude == 0 then
+		local horiz = Vector3.new(velocity.X, 0, velocity.Z)
+		local curHoriz = Vector3.new(currentVel.X, 0, currentVel.Z)
+		local velT = 1 - math.exp(-20 * dt)
+		local newHoriz = curHoriz:Lerp(horiz, velT)
+		bodyVelocity.Velocity = Vector3.new(newHoriz.X, currentVel.Y, newHoriz.Z)
 	else
-		-- Gradual slowdown when no input
-		targetVelocity = Vector3.zero
+		local currentHorizVel = Vector3.new(currentVel.X, 0, currentVel.Z)
+		local slowedHorizVel = currentHorizVel * math.exp(-10 * dt) -- Gradual slowdown
+		bodyVelocity.Velocity = Vector3.new(slowedHorizVel.X, currentVel.Y, slowedHorizVel.Z)
 	end
-
-	-- Smooth velocity transition
-	local currentHorizVel = Vector3.new(currentVel.X, 0, currentVel.Z)
-	local targetHorizVel = Vector3.new(targetVelocity.X, 0, targetVelocity.Z)
-
-	local velT = 1 - math.exp(-15 * dt) -- Smoothing factor
-	local newHorizVel = currentHorizVel:Lerp(targetHorizVel, velT)
-
-	-- Preserve Y velocity for gravity/jumping
-	bodyVelocity.Velocity = Vector3.new(newHorizVel.X, currentVel.Y, newHorizVel.Z)
-
-	-- if not bodyVelocity or not hoverboard or not hoverboard.PrimaryPart then return end
-
-	-- local effectiveDir = (currentSpeed > 0) and State.lastMoveDir or Vector3.zero
-	-- local velocity = effectiveDir * currentSpeed
-	-- local currentVel = hoverboard.PrimaryPart.AssemblyLinearVelocity
-
-	-- -- Only apply movement if allowed and we have input
-	-- if moveDir.Magnitude > 0 then
-	-- 	local horiz = Vector3.new(velocity.X, 0, velocity.Z)
-	-- 	local curHoriz = Vector3.new(currentVel.X, 0, currentVel.Z)
-	-- 	local velT = 1 - math.exp(-20 * dt)
-	-- 	local newHoriz = curHoriz:Lerp(horiz, velT)
-	-- 	bodyVelocity.Velocity = Vector3.new(newHoriz.X, currentVel.Y, newHoriz.Z)
-	-- elseif moveDir.Magnitude == 0 then
-	-- 	local horiz = Vector3.new(velocity.X, 0, velocity.Z)
-	-- 	local curHoriz = Vector3.new(currentVel.X, 0, currentVel.Z)
-	-- 	local velT = 1 - math.exp(-20 * dt)
-	-- 	local newHoriz = curHoriz:Lerp(horiz, velT)
-	-- 	bodyVelocity.Velocity = Vector3.new(newHoriz.X, currentVel.Y, newHoriz.Z)
-	-- else
-	-- 	local currentHorizVel = Vector3.new(currentVel.X, 0, currentVel.Z)
-	-- 	local slowedHorizVel = currentHorizVel * math.exp(-10 * dt) -- Gradual slowdown
-	-- 	bodyVelocity.Velocity = Vector3.new(slowedHorizVel.X, currentVel.Y, slowedHorizVel.Z)
-	-- end
 end
 
 function HoverboardMovement.HandleMovement(
@@ -95,6 +67,7 @@ function HoverboardMovement.HandleMovement(
 	MOVEMENT_SMOOTHNESS,
 	MIN_MOVEMENT_THRESHOLD,
 	State,
+	isBoosting, 
 	dt
 )
 	if not humanoid or not hoverboard or not hoverboard.PrimaryPart then
@@ -142,6 +115,7 @@ function HoverboardMovement.UpdateOrientation(
 	ROTATION_SMOOTHNESS,
 	MAX_LEAN,
 	LEAN_SMOOTH,
+	LEAN_MULTIPLIER,
 	State,
 	dt
 )
@@ -185,8 +159,8 @@ function HoverboardMovement.UpdateOrientation(
 		local yawDelta = currentYaw - prevYaw
 		prevYaw = currentYaw
 
-		if HoverboardMovement.CurrentSpeed > 2 then
-			local targetLean = math.clamp(yawDelta * 50, -MAX_LEAN, MAX_LEAN)
+		if HoverboardMovement.CurrentSpeed > 10 then
+			local targetLean = math.clamp(yawDelta * LEAN_MULTIPLIER, -MAX_LEAN, MAX_LEAN)
 			smoothedLean = smoothedLean + (targetLean - smoothedLean) * math.clamp(dt * LEAN_SMOOTH, 0, 1)
 		else
 			smoothedLean = smoothedLean * 0.9 -- Reset lean when not moving
@@ -224,11 +198,7 @@ function HoverboardMovement.UpdateSurfaceAlignment(
 	hoverboard,
 	dt
 )
-	if not rootPart or not hoverboard or not hoverboard.PrimaryPart or not ready then
-		return
-	end
-	if not HoverboardJump.IsGrounded() then
-		print("Not grounded")
+	if not rootPart or not hoverboard or not hoverboard.PrimaryPart or not HoverboardJump.IsGrounded() then
 		return
 	end
 	local primaryPart = hoverboard.PrimaryPart
@@ -307,6 +277,12 @@ function HoverboardMovement.UpdateSurfaceAlignment(
 		bodyGyro.CFrame = CFrame.new(currentPos) * newRot
 	end
 
+	
+	
+	
+	
+	
+	
 	-- if not rootPart or not hoverboard or not hoverboard.PrimaryPart then return end
 
 	-- local origin = hoverboard.PrimaryPart.Position
