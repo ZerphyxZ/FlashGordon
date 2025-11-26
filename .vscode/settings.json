@@ -1,5 +1,6 @@
 {
     "robloxLsp.diagnostics.disable": [
         "empty-block"
-    ]
+    ],
+    "luau-lsp.completion.autocompleteEnd": true
 }
