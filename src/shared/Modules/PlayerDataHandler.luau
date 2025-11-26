@@ -46,7 +46,7 @@ local function getCurrentWorldIndex(player: Player): number
 	return idx
 end
 
-local function ensurePerWorldContainers(profileData: table)
+local function ensurePerWorldContainers(profileData)
 	profileData.LastCheckpointByWorld = profileData.LastCheckpointByWorld or {}
 	profileData.VisitedCheckpointsByWorld = profileData.VisitedCheckpointsByWorld or {}
 end
@@ -381,7 +381,7 @@ function PlayerDataHandler:ResetStreak(player: Player)
 	end
 end
 
---[Daily Reward Helpers]
+--[Daily Spin Helpers]
 function PlayerDataHandler:IncrementSpins(player: Player, incrementValue: number)
 	local playerData = self:GetData(player)
 	--print(playerData,"Increment spin player data")
