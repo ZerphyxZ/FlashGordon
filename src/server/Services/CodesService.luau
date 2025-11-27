@@ -18,7 +18,6 @@ local function GetClaimedCodesForPlayer(Player: Player)
 	local playerData = DataHandler:GetData(Player)
 
 	if playerData and typeof(playerData.Codes) == "table" then
-		print("playerData Codes", playerData.Codes)
 		return playerData.Codes
 	end
 

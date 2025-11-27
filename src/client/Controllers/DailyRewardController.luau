@@ -18,13 +18,22 @@ local DailyRewardConfig: {} = require(Configuration:WaitForChild("DailyRewardDat
 
 -- [UI References]		----
 local PlayerGui = PlayerService.LocalPlayer:WaitForChild("PlayerGui")
-local DailyRewardGui = PlayerGui:WaitForChild("DailyReward")
+local RewardsGUI = PlayerGui:WaitForChild("RewardsGUI")
+local Rewards = RewardsGUI:WaitForChild("Rewards")
+local Contents = Rewards:WaitForChild("Contents")
 
-local MainFrame = DailyRewardGui:WaitForChild("MainFrame")
-local Container = MainFrame:WaitForChild("Container")
-local CloseButton: TextButton = DailyRewardGui:WaitForChild("CloseButton")
+local Codes = Contents:WaitForChild("Codes")
+local Daily = Contents:WaitForChild("Daily")
+local Time = Contents:WaitForChild("Time")
 
-local Template = DailyRewardGui:WaitForChild("Template")
+local Sections = Rewards:WaitForChild("Sections")
+local DailyButtonFrame = Sections:WaitForChild("Daily")
+local DailyRewardbutton = DailyButtonFrame:WaitForChild("Button")
+
+local CloseButton = Rewards:WaitForChild("Close"):WaitForChild("Button")
+
+local NormalTemplate = Daily:WaitForChild("NormalTemplate")
+local DaySevenTemplate = Daily:WaitForChild("DaySevenTemplate")
 
 -- [Variables]		----
 local streak = 0
@@ -61,7 +70,7 @@ local function StopCountdown()
 	nextClaimAt = nil
 end
 
-local function StartCountdown(tNext: number, timeLabel: TextButton, button: TextButton | ImageButton)
+local function StartCountdown(tNext: number, timeLabel, button)
 	--print("StartCountdown")
 	StopCountdown()
 	nextClaimAt = tNext
@@ -83,6 +92,13 @@ local function StartCountdown(tNext: number, timeLabel: TextButton, button: Text
 	end)
 end
 
+local function EnableDailyReward()
+	Time.Visible = false
+	Codes.Visible = false
+	Daily.Visible = true
+	DailyRewardController:UpdateRewards()
+end
+
 function Initialize()
 	for day in pairs(DailyRewardConfig) do
 		table.insert(days, day)
@@ -91,16 +107,23 @@ function Initialize()
 		return tonumber(a) < tonumber(b)
 	end)
 
-	Template.Visible = false
+	NormalTemplate.Visible = false
+	DaySevenTemplate.Visible = false
 
 	for _, day in ipairs(days) do
 		local reward = DailyRewardConfig[day]
+		local item
 
-		local item = Template:Clone()
+		if day == "7" then
+			item = DaySevenTemplate:Clone()
+		else
+			item = NormalTemplate:Clone()
+		end
+
 		item.Name = day
 		item.LayoutOrder = tonumber(day)
 		item.Visible = true
-		item.Parent = Container
+		item.Parent = Daily
 
 		local icon = item:FindFirstChild("Icon") :: ImageLabel?
 		local prize = item:FindFirstChild("Prize") :: ImageLabel?
@@ -161,10 +184,10 @@ function UpdateState(state: { [string]: any })
 			continue
 		end
 
-		local icon: ImageLabel? = item:FindFirstChild("Icon")
-		local button: TextButton? = item:FindFirstChild("Action")
-		local check: TextButton? = item:FindFirstChild("Checkmark")
-		local timer: TextButton? = item:FindFirstChild("Timer")
+		local icon = item:FindFirstChild("Icon")
+		local button = item:FindFirstChild("Action")
+		local check = item:FindFirstChild("Checkmark")
+		local timer = item:FindFirstChild("Timer")
 
 		button.Visible = false
 		check.Visible = false
@@ -215,27 +238,28 @@ function DailyRewardController:UpdateRewards()
 	end)
 end
 
--- function DailyRewardController:SetEnabled(enabled: boolean)
--- 	DailyRewardGui.Enabled = enabled
+function DailyRewardController:SetEnabled(enabled: boolean)
+	RewardsGUI.Enabled = enabled
 
--- 	if enabled then
--- 		self:UpdateRewards()
--- 	else
--- 		StopCountdown()
--- 	end
--- end
+	if enabled then
+		EnableDailyReward()
+	else
+		StopCountdown()
+	end
+end
 
 -- Open button already handled in Lobbyhud
--- CloseButton.MouseButton1Click:Connect(function()
--- 	module.LobbyHUD:OpenContainer("MainGui")
--- end)
+CloseButton.MouseButton1Click:Connect(function()
+	-- DailyRewardController.LobbyHUD:OpenContainer("MainGui")
+	RewardsGUI.Enabled = false
+end)
 
 function DailyRewardController:KnitStart()
 	DailyRewardService = Knit.GetService("DailyRewardService")
 	CoinsController = Knit.GetController("CoinsController")
 
+	DailyRewardbutton.MouseButton1Click:Connect(EnableDailyReward)
 	Initialize()
-	self:UpdateRewards()
 end
 
 return DailyRewardController

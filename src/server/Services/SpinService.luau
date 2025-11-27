@@ -6,7 +6,7 @@ local PlayerDataHandler = require(ReplicatedStorage.Shared.Modules.PlayerDataHan
 local PrizeModule = require(ReplicatedStorage.Configuration.SpinPrizeConfig)
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 
-local spinTimeSeconds = 10 -- 86400
+local spinTimeSeconds = 86400
 
 local SpinService = Knit.CreateService({
 	Name = "SpinService",
