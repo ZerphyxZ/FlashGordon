@@ -3,15 +3,11 @@ local utilityFolder: Folder = replicatedStorage:WaitForChild("Utility")
 local configurations: Configuration = script:WaitForChild("Configuration")
 
 -- [Constants]
-local VFX_FOLDER_NAME: StringValue | ObjectValue = configurations:WaitForChild("VFXWorkspaceFolderName")
-local VFX_TEMPLATE_FOLDER: ObjectValue = configurations:WaitForChild("VFXTemplateFolderName")
-local EMIT_COUNT_ATTRIBUTE: StringValue = configurations:WaitForChild("EmitCountAttributeName")
-
-local vfxTemplateFolder = VFX_TEMPLATE_FOLDER.Value
-local vfxFolder: Folder = workspace:FindFirstChild(VFX_FOLDER_NAME.Value)
+local vfxTemplateFolder: ObjectValue = replicatedStorage:WaitForChild("Assets"):WaitForChild("Particles")
+local vfxFolder: Folder = workspace:FindFirstChild("ParticleEffect")
 if not vfxFolder then
 	vfxFolder = Instance.new("Folder")
-	vfxFolder.Name = VFX_FOLDER_NAME.Value
+	vfxFolder.Name = "ParticleEffect"
 	vfxFolder.Parent = workspace
 end	
 

@@ -18,14 +18,14 @@ local ObstacleConfigs = require(Configuration:WaitForChild("Obstacles"))
 local Utility = ReplicatedStorage:WaitForChild("Utility")
 
 local SimpleParticleEmit = require(Utility:WaitForChild("SimpleParticleEmit"))
-
+local FolderName: string = "Laser"
 -- ===== References	 ===============================================================
 
 local Assets: Folder = ReplicatedStorage:WaitForChild("Assets")
 local MonsterTemplates: Folder = Assets:WaitForChild("Obstacle")
 
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
-local Controller = Knit.CreateController({ Name = "MonsterObstacleController" })
+local Controller = Knit.CreateController({ Name = "FireLaserController" })
 
 -- Track which parts we've already bound (avoid duplicate connections)
 local boundParts = setmetatable({}, { __mode = "k" })
@@ -82,21 +82,11 @@ local function attachToStaticFolder(staticFolder: Instance)
 		return
 	end
 
-	-- Existing parts
-	for _, child in ipairs(staticFolder:GetChildren()) do
-		if child:IsA("Model") then
-			local monsterObject = MakeMonster(child)
-			Attack(monsterObject)
-
-			monsters[child] = monsterObject
-		end
-	end
-
 	-- Live add/remove
 	staticFolder.ChildAdded:Connect(function(child)
 		if child:IsA("Model") then
-			local monsterObject = MakeMonster(child)
-			Attack(monsterObject)
+			local laserObject = makeLaserAlien(child)
+			Attack(laserObject)
 		end
 	end)
 
@@ -111,6 +101,17 @@ local function attachToStaticFolder(staticFolder: Instance)
 			end
 		end
 	end)
+
+	-- Existing parts
+	for _, child in ipairs(staticFolder:GetChildren()) do
+		if child:IsA("Model") then
+			local laserObject = makeLaserAlien(child)
+			Attack(laserObject)
+
+			monsters[child] = laserObject
+		end
+	end
+
 end
 
 local function wireWorld(world: Instance)
@@ -119,13 +120,13 @@ local function wireWorld(world: Instance)
 	end
 	local obstacles = world:FindFirstChild("Obstacles")
 	if obstacles and obstacles:IsA("Folder") then
-		local staticFolder = obstacles:FindFirstChild("Monster")
+		local staticFolder = obstacles:FindFirstChild(FolderName)
 		if staticFolder and staticFolder:IsA("Folder") then
 			attachToStaticFolder(staticFolder)
 		end
 		-- Listen for Static being created later
 		obstacles.ChildAdded:Connect(function(sub)
-			if sub.Name == "Static" and sub:IsA("Folder") then
+			if sub.Name == FolderName and sub:IsA("Folder") then
 				attachToStaticFolder(sub)
 			end
 		end)
@@ -149,47 +150,86 @@ end
 -- ===== Knit lifecycle ========================================================
 
 function Attack(Monster: {})
-	print("Attack", Monster)
-
-	SimpleParticleEmit(Monster.Config.SpawnEffect, "Burst", CFrame.new(Monster.SpawnPoint.Position)) -- + (Vector3.yAxis * Monster.Size.Y / monsterSizeDivider)))
-	Monster.Model.Parent = workspace
-	Monster.Model:PivotTo(CFrame.new(Monster.SpawnPoint:GetPivot().Position, Monster.Hitbox:GetPivot().Position))
-	-- Monster.AnimationTrack:Play()
-
-	local translation = TweenService:Create(
-		Monster.Model.PrimaryPart,
-		TweenInfo.new(Monster.Config.AnimationTime),
-		{ CFrame = Monster.Hitbox:GetPivot() + (Vector3.yAxis * Monster.Size.Y / 2) }
-	)
-
-	-- play animation
-	local animation = Instance.new("Animation")
-	animation.AnimationId = Monster.Config.AnimationId
-
-	animation = Monster.Model.AnimationController.Animator:LoadAnimation(animation)
-	animation:Play()
-
-	-- play attack sequence
-	translation:Play()
-	translation.Completed:Wait()
-
-	SimpleParticleEmit(Monster.Config.ImpactEffect, "Burst", Monster.Hitbox:GetPivot())
-	SimpleParticleEmit(Monster.Config.HitEffect, "Burst", Monster.Hitbox.Position)
-
-	Monster.Hitbox.CanTouch = true
-
-	task.delay(Monster.Config.ImpactDuration, function()
-		Monster.Hitbox.Transparency = 0.5
-		Monster.Hitbox.CanTouch = false
-		Monster.Model.Parent = ReplicatedStorage
-	end)
-
+	
 	Monster.NextAttack = task.delay(Monster.Config.Frequency, function()
 		Attack(Monster)
 	end)
+
+	--SimpleParticleEmit(Monster.Config.SpawnEffect, "Burst", CFrame.new(Monster.SpawnPoint.Position)) -- + (Vector3.yAxis * Monster.Size.Y / monsterSizeDivider)))
+
+	local animation = Instance.new("Animation")
+	animation.AnimationId = Monster.Config.AnimationId
+	
+	Monster.AnimationTrack = Monster.Model.AnimationController.Animator:LoadAnimation(animation)	
+	
+	Monster.AnimationTrack:Play()
+
+	-- play attack sequence
+	Monster.Hitbox.Position = Monster.StartAttachment.WorldCFrame.Position
+	Monster.Hitbox.Size = Vector3.new(1, Monster.Config.LaserWidth, Monster.Config.LaserWidth)
+	Monster.Hitbox.Transparency = 0
+
+	Monster.AppearTween:Play()
+
+	Monster.Hitbox.CanTouch = true
+
+	task.wait(Monster.Config.LaserTime)
+
+	Monster.DisappearTween:Play()
+	Monster.Hitbox.CanTouch = false
 end
 
-function MakeMonster(MonsterPlaceholder: Model)
+function CreateLaserPart(Monster)
+	local cylinder: Part = Instance.new("Part")
+	cylinder.Shape = "Cylinder"
+
+	local startPosition = Monster.StartAttachment.WorldCFrame.Position
+	local endPosition = Monster.HitAttachment.WorldCFrame.Position
+
+	local desiredVector = endPosition - startPosition
+	cylinder.CFrame = CFrame.new(startPosition + desiredVector / 2, endPosition) * CFrame.fromEulerAngles(0, math.rad(90), 0)
+	cylinder.Size = Vector3.new((startPosition - endPosition).Magnitude, Monster.Config.LaserWidth, Monster.Config.LaserWidth)	
+	cylinder.Anchored = true
+	cylinder.CanCollide = false
+	cylinder.CanTouch = false
+	cylinder.CanQuery = false
+	cylinder.Transparency = 1
+	cylinder.Material = Enum.Material.Neon
+	cylinder.Color = Color3.fromRGB(255, 0, 0)
+	cylinder.Parent = Monster.Model
+	cylinder.CastShadow = false
+
+	Monster.HitboxCFrame = cylinder.CFrame
+	Monster.HitboxSize = cylinder.Size
+
+	return cylinder
+end
+
+function createLaserTween(Monster)
+
+	Monster.AppearTween = TweenService:Create(
+		Monster.Hitbox,
+		TweenInfo.new(.2),
+		{ 
+			CFrame = Monster.HitboxCFrame,
+			Size = Monster.HitboxSize
+		}
+	)
+
+	Monster.DisappearTween = TweenService:Create(
+		Monster.Hitbox,
+		TweenInfo.new(Monster.Config.LaserFadeOut),
+		{ 
+			Transparency = 1,
+			--Size = Vector3.new(1, Monster.Config.LaserWidth, Monster.Config.LaserWidth),
+			--Position = Monster.HitboxAttachment.WorldCFrame.Position
+		}
+	)
+end
+
+function makeLaserAlien(MonsterPlaceholder: Model)
+	
+	print("Creating laser alien")
 	local config = ObstacleConfigs[MonsterPlaceholder.Name]
 
 	local monster = nil
@@ -197,17 +237,33 @@ function MakeMonster(MonsterPlaceholder: Model)
 		monster = {}
 
 		monster.Config = config
-		monster.Hitbox = MonsterPlaceholder.Hitbox
-		monster.SpawnPoint = MonsterPlaceholder.Spawn
-		monster.Model = MonsterTemplates:WaitForChild(MonsterPlaceholder.Name):Clone()
+		monster.HitAttachment = MonsterPlaceholder.Hit
+		monster.StartAttachment = MonsterPlaceholder.Start
+		monster.Model = MonsterPlaceholder.Shooter
 		monster.Size = monster.Model:GetExtentsSize()
 
-		if not monster.Hitbox or not monster.SpawnPoint or not monster.Model then
+		local monsterPosition = monster.Model:GetPivot().Position
+
+		monster.Model:PivotTo(CFrame.new(
+			monsterPosition, 
+			Vector3.new(
+				monster.HitAttachment.WorldCFrame.Position.X,
+				monsterPosition.Y,
+				monster.HitAttachment.WorldCFrame.Position.Z
+			)
+		))
+
+		monster.StartAttachment.WorldCFrame = monster.Model.Weapon.CFrame
+		if not monster.HitAttachment or not monster.StartAttachment or not monster.Model then
 			return nil
 		end
 
-		monster.Hitbox.CanTouch = false
+		-- monster.Hitbox.CanTouch = false
+		monster.Hitbox = CreateLaserPart(monster)
+
+		createLaserTween(monster)
 		connectObstaclePart(monster.Hitbox)
+		
 	end
 
 	return monster
