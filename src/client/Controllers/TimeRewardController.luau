@@ -22,7 +22,13 @@ local RewardsGUI = PlayerGui:WaitForChild("RewardsGUI")
 local Rewards = RewardsGUI:WaitForChild("Rewards")
 local Contents = Rewards:WaitForChild("Contents")
 local TimeFrame = Contents:WaitForChild("Time")
+local CodesFrame = Contents:WaitForChild("Codes")
+local DailyFrame = Contents:WaitForChild("Daily")
 local ProductTemplate = TimeFrame:WaitForChild("Template")
+
+local Sections = Rewards:WaitForChild("Sections")
+local TimeButtonFrame = Sections:WaitForChild("Time")
+local Timebutton = TimeButtonFrame:WaitForChild("Button")
 
 --[Constants]
 local TweenInfo1 = TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
@@ -155,6 +161,12 @@ local function CreateProduct(RewardData, RewardIndex)
 	return self
 end
 
+local function EnableTime()
+	DailyFrame.Visible = false
+	CodesFrame.Visible = false
+	TimeFrame.Visible = true
+end
+
 function StartAllRewardsTimer()
 	TimeRewardServer:RefreshAndGetJoinTime():andThen(function(StartTime)
 		if not StartTime then
@@ -179,6 +191,14 @@ function StartAllRewardsTimer()
 	end)
 end
 
+function TimeRewardController:SetEnabled(enabled: boolean)
+	RewardsGUI.Enabled = enabled
+
+	if enabled then
+		EnableTime()
+	end
+end
+
 function TimeRewardController:KnitStart()
 	TimeRewardServer = Knit.GetService("TimeRewardServer")
 	CoinsController = Knit.GetController("CoinsController")
@@ -196,6 +216,7 @@ function TimeRewardController:KnitStart()
 	end
 
 	TimeRewardServer.RewardClaimed:Connect(RewardClaimedSuccessfully)
+	Timebutton.MouseButton1Click:Connect(EnableTime)
 
 	StartAllRewardsTimer()
 end

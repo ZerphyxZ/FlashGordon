@@ -2,6 +2,7 @@
 local PlayerService: Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Knit = require(ReplicatedStorage.Packages.Knit)
+local trove = require(ReplicatedStorage.Packages.trove)
 -- local ReplicatedStorage: ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- [Modules]			----
@@ -13,12 +14,20 @@ local Knit = require(ReplicatedStorage.Packages.Knit)
 
 -- [UI References]		----
 local PlayerGui = PlayerService.LocalPlayer:WaitForChild("PlayerGui")
-local RedeemCode = PlayerGui:WaitForChild("RedeemCode")
+local RewardsGUI = PlayerGui:WaitForChild("RewardsGUI")
+local Rewards = RewardsGUI:WaitForChild("Rewards")
+local Contents = Rewards:WaitForChild("Contents")
 
-local MainFrame = RedeemCode:WaitForChild("MainFrame")
-local textBox = MainFrame:WaitForChild("Box")
-local ClaimButton = MainFrame:WaitForChild("ClaimButton")
-local CloseButton = RedeemCode:WaitForChild("Close")
+local Codes = Contents:WaitForChild("Codes")
+local Daily = Contents:WaitForChild("Daily")
+local Time = Contents:WaitForChild("Time")
+
+local textBox = Codes:WaitForChild("Box")
+local ClaimButton = Codes:WaitForChild("ClaimButton")
+
+local Sections = Rewards:WaitForChild("Sections")
+local CodesButtonFrame = Sections:WaitForChild("Codes")
+local Codesbutton = CodesButtonFrame:WaitForChild("Button")
 
 -- [Variables]		----
 local PlaceHolderText = "Enter code..."
@@ -75,29 +84,22 @@ local function onFocusLost(enterPressed, _inputObject)
 	end
 end
 
-textBox.FocusLost:Connect(onFocusLost)
-textBox.Focused:Connect(onFocused)
-
--- function CodesController:SetEnabled(enabled: boolean)
--- 	RedeemCode.Enabled = enabled
-
--- 	if enabled then
--- 		HandleTextBoxFrame()
--- 	end
--- end
-
-ClaimButton.MouseButton1Click:Connect(OnClaim)
-
--- Open button already handled in Lobbyhud
-CloseButton.MouseButton1Click:Connect(function()
-	-- CodesController.LobbyHUD:OpenContainer("MainGui")
-end)
+local function EnableCodes()
+	Daily.Visible = false
+	Time.Visible = false
+	Codes.Visible = true
+	HandleTextBoxFrame()
+end
 
 function CodesController:KnitStart()
 	CodesService = Knit.GetService("CodesService")
 	CoinsController = Knit.GetController("CoinsController")
 
-	HandleTextBoxFrame()
+	textBox.FocusLost:Connect(onFocusLost)
+	textBox.Focused:Connect(onFocused)
+
+	ClaimButton.MouseButton1Click:Connect(OnClaim)
+	Codesbutton.MouseButton1Click:Connect(EnableCodes)
 end
 
 return CodesController
