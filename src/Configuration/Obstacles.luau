@@ -15,7 +15,7 @@ return {
     },
     Laser = {
         -- attack configs
-        LaserWidth = 5,
+        LaserWidth = 2,
         LaserTime = .5,
         LaserFadeOut = .3,
         Frequency = 3,

@@ -184,6 +184,10 @@ end
 
 -- ===== KNIT START ===========================================================
 
+function sinFunc(x)
+	return .5 + math.sin(x) / 2
+end
+
 function Controller:KnitStart()
 	-- Sync time (unchanged)
 	local syncService = Knit.GetService("ObstacleSyncService")
@@ -207,21 +211,32 @@ function Controller:KnitStart()
 			local startPos   = obstacle.startPos
 			local endPos     = obstacle.endPos
 			local travelTime = obstacle.travelTime
+			local midpoint = (startPos + endPos) * 0.5
+
 			if part and part.Parent and travelTime and travelTime > 0 then
 				local skip = false
 				if playerPos then
-					local midpoint = (startPos + endPos) * 0.5
+					
 					if (playerPos - midpoint).Magnitude > MAX_UPDATE_DISTANCE then
 						skip = true
 					end
 				end
 				if not skip then
-					local cycle = (serverTime - movingStartTime) / travelTime
+					local cycle = serverTime
 					local phase = cycle % 2
 					local alpha = math.abs(phase - 1)
 					local newPos = startPos:Lerp(endPos, alpha)
 					part.CFrame = CFrame.new(newPos) * obstacle.initialRot
 				end
+
+				-- if not skip then
+				-- 	local movingVector: Vector3 = startPos - endPos
+
+				-- 	-- local newPosition = midpoint + (movingVector * 0.5) + ((movingVector.Magnitude) * math.sin(serverTime)) * movingVector.Unit
+					
+				-- 	local newPosition = endPos + movingVector * sinFunc(serverTime)
+				-- 	part.CFrame = CFrame.new(newPosition)
+				-- end
 			end
 		end
 	end)

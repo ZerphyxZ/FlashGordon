@@ -1,6 +1,5 @@
 local replicatedStorage: ReplicatedStorage = game:GetService("ReplicatedStorage")
 local utilityFolder: Folder = replicatedStorage:WaitForChild("Utility")
-local configurations: Configuration = script:WaitForChild("Configuration")
 
 -- [Constants]
 local vfxTemplateFolder: ObjectValue = replicatedStorage:WaitForChild("Assets"):WaitForChild("Particles")

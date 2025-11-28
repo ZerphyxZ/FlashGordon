@@ -5,6 +5,7 @@
 -- (also falls back to legacy Workspace/Obstacles/Static).
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -77,6 +78,16 @@ local function isWorldContainer(inst: Instance?): boolean
 	return inst and (inst:IsA("Folder") or inst:IsA("Model")) and tostring(inst.Name):match("^World_%d+")
 end
 
+local function scheduleAttack(Laser)
+	local syncService = Knit.GetService("ObstacleSyncService")
+	local serverTime = workspace:GetServerTimeNow()
+
+	local nextAttackTick = serverTime % Laser.Config.Frequency
+	task.delay(nextAttackTick, function()
+		Attack(Laser)
+	end)
+end
+
 local function attachToStaticFolder(staticFolder: Instance)
 	if not (staticFolder and staticFolder:IsA("Folder")) then
 		return
@@ -86,7 +97,6 @@ local function attachToStaticFolder(staticFolder: Instance)
 	staticFolder.ChildAdded:Connect(function(child)
 		if child:IsA("Model") then
 			local laserObject = makeLaserAlien(child)
-			Attack(laserObject)
 		end
 	end)
 
@@ -106,7 +116,6 @@ local function attachToStaticFolder(staticFolder: Instance)
 	for _, child in ipairs(staticFolder:GetChildren()) do
 		if child:IsA("Model") then
 			local laserObject = makeLaserAlien(child)
-			Attack(laserObject)
 
 			monsters[child] = laserObject
 		end
@@ -150,11 +159,6 @@ end
 -- ===== Knit lifecycle ========================================================
 
 function Attack(Monster: {})
-	
-	Monster.NextAttack = task.delay(Monster.Config.Frequency, function()
-		Attack(Monster)
-	end)
-
 	--SimpleParticleEmit(Monster.Config.SpawnEffect, "Burst", CFrame.new(Monster.SpawnPoint.Position)) -- + (Vector3.yAxis * Monster.Size.Y / monsterSizeDivider)))
 
 	local animation = Instance.new("Animation")
@@ -242,6 +246,8 @@ function makeLaserAlien(MonsterPlaceholder: Model)
 		monster.Model = MonsterPlaceholder.Shooter
 		monster.Size = monster.Model:GetExtentsSize()
 
+		monster.Delay = MonsterPlaceholder:GetAttribute("Delay") or 0
+
 		local monsterPosition = monster.Model:GetPivot().Position
 
 		monster.Model:PivotTo(CFrame.new(
@@ -264,6 +270,19 @@ function makeLaserAlien(MonsterPlaceholder: Model)
 		createLaserTween(monster)
 		connectObstaclePart(monster.Hitbox)
 		
+
+		local serverTime = workspace:GetServerTimeNow()
+		local attackDelay = monster.Config.Frequency + monster.Delay
+		monster.NextAttack = serverTime - (serverTime % attackDelay) + attackDelay
+
+		monster.AttackConnection = RunService.RenderStepped:Connect(function(deltaTime)
+			local now = workspace:GetServerTimeNow()
+
+			if now >= monster.NextAttack then
+				monster.NextAttack = now + attackDelay
+				Attack(monster)
+			end
+		end)
 	end
 
 	return monster

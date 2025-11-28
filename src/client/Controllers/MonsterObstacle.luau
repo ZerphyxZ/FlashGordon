@@ -6,6 +6,7 @@
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -23,7 +24,6 @@ local SimpleParticleEmit = require(Utility:WaitForChild("SimpleParticleEmit"))
 
 local Assets: Folder = ReplicatedStorage:WaitForChild("Assets")
 local MonsterTemplates: Folder = Assets:WaitForChild("Obstacle")
-
 
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 local Controller = Knit.CreateController({ Name = "MonsterObstacleController" })
@@ -78,26 +78,26 @@ local function isWorldContainer(inst: Instance?): boolean
 	return inst and (inst:IsA("Folder") or inst:IsA("Model")) and tostring(inst.Name):match("^World_%d+")
 end
 
+local function scheduleAttack(Monster)
+	-- local syncService = Knit.GetService("ObstacleSyncService")
+
+	local nextAttackTick = workspace:GetServerTimeNow() % Monster.Config.Frequency
+	print("Next attack tick: ", nextAttackTick)
+	task.delay(nextAttackTick, function()
+		Attack(Monster)
+	end)
+end
+
 local function attachToStaticFolder(staticFolder: Instance)
 	if not (staticFolder and staticFolder:IsA("Folder")) then
 		return
-	end
-
-	-- Existing parts
-	for _, child in ipairs(staticFolder:GetChildren()) do
-		if child:IsA("Model") then
-			local monsterObject = MakeMonster(child)
-			Attack(monsterObject)
-
-			monsters[child] = monsterObject
-		end
 	end
 
 	-- Live add/remove
 	staticFolder.ChildAdded:Connect(function(child)
 		if child:IsA("Model") then
 			local monsterObject = MakeMonster(child)
-			Attack(monsterObject)
+			scheduleAttack(monsterObject)
 		end
 	end)
 
@@ -112,6 +112,16 @@ local function attachToStaticFolder(staticFolder: Instance)
 			end
 		end
 	end)
+
+	-- Existing parts
+	for _, child in ipairs(staticFolder:GetChildren()) do
+		if child:IsA("Model") then
+			local monsterObject = MakeMonster(child)
+			scheduleAttack(monsterObject)
+
+			monsters[child] = monsterObject
+		end
+	end
 end
 
 local function wireWorld(world: Instance)
@@ -152,28 +162,30 @@ end
 function Attack(Monster: {})
 	print("Attack", Monster)
 
-	SimpleParticleEmit(Monster.Config.SpawnEffect, "Burst", CFrame.new(Monster.SpawnPoint.Position))  -- + (Vector3.yAxis * Monster.Size.Y / monsterSizeDivider)))
+	SimpleParticleEmit(Monster.Config.SpawnEffect, "Burst", CFrame.new(Monster.SpawnPoint.Position)) -- + (Vector3.yAxis * Monster.Size.Y / monsterSizeDivider)))
 	Monster.Model.Parent = workspace
 	Monster.Model:PivotTo(CFrame.new(Monster.SpawnPoint:GetPivot().Position, Monster.Hitbox:GetPivot().Position))
 	-- Monster.AnimationTrack:Play()
 
+	local hitboxPos = Monster.Hitbox:GetPivot().Position
+	local startPos = Monster.SpawnPoint.Position
 	local translation = TweenService:Create(
 		Monster.Model.PrimaryPart,
 		TweenInfo.new(Monster.Config.AnimationTime),
-		{ CFrame = Monster.Hitbox:GetPivot() + (Vector3.yAxis * Monster.Size.Y / 2) }
+		{ CFrame = CFrame.new( hitboxPos + (Vector3.yAxis * Monster.Size.Y / 2), hitboxPos + (hitboxPos - startPos ).Unit + (Vector3.yAxis * Monster.Size.Y / 2) )}
 	)
 
 	-- play animation
 	local animation = Instance.new("Animation")
 	animation.AnimationId = Monster.Config.AnimationId
-	
+
 	animation = Monster.Model.AnimationController.Animator:LoadAnimation(animation)
 	animation:Play()
 
 	-- play attack sequence
 	translation:Play()
 	translation.Completed:Wait()
-	
+
 	SimpleParticleEmit(Monster.Config.ImpactEffect, "Burst", Monster.Hitbox:GetPivot())
 	SimpleParticleEmit(Monster.Config.HitEffect, "Burst", Monster.Hitbox.Position)
 
@@ -183,10 +195,6 @@ function Attack(Monster: {})
 		Monster.Hitbox.Transparency = 0.5
 		Monster.Hitbox.CanTouch = false
 		Monster.Model.Parent = ReplicatedStorage
-	end)
-
-	Monster.NextAttack = task.delay(Monster.Config.Frequency, function()
-		Attack(Monster)
 	end)
 end
 
@@ -203,12 +211,28 @@ function MakeMonster(MonsterPlaceholder: Model)
 		monster.Model = MonsterTemplates:WaitForChild(MonsterPlaceholder.Name):Clone()
 		monster.Size = monster.Model:GetExtentsSize()
 
+		monster.Delay = MonsterPlaceholder:GetAttribute("Delay") or 0
+
 		if not monster.Hitbox or not monster.SpawnPoint or not monster.Model then
 			return nil
 		end
 
 		monster.Hitbox.CanTouch = false
 		connectObstaclePart(monster.Hitbox)
+
+		
+		local serverTime = workspace:GetServerTimeNow()
+		local attackDelay = monster.Config.Frequency + monster.Delay
+		monster.NextAttack = serverTime - (serverTime % attackDelay) + attackDelay
+
+		monster.AttackConnection = RunService.RenderStepped:Connect(function(deltaTime)
+			local now = workspace:GetServerTimeNow()
+
+			if now >= monster.NextAttack then
+				monster.NextAttack = now + attackDelay
+				Attack(monster)
+			end
+		end)
 	end
 
 	return monster
