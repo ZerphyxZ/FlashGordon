@@ -15,8 +15,8 @@ local WorldRouterService = Knit.CreateService {
 -- === CONFIG: PlaceId ↔ World Info (UPDATE: real PlaceIds) ====================
 local WORLD_REGISTRY = {
     [95954065660891]   = { Index = 1, Name = "Central City Ruins" }, -- Place 1
-    [90678723238530]   = { Index = 2, Name = "Vortex Corridor"    }, -- Place 2
-    [127054520314978]  = { Index = 3, Name = "Surface of Mongo"   }, -- Place 3
+    [129835454913823]   = { Index = 2, Name = "Vortex Corridor"    }, -- Place 2
+    [76680813943017]  = { Index = 3, Name = "Surface of Mongo"   }, -- Place 3
 }
 
 local DEFAULT_WORLD = { Index = 1, Name = "Central City Ruins" }
