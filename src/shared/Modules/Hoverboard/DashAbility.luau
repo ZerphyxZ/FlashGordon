@@ -1,114 +1,259 @@
 -- HoverboardDash.lua
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local DashTrailModule = ReplicatedStorage:WaitForChild("VFX"):WaitForChild("HoverboardVFX"):WaitForChild("ElectricDash")
+
 local HoverboardDash = {}
+local flashConnection
 
--- Dash constants
-local DASH_SPEED = 100
-local DASH_DURATION = 0.3
-local DASH_COOLDOWN = 5
-local DASH_VFX_DURATION = 0.5
-
--- Dash state
-local isDashing = false
+-- state
+local player = Players.LocalPlayer
+local character, humanoid, rootPart
 local dashReady = true
-local dashTimeLeft = 0
+HoverboardDash.isDashing = false
 
--- VFX assets
-local electricVFX = nil
+-- GUI references (module-owned)
+local gameHUD = player:WaitForChild("PlayerGui"):WaitForChild("GameHUD")
+local flashFrame = gameHUD:WaitForChild("FlashFrame")
+local flashButton = flashFrame:WaitForChild("FlashButton")
+local cooldownFiller = flashFrame:WaitForChild("CooldownFill")
 
-function HoverboardDash.Initialize(hoverboard)
-	-- Create electric VFX
-	if hoverboard and hoverboard.PrimaryPart then
-		electricVFX = Instance.new("ParticleEmitter")
-		electricVFX.Name = "DashVFX"
-		electricVFX.LightEmission = 0.8
-		electricVFX.Color = ColorSequence.new(Color3.fromRGB(0, 200, 255))
-		electricVFX.Size = NumberSequence.new(0.5)
-		electricVFX.Texture = "rbxassetid://242932105"
-		electricVFX.Lifetime = NumberRange.new(0.3, 0.5)
-		electricVFX.Rate = 50
-		electricVFX.SpreadAngle = Vector2.new(45, 45)
-		electricVFX.Speed = NumberRange.new(5, 10)
-		electricVFX.Enabled = false
-		electricVFX.Parent = hoverboard.PrimaryPart
+-- Config
+local DASH_DISTANCE = 70           -- default distance in studs
+local DASH_DURATION = 0.25         -- seconds
+local DASH_COOLDOWN = 3            -- seconds
+local DASH_SPEED_MULTIPLIER = 1.5
+
+-- VFX: attach electric trails to player body parts
+local BODY_PARTS = {
+    "Head",
+    "LeftFoot",
+    "LeftHand",
+    "LeftLowerArm",
+    "LeftLowerLeg",
+    "LeftUpperArm",
+    "LeftUpperLeg",
+    "LowerTorso",
+    "RightFoot",
+    "RightHand",
+    "RightLowerArm",
+	"RightLowerLeg",
+	"RightUpperArm",
+	"RightUpperLeg",
+	"UpperTorso",
+}
+
+
+local function CloneVFX()
+    HoverboardDash._activeVFX = {}
+    for _, partName in ipairs(BODY_PARTS) do
+        local part = character:FindFirstChild(partName)
+        if part then
+            -- Clone the whole folder
+            local fxFolder = DashTrailModule:Clone()
+            fxFolder.Name = "ElectricDash_VFX_" .. partName
+
+            -- Extract the objects BEFORE re-parenting
+            local attach = fxFolder:FindFirstChild("ParticleAttachment")
+            local particleEmitter  = fxFolder:FindFirstChild("ParticleEmitter")
+
+            if attach then attach.Parent = part end
+            if particleEmitter then 
+                particleEmitter.Parent = part
+                particleEmitter.Enabled = false
+            end
+
+            -- store the trails ONLY (they are what we toggle)
+            table.insert(HoverboardDash._activeVFX, {
+                ParticleEmitter = particleEmitter,
+            })
+
+            -- destroy the empty folder now
+            fxFolder:Destroy()
+        end
+    end
+end
+
+---------------------------------------------------------------------
+-- Utility: Enable and Disable electric VFX
+local function EnableDashVFX(enable)
+	for _, fx in ipairs(HoverboardDash._activeVFX or {}) do
+		if fx.ParticleEmitter then print("VFX Enabled") fx.ParticleEmitter.Enabled = enable end
 	end
 end
 
-function HoverboardDash.CanDash(currentSpeed)
-	return dashReady and currentSpeed > 10 and not isDashing
+---------------------------------------------------------------------
+-- Char handlers
+---------------------------------------------------------------------
+
+local function RefreshGUI()
+if not player then return end
+
+	local pg = player:WaitForChild("PlayerGui")
+	local mg = pg:WaitForChild("GameHUD")
+
+	gameHUD = mg
+	flashFrame = mg:WaitForChild("FlashFrame")
+	cooldownFiller = flashFrame:WaitForChild("CooldownFill")
+	if cooldownFiller then
+		cooldownFiller.Visible = false
+		-- ensure correct initial size (full height = ready, 0 = empty)
+		cooldownFiller.Size = UDim2.new(1, 0, 0, 0)
+	end
 end
 
-function HoverboardDash.PerformDash(hoverboard, currentSpeed, moveDir, bodyVelocity)
-	if not HoverboardDash.CanDash(currentSpeed) or not hoverboard or not hoverboard.PrimaryPart then
-		return false
+
+function HoverboardDash.BindDash(char, hum, root, currentSpeed, hoverboard, State)
+	character = char
+	humanoid = hum
+	rootPart = root
+	HoverboardDash.isDashing = false
+	dashReady = true
+    RefreshGUI()
+    CloneVFX()
+
+	if flashConnection then
+		flashConnection:Disconnect()
+		flashConnection = nil
 	end
-
-	print("Dash activated!")
-	isDashing = true
-	dashReady = false
-	dashTimeLeft = DASH_COOLDOWN
-
-	-- Activate VFX
-	if electricVFX then
-		electricVFX.Enabled = true
-	end
-
-	-- Calculate dash direction (use last movement direction if available)
-	local dashDirection = moveDir
-	if dashDirection.Magnitude == 0 then
-		dashDirection = hoverboard.PrimaryPart.CFrame.LookVector
-	end
-
-	-- Apply dash impulse
-	local dashVelocity = dashDirection.Unit * DASH_SPEED
-	if bodyVelocity then
-		bodyVelocity.Velocity = Vector3.new(dashVelocity.X, bodyVelocity.Velocity.Y, dashVelocity.Z)
-	end
-
-	-- Schedule dash end
-	task.delay(DASH_DURATION, function()
-		isDashing = false
-		if electricVFX then
-			electricVFX.Enabled = false
+	flashConnection = UserInputService.InputBegan:Connect(function(input, gpe)
+		if gpe then
+			print("Returning GPE")
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.F then
+			print("Hoverboard: Dash requested.")
+			HoverboardDash.ApplyDash(currentSpeed(), hoverboard, State)
 		end
 	end)
+	flashButton.MouseButton1Click:Connect(function()
+		print("Hoverboard: Boost requested.")
+		HoverboardDash.ApplyDash(currentSpeed(), hoverboard, State)
+	end)
+end
 
-	-- Start cooldown
+function HoverboardDash.CharRemoving()
+	if flashConnection then
+		flashConnection:Disconnect()
+		flashConnection = nil
+	end
+	
+	character = nil
+	humanoid = nil
+	rootPart = nil
+	HoverboardDash.isDashing = false
+	dashReady = true
+end
+
+---------------------------------------------------------------------
+-- Public API: ApplyDash
+---------------------------------------------------------------------
+
+local function dash_velocity_method(hoverboard, moveDir, distance, duration)
+	if not hoverboard or not hoverboard.PrimaryPart or moveDir.Magnitude == 0 then return end
+	local primary = hoverboard.PrimaryPart
+	local startVel = primary.AssemblyLinearVelocity
+
+	-- compute dash velocity required to traverse distance in duration
+	local dashSpeed = distance / math.max(duration, 0.0001) * DASH_SPEED_MULTIPLIER
+    print("Dash speed: ", dashSpeed)
+	local dashVel = moveDir.Unit * dashSpeed
+
+	-- apply: ramp assembly velocity towards dashVel, hold, then restore
+	local t = 0
+	local holdT = duration
+	local lastTime = tick()
+	-- create a short run-service loop for reliable timing
+	local conn
+	conn = RunService.Heartbeat:Connect(function(dt)
+		if not primary or not conn then
+			if conn then conn:Disconnect() end
+			return
+		end
+		t = t + dt
+		if t <= holdT then
+			-- lerp current assembly velocity towards dashVel (fast)
+			local cur = primary.AssemblyLinearVelocity
+			local lerpT = 1 - math.exp(-60 * dt)
+			local new = cur:Lerp(Vector3.new(dashVel.X, cur.Y, dashVel.Z), lerpT)
+			primary.AssemblyLinearVelocity = new
+		else
+			-- restore: lerp back to startVel over 0.2s
+			local restoreDur = 0.2
+			local restoreT = math.min((t - holdT) / restoreDur, 1)
+			local cur = primary.AssemblyLinearVelocity
+			local target = Vector3.new(startVel.X, cur.Y, startVel.Z)
+			local new = cur:Lerp(target, restoreT)
+			primary.AssemblyLinearVelocity = new
+
+			if restoreT >= 1 then
+				conn:Disconnect()
+			end
+		end
+	end)
+end
+
+function HoverboardDash.ApplyDash(currentSpeed, hoverboard, State)
+	-- sanity
+	if not humanoid then warn("HoverboardDash: humanoid nil") return end
+	if not dashReady then return end
+    if humanoid.MoveDirection.Magnitude < 0.1 then return end
+	if not hoverboard or not hoverboard.PrimaryPart then warn("HoverboardDash: invalid hoverboard") return end
+	if not State or not State.lastMoveDir or State.lastMoveDir.Magnitude == 0 then return end
+	if currentSpeed < 20 then return end -- require some minimum speed (tweakable)
+
+    print("Dash applied.")
+	dashReady = false
+	HoverboardDash.isDashing = true
+
+	-- compute dash params adaptively from current speed
+	local moveDir = State.lastMoveDir
+	local distance = math.max(DASH_DISTANCE, math.clamp(currentSpeed * 0.6, 8, 40))
+	local duration = DASH_DURATION
+
+    dash_velocity_method(hoverboard, moveDir, distance, duration)
+	EnableDashVFX(true)
+
+    if cooldownFiller then
+		cooldownFiller.Visible = true
+		-- start full progress and will shrink
+		cooldownFiller.Size = UDim2.new(1, 0, 1, 0)
+	end
+
+	-- finish dash after duration: unset flag and start cooldown
+	task.delay(duration, function()
+		HoverboardDash.isDashing = false
+        EnableDashVFX(false)
+	end)
+
 	task.spawn(function()
-		local step = 0.1
+       local step = 0.05
 		local timeLeft = DASH_COOLDOWN
+
 		while timeLeft > 0 do
-			dashTimeLeft = timeLeft
+			-- update UI filler: shrink from 1->0 vertically
+			if cooldownFiller then
+				local frac = timeLeft / DASH_COOLDOWN
+				cooldownFiller.Size = UDim2.new(1, 0, frac, 0)
+			end
 			timeLeft = timeLeft - step
 			task.wait(step)
 		end
 		dashReady = true
-		dashTimeLeft = 0
-		print("Dash ready!")
+        print("Dash ready")
 	end)
 
 	return true
 end
 
-function HoverboardDash.IsDashing()
-	return isDashing
-end
-
-function HoverboardDash.GetCooldown()
-	return dashTimeLeft
-end
-
-function HoverboardDash.IsReady()
-	return dashReady
-end
-
-function HoverboardDash.Cleanup()
-	if electricVFX then
-		electricVFX:Destroy()
-		electricVFX = nil
-	end
-	isDashing = false
-	dashReady = true
-	dashTimeLeft = 0
+---------------------------------------------------------------------
+-- Init
+---------------------------------------------------------------------
+function HoverboardDash.Init(plr)
+	player = plr or Players.LocalPlayer
 end
 
 return HoverboardDash

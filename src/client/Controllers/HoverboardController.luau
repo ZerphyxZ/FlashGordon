@@ -8,9 +8,10 @@ local UserInputService = Global.UserInputService
 local TweenService = Global.TweenService
 local workspace = Global.Workspace
 local ReplicatedStorage = Global.ReplicatedStorage
+local Configuration = ReplicatedStorage:WaitForChild("Configuration")
 local HoverboardModules = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Hoverboard")
 
-local HoverboardData = require(HoverboardModules:WaitForChild("Hoverboards"))
+local HoverboardData = require(Configuration:WaitForChild("HoverboardData"))
 local HoverboardMovement = require(HoverboardModules:WaitForChild("HoverboardMovement"))
 local HoverboardJump = require(HoverboardModules:WaitForChild("HoverboardJump"))
 local HoverboardPhysics = require(HoverboardModules:WaitForChild("HoverboardPhysics"))
@@ -18,6 +19,12 @@ local Speed = require(HoverboardModules:WaitForChild("HoverboardSpeed"))
 local HoverboardUtils = require(HoverboardModules:WaitForChild("HoverboardUtils"))
 local BoostAbility = require(HoverboardModules:WaitForChild("HoverboardBoost"))
 local DashAbility = require(HoverboardModules:WaitForChild("DashAbility"))
+local cameraFOV = require(HoverboardModules:WaitForChild("CameraFOV"))
+
+-- UI References
+local playerGUI = player:WaitForChild("PlayerGui")
+local gameHUD = playerGUI:WaitForChild("GameHUD")
+local mainGUI = playerGUI:WaitForChild("MainGui")
 
 -- Create controller
 local HoverboardController = Knit.CreateController({ Name = "HoverboardController" })
@@ -26,33 +33,29 @@ local HoverboardService
 -- State
 local character, humanoid, rootPart
 local hoverboard, bodyVelocity, bodyGyro, bodyPosition
-local runningConnection, abilityConnection
-local inputVector = Vector3.zero
+local runningConnection
 local isOnHoverboard = false
 local isHoverboardInitialized = false
-local HOVERBOARD_OFFSET = Vector3.new(0, 0, 0)
-
---UI References
-local mainGUI = player:WaitForChild("PlayerGui"):WaitForChild("MainGui")
-local speedGUI = mainGUI:WaitForChild("SpeedGUI")
-local speedLabel = speedGUI:WaitForChild("SpeedVal")
+local Jump = HoverboardJump.State
 
 --Constants
 local MAX_SPEED = 80
 local ACCELERATION = 2
-local DECELERATION = 20
-local MOVEMENT_SMOOTHNESS = 0.1
-local MIN_MOVEMENT_THRESHOLD = 0.1
-local ROTATION_SPEED = 60
-local ROTATION_SMOOTHNESS = 0.05
-local LEAN_SMOOTH = 30
-local MAX_LEAN = 2.2
-local LEAN_MULTIPLIER = 120
-local HOVER_HEIGHT = 1.5
+local DECELERATION = 2
+local MOVEMENT_SMOOTHNESS = 1
+local MIN_THROTTLING_THRESHOLD = 0.1
+local MIN_SPEED_THRESHOLD = 20
+local ROTATION_SPEED = 20
+local ROTATION_SMOOTHNESS = 0.9
+local LEAN_SMOOTH = 25
+local MAX_LEAN = 1
+local LEAN_MULTIPLIER = 60
+local HOVER_HEIGHT = 3
 local RAY_DISTANCE = 20
 local MAX_BODY_FORCE = 100000
 local HOVER_SMOOTHNESS = 8
 local ORIENTATION_SMOOTHNESS = 6
+
 
 -- Mutable refs so BoostModule can modify them
 local currentAccelerationRef = { value = ACCELERATION }
@@ -88,21 +91,27 @@ function HoverboardController:StartHoverboard(config)
 	local topSpeed = config.TopSpeed or MAX_SPEED
 	currentAccelerationRef.value = acceleration
 	currentTopSpeedRef.value = topSpeed
+	BoostAbility.BindBoost(character, humanoid, rootPart, function() return HoverboardMovement.CurrentSpeed end, currentAccelerationRef, currentTopSpeedRef)
+	DashAbility.BindDash(character, humanoid, rootPart, function() return HoverboardMovement.CurrentSpeed end, hoverboard, State)
+	HoverboardController:EnableHUD()
 	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
 
 	runningConnection = RunService.Heartbeat:Connect(function(dt)
-		if not rootPart or not character or not hoverboard or not isOnHoverboard then
-			return
+		if not rootPart or not character or not hoverboard or not isOnHoverboard or not bodyVelocity or not bodyGyro or not bodyPosition then
+			print("physics not attached yet") return
 		end
-		local moveDir = HoverboardMovement.HandleMovement(humanoid, rootPart, hoverboard, bodyVelocity, topSpeed, acceleration, DECELERATION,
-			MOVEMENT_SMOOTHNESS, MIN_MOVEMENT_THRESHOLD, State, BoostAbility.isBoosting, dt)
 
-		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HoverboardJump, ROTATION_SPEED, ROTATION_SMOOTHNESS,
+		local moveDir = HoverboardMovement.HandleMovement(humanoid, rootPart, hoverboard, bodyVelocity, topSpeed, acceleration, DECELERATION,
+			MOVEMENT_SMOOTHNESS, MIN_THROTTLING_THRESHOLD, State, BoostAbility.isBoosting, dt)
+
+		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HoverboardJump, MIN_SPEED_THRESHOLD, ROTATION_SPEED, ROTATION_SMOOTHNESS,
 			MAX_LEAN, LEAN_SMOOTH, LEAN_MULTIPLIER, State, dt)
 
 		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, RAY_DISTANCE, ORIENTATION_SMOOTHNESS, State, HoverboardJump, hoverboard, dt)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
 		HoverboardJump.UpdateLanding(humanoid, dt) --Check for the ground detection
+		--HoverboardMovement.HandleHovering(character, rootPart, bodyPosition, hoverboard, RAY_DISTANCE, HOVER_HEIGHT, MAX_BODY_FORCE, HoverboardJump, dt)
+		cameraFOV.Update(dt, moveDir, BoostAbility.isBoosting)
 	end)
 	Speed.UpdateSpeed(function() return HoverboardMovement.CurrentSpeed end, function() return topSpeed end)
 end
@@ -148,10 +157,21 @@ function HoverboardController:WaitForHoverboard(config)
 		bodyVelocity = primary:WaitForChild("BodyVelocity")
 		bodyGyro = primary:WaitForChild("BodyGyro")
 		bodyPosition = primary:WaitForChild("BodyPosition")
-		HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition)
-		HoverboardJump.SetHoverHeight(HOVER_HEIGHT)
-		HoverboardController:DisableAnimations(character)
-		HoverboardController:StartHoverboard(config)
+		if bodyVelocity and bodyGyro and bodyPosition then
+			HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition)
+			HoverboardJump.SetHoverHeight(HOVER_HEIGHT)
+			HoverboardController:DisableAnimations(character)
+			HoverboardController:StartHoverboard(config) 
+		else
+			warn("Hoverboard: Physics objects not ready, retrying...")
+			-- Retry after a brief moment
+			task.spawn(function()
+				task.wait(0.1)
+				if character and character.Parent then
+					self:WaitForHoverboard(config)
+				end
+			end)
+		end
 	end
 end
 
@@ -160,18 +180,7 @@ function HoverboardController:ApplyBoost()
 end
 
 function HoverboardController:ApplyDash()
-	if not HoverboardMovement then print("No hoverboard movement found!") return end
-	if not DashAbility.CanDash(HoverboardMovement.CurrentSpeed) then 
-		return 
-	end
-
-	print("Dash called.")
-	local moveDir = State.lastMoveDir
-	if moveDir.Magnitude == 0 then
-		moveDir = rootPart.CFrame.LookVector
-	end
-
-	DashAbility.PerformDash(hoverboard, HoverboardMovement.CurrentSpeed, moveDir, bodyVelocity)
+	DashAbility.ApplyDash(HoverboardMovement.CurrentSpeed, hoverboard, State)
 end
 
 --[[
@@ -201,6 +210,11 @@ end
     Character Setup
 ]]
 --
+
+function HoverboardController:EnableHUD()
+	gameHUD.Enabled = true
+end
+
 function HoverboardController:DisableAnimations(char)
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hum then
@@ -213,25 +227,26 @@ function HoverboardController:DisableAnimations(char)
 	if animate then
 		animate.Disabled = true
 	end
-	hum:ChangeState(Enum.HumanoidStateType.Physics)
-end
 
-function HoverboardController:SetFieldOfView(dt)
-	-- Camera FOV control
-	local camera = workspace.CurrentCamera
-	local targetFOV = 60
-
-	-- Increase FOV when moving
-	if HoverboardMovement.CurrentSpeed > 1 then
-		targetFOV = 70
+	if bodyVelocity and bodyGyro and bodyPosition then
+		hum:ChangeState(Enum.HumanoidStateType.Physics)
 	else
-		targetFOV = 60
+		-- If physics aren't ready, wait a frame and try again
+		task.spawn(function()
+			local maxWait = 10 -- 10 frames max
+			local waited = 0
+			while waited < maxWait and (not bodyVelocity or not bodyGyro or not bodyPosition) do
+				task.wait()
+				waited = waited + 1
+			end
+			if hum and hum.Parent then
+				--hum:ChangeState(Enum.HumanoidStateType.Physics)
+			end
+		end)
 	end
 
-	-- Smooth FOV transition (exponential smoothing)
-	local FOV_SMOOTHNESS = 8 -- tweak for faster/slower transition
-	local smooth = 1 - math.exp(-FOV_SMOOTHNESS * dt)
-	camera.FieldOfView = camera.FieldOfView + (targetFOV - camera.FieldOfView) * smooth
+
+	--hum:ChangeState(Enum.HumanoidStateType.Physics)
 end
 
 local function OnCharacterAdded(char)
@@ -241,40 +256,21 @@ local function OnCharacterAdded(char)
 	humanoid = char:WaitForChild("Humanoid")
 	rootPart = char:WaitForChild("HumanoidRootPart")
 	HoverboardUtils.BindJump(HoverboardJump)
-	BoostAbility.CharAdded(character, humanoid, rootPart)
 	Speed.RefreshSpeedGUI()
-	
-	if abilityConnection then
-		abilityConnection:Disconnect()
-	end
-	abilityConnection = UserInputService.InputBegan:Connect(function(input, gpe)
-		if gpe then
-			return
-		end
-		if input.KeyCode == Enum.KeyCode.Q then
-			print("Hoverboard: Boost requested.")
-			HoverboardController:ApplyBoost()
-		elseif input.KeyCode == Enum.KeyCode.F then
-			print("Hoverboard: Dash requested.")
-			HoverboardController:ApplyDash()
-		end
-	end)
 end
 
 local function OnCharacterRemoving()
+	print("Character removed successfully!")
 	if runningConnection then
 		runningConnection:Disconnect()
 		runningConnection = nil
-	end
-	if abilityConnection then
-		abilityConnection:Disconnect()
-		abilityConnection = nil
 	end
 	CleanupHoverboard()
 	ResetStates()
 	HoverboardUtils.UnBindJump()
 	Speed.Cleanup()
 	BoostAbility.CharRemoving()
+	DashAbility.CharRemoving()
 end
 
 local function OnPlayerAdded(plr)
@@ -324,6 +320,7 @@ function HoverboardController:KnitStart()
 	end)
 	OnPlayerAdded(player)
 	BoostAbility.Init(player)
+	DashAbility.Init(player)
 end
 
 return HoverboardController

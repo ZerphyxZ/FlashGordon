@@ -1,6 +1,7 @@
 -- HoverboardBoost.lua
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local HoverboardModules = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Hoverboard")
 local HoverboardMovement = require(HoverboardModules:WaitForChild("HoverboardMovement"))
 
@@ -10,17 +11,16 @@ local BoostModule = {}
 local player = Players.LocalPlayer
 
 -- GUI references (module-owned)
-local mainGUI = player:WaitForChild("PlayerGui"):WaitForChild("MainGui")
-local speedGUI = mainGUI:WaitForChild("SpeedGUI")
-local boostFrame = mainGUI:WaitForChild("BoostFrame")
+local gameHUD = player:WaitForChild("PlayerGui"):WaitForChild("GameHUD")
+local boostFrame = gameHUD:WaitForChild("BoostFrame")
 local boostButton = boostFrame:WaitForChild("BoostButton")
 local boostCooldownFiller = boostFrame:WaitForChild("CooldownFill")
 
 -- Boost config
-local BOOST_AMOUNT = 30
+local BOOST_AMOUNT = 50
 local BOOST_DURATION = 1
-local BOOST_COOLDOWN = 5
-local BOOSTED_ACCELERATION = 50
+local BOOST_COOLDOWN = 3
+local BOOSTED_ACCELERATION = 100
 
 BoostModule.isBoosting = false
 local boostReady = true
@@ -40,10 +40,9 @@ local function RefreshGUI()
 	if not player then return end
 
 	local pg = player:WaitForChild("PlayerGui")
-	local mg = pg:WaitForChild("MainGui")
+	local mg = pg:WaitForChild("GameHUD")
 
-	mainGUI = mg
-	speedGUI = mg:WaitForChild("SpeedGUI")
+	gameHUD = mg
 	boostFrame = mg:WaitForChild("BoostFrame")
 	boostCooldownFiller = boostFrame:WaitForChild("CooldownFill")
 	if boostCooldownFiller then
@@ -56,7 +55,7 @@ end
 ---------------------------------------------------------------------
 -- CharAdded / CharRemoving
 ---------------------------------------------------------------------
-function BoostModule.CharAdded(char, hum, root)
+function BoostModule.BindBoost(char, hum, root, currentSpeedGetter, accelRef, topSpeedRef)
 	character = char
 	humanoid = hum
 	rootPart = root
@@ -64,6 +63,23 @@ function BoostModule.CharAdded(char, hum, root)
 	BoostModule.isBoosting = false
 	boostReady = true
 	RefreshGUI()
+
+	if boostConnection then
+		boostConnection:Disconnect()
+	end
+	boostConnection = UserInputService.InputBegan:Connect(function(input, gpe)
+		if gpe then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.Q then
+			print("Hoverboard: Boost requested.")
+			BoostModule.ApplyBoost(currentSpeedGetter(), accelRef, topSpeedRef)
+		end
+	end)
+	boostButton.MouseButton1Click:Connect(function()
+		print("Hoverboard: Boost requested.")
+		BoostModule.ApplyBoost(currentSpeedGetter(), accelRef, topSpeedRef)
+	end)
 end
 
 function BoostModule.CharRemoving()
@@ -87,10 +103,10 @@ end
 ---------------------------------------------------------------------
 function BoostModule.ApplyBoost(currentSpeed, accelRef, topSpeedRef)
 	-- sanity checks
-	if not humanoid then print("Humanoid is nil") return end
-	if not boostReady then print("boostReady false") return end
-	if humanoid.MoveDirection.Magnitude < 0.1 then return end
-	if not currentSpeed or currentSpeed < 20 then print("Current speed is nil") return end
+	if not humanoid then print("Humanoid: ", humanoid) return end
+	if not boostReady then print("boostReady: ", boostReady) return end
+	if humanoid.MoveDirection.Magnitude < 0.1 then print("humanoid.MoveDirection.Magnitude ", humanoid.MoveDirection.Magnitude) return end
+	if not currentSpeed or currentSpeed < 20 then print("currentSpeed: ", currentSpeed) return end
 	if type(accelRef) ~= "table" or type(topSpeedRef) ~= "table" then
 		warn("BoostModule: ApplyBoost expects accelRef and topSpeedRef as tables with .value")
 		return
@@ -99,6 +115,8 @@ function BoostModule.ApplyBoost(currentSpeed, accelRef, topSpeedRef)
 	-- Activate boost
 	boostReady = false
 	BoostModule.isBoosting = true
+
+	print("Boost activated")
 
 	local originalAcceleration = accelRef.value
 	local originalTopSpeed = topSpeedRef.value
