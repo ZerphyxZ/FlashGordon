@@ -46,7 +46,7 @@ local function getCurrentWorldIndex(player: Player): number
 	return idx
 end
 
-local function ensurePerWorldContainers(profileData: table)
+local function ensurePerWorldContainers(profileData)
 	profileData.LastCheckpointByWorld = profileData.LastCheckpointByWorld or {}
 	profileData.VisitedCheckpointsByWorld = profileData.VisitedCheckpointsByWorld or {}
 end
@@ -237,6 +237,17 @@ function PlayerDataHandler:IncrementCoins(player: Player, amountEarned: number)
 	end
 end
 
+function PlayerDataHandler:DeductCoins(player: Player, amountDeducted: number)
+	local playerData = self:GetData(player)
+	if playerData then
+		local prevCoins = playerData.Coins
+		local updatedCoins = prevCoins - amountDeducted
+		--print(updatedCoins,"updatedCoins")
+		self:SetPlayerData(player, { Coins = updatedCoins })
+		player:SetAttribute("Coins", updatedCoins)
+	end
+end
+
 -- === checkpoints (per-world, with legacy mirror) =============================
 
 function PlayerDataHandler:SetLastCheckpoint(player: Player, positionTable: { number })
@@ -339,7 +350,7 @@ end
 function PlayerDataHandler:GetEquippedHoverboard(player: Player): string
 	local profile = Profiles[player]
 	if profile and profile:IsActive() then
-		return profile.Data.HoverboardName or "Hoverboard1"
+		return profile.Data.EquippedHoverboard or "Hoverboard1"
 	end
 	return "Hoverboard1"
 end
@@ -347,13 +358,122 @@ end
 function PlayerDataHandler:SetEquippedHoverboard(player: Player, boardName: string)
 	local profile = Profiles[player]
 	if profile and profile:IsActive() then
-		profile.Data.HoverboardName = boardName
+		-- Verify player owns this hoverboard before equipping
+		if self:PlayerOwnsHoverboard(player, boardName) then
+			profile.Data.EquippedHoverboard = boardName
+			pcall(function()
+				profile:Save()
+			end)
+			print("[PlayerDataHandler] Hoverboard equipped for", player.Name, "→", boardName)
+			return true
+		else
+			warn("[PlayerDataHandler] Player", player.Name, "does not own hoverboard:", boardName)
+			return false
+		end
+	end
+	return false
+
+
+
+
+
+
+	-- local profile = Profiles[player]
+	-- if profile and profile:IsActive() then
+	-- 	profile.Data.HoverboardName = boardName
+	-- 	pcall(function()
+	-- 		profile:Save()
+	-- 	end)
+	-- 	print("[PlayerDataHandler] Hoverboard saved for", player.Name, "→", boardName)
+	-- end
+end
+
+function PlayerDataHandler:PlayerOwnsHoverboard(player: Player, boardName: string): boolean
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		local owned = profile.Data.OwnedHoverboards or {}
+		for _, ownedBoard in ipairs(owned) do
+			if ownedBoard == boardName then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function PlayerDataHandler:GetOwnedHoverboards(player: Player): {string}
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		return profile.Data.OwnedHoverboards or {"Hoverboard1"}
+	end
+	return {"Hoverboard1"}
+end
+
+function PlayerDataHandler:AddHoverboardToInventory(player: Player, boardName: string): boolean
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		-- Initialize if not exists
+		profile.Data.OwnedHoverboards = profile.Data.OwnedHoverboards or {"Hoverboard1"}
+		
+		-- Check if already owned
+		if self:PlayerOwnsHoverboard(player, boardName) then
+			warn("[PlayerDataHandler] Player", player.Name, "already owns hoverboard:", boardName)
+			return false
+		end
+		
+		-- Add to owned hoverboards
+		table.insert(profile.Data.OwnedHoverboards, boardName)
+		
 		pcall(function()
 			profile:Save()
 		end)
-		print("[PlayerDataHandler] Hoverboard saved for", player.Name, "→", boardName)
+		
+		print("[PlayerDataHandler] Added hoverboard to inventory for", player.Name, "→", boardName)
+		return true
 	end
+	return false
 end
+
+function PlayerDataHandler:RemoveHoverboardFromInventory(player: Player, boardName: string): boolean
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		local owned = profile.Data.OwnedHoverboards or {}
+		
+		-- Find and remove the hoverboard
+		for i, ownedBoard in ipairs(owned) do
+			if ownedBoard == boardName then
+				-- Prevent removing the last hoverboard
+				if #owned <= 1 then
+					warn("[PlayerDataHandler] Cannot remove last hoverboard for", player.Name)
+					return false
+				end
+				
+				table.remove(owned, i)
+				
+				-- If player had this hoverboard equipped, switch to first available
+				if profile.Data.EquippedHoverboard == boardName then
+					profile.Data.EquippedHoverboard = owned[1] or "Hoverboard1"
+					print("[PlayerDataHandler] Auto-equipped new hoverboard:", profile.Data.EquippedHoverboard)
+				end
+				
+				pcall(function()
+					profile:Save()
+				end)
+				
+				print("[PlayerDataHandler] Removed hoverboard from inventory for", player.Name, "→", boardName)
+				return true
+			end
+		end
+		
+		warn("[PlayerDataHandler] Hoverboard not found in inventory:", boardName)
+	end
+	return false
+end
+
+function PlayerDataHandler:GetTotalHoverboards(): number
+	return PlayerDataTemplate.TotalHoverboards or 20
+end
+
 
 --[Daily Reward Helpers]
 function PlayerDataHandler:SetLastDailyClaim(player: Player)
@@ -381,7 +501,7 @@ function PlayerDataHandler:ResetStreak(player: Player)
 	end
 end
 
---[Daily Reward Helpers]
+--[Daily Spin Helpers]
 function PlayerDataHandler:IncrementSpins(player: Player, incrementValue: number)
 	local playerData = self:GetData(player)
 	--print(playerData,"Increment spin player data")

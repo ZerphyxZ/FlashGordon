@@ -22,6 +22,11 @@ local PlayerDataTemplate = {
 
 	-- Claimed Redeem Codes
 	Codes = {},
+
+	--Hoverboards Inventory
+	TotalHoverboards = 20, -- Total available hoverboards in game
+	OwnedHoverboards = {"Hoverboard1"}, -- Start with default hoverboard
+	EquippedHoverboard = "Hoverboard1", -- Currently equipped hoverboard
 }
 
 return PlayerDataTemplate

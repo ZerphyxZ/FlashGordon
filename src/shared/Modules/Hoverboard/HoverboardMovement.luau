@@ -16,13 +16,20 @@ function HoverboardMovement.CalculateSpeed(
 	dt,
 	isMoving,
 	MAX_SPEED,
-	MOVEMENT_SMOOTHNESS
+	MOVEMENT_SMOOTHNESS,
+	allowedExceedMax
 )
 	local rate = isMoving and Acceleration or Deceleration
+	-- Ensure minimum rate to prevent movement issues
+	local minRate = 0.1
+	rate = math.max(rate, minRate)
 	local smooth = 1 - math.exp(-rate * MOVEMENT_SMOOTHNESS * dt)
 	HoverboardMovement.CurrentSpeed = HoverboardMovement.CurrentSpeed
 		+ (targetSpeed - HoverboardMovement.CurrentSpeed) * smooth
-	HoverboardMovement.CurrentSpeed = math.clamp(HoverboardMovement.CurrentSpeed, 0, MAX_SPEED)
+
+	if allowedExceedMax then
+		HoverboardMovement.CurrentSpeed = math.clamp(HoverboardMovement.CurrentSpeed, 0, MAX_SPEED)
+	end
 end
 
 function HoverboardMovement.ApplyVelocity(dt, hrp, moveDir, bodyVelocity, hoverboard, currentSpeed, State)
@@ -30,58 +37,28 @@ function HoverboardMovement.ApplyVelocity(dt, hrp, moveDir, bodyVelocity, hoverb
 		return
 	end
 
-	local primary = hoverboard.PrimaryPart
-	local currentVel = primary.AssemblyLinearVelocity
+	local effectiveDir = (currentSpeed > 0) and State.lastMoveDir or Vector3.zero
+	local velocity = effectiveDir * currentSpeed
+	local currentVel = hoverboard.PrimaryPart.AssemblyLinearVelocity
 
-	-- Determine the effective movement direction
-	local effectiveDir = (moveDir.Magnitude > 0.1) and moveDir.Unit or State.lastMoveDir
-	if effectiveDir.Magnitude > 0 then
-		State.lastMoveDir = effectiveDir
-	end
-
-	-- Calculate target velocity
-	local targetVelocity = Vector3.zero
-	if currentSpeed > 0 and effectiveDir.Magnitude > 0 then
-		targetVelocity = effectiveDir * currentSpeed
+	-- Only apply movement if allowed and we have input
+	if moveDir.Magnitude > 0.1 then
+		local horiz = Vector3.new(velocity.X, 0, velocity.Z)
+		local curHoriz = Vector3.new(currentVel.X, 0, currentVel.Z)
+		local velT = 1 - math.exp(-20 * dt)
+		local newHoriz = curHoriz:Lerp(horiz, velT)
+		bodyVelocity.Velocity = Vector3.new(newHoriz.X, currentVel.Y, newHoriz.Z)
+	elseif moveDir.Magnitude == 0 then
+		local horiz = Vector3.new(velocity.X, 0, velocity.Z)
+		local curHoriz = Vector3.new(currentVel.X, 0, currentVel.Z)
+		local velT = 1 - math.exp(-20 * dt)
+		local newHoriz = curHoriz:Lerp(horiz, velT)
+		bodyVelocity.Velocity = Vector3.new(newHoriz.X, currentVel.Y, newHoriz.Z)
 	else
-		-- Gradual slowdown when no input
-		targetVelocity = Vector3.zero
+		local currentHorizVel = Vector3.new(currentVel.X, 0, currentVel.Z)
+		local slowedHorizVel = currentHorizVel * math.exp(-10 * dt) -- Gradual slowdown
+		bodyVelocity.Velocity = Vector3.new(slowedHorizVel.X, currentVel.Y, slowedHorizVel.Z)
 	end
-
-	-- Smooth velocity transition
-	local currentHorizVel = Vector3.new(currentVel.X, 0, currentVel.Z)
-	local targetHorizVel = Vector3.new(targetVelocity.X, 0, targetVelocity.Z)
-
-	local velT = 1 - math.exp(-15 * dt) -- Smoothing factor
-	local newHorizVel = currentHorizVel:Lerp(targetHorizVel, velT)
-
-	-- Preserve Y velocity for gravity/jumping
-	bodyVelocity.Velocity = Vector3.new(newHorizVel.X, currentVel.Y, newHorizVel.Z)
-
-	-- if not bodyVelocity or not hoverboard or not hoverboard.PrimaryPart then return end
-
-	-- local effectiveDir = (currentSpeed > 0) and State.lastMoveDir or Vector3.zero
-	-- local velocity = effectiveDir * currentSpeed
-	-- local currentVel = hoverboard.PrimaryPart.AssemblyLinearVelocity
-
-	-- -- Only apply movement if allowed and we have input
-	-- if moveDir.Magnitude > 0 then
-	-- 	local horiz = Vector3.new(velocity.X, 0, velocity.Z)
-	-- 	local curHoriz = Vector3.new(currentVel.X, 0, currentVel.Z)
-	-- 	local velT = 1 - math.exp(-20 * dt)
-	-- 	local newHoriz = curHoriz:Lerp(horiz, velT)
-	-- 	bodyVelocity.Velocity = Vector3.new(newHoriz.X, currentVel.Y, newHoriz.Z)
-	-- elseif moveDir.Magnitude == 0 then
-	-- 	local horiz = Vector3.new(velocity.X, 0, velocity.Z)
-	-- 	local curHoriz = Vector3.new(currentVel.X, 0, currentVel.Z)
-	-- 	local velT = 1 - math.exp(-20 * dt)
-	-- 	local newHoriz = curHoriz:Lerp(horiz, velT)
-	-- 	bodyVelocity.Velocity = Vector3.new(newHoriz.X, currentVel.Y, newHoriz.Z)
-	-- else
-	-- 	local currentHorizVel = Vector3.new(currentVel.X, 0, currentVel.Z)
-	-- 	local slowedHorizVel = currentHorizVel * math.exp(-10 * dt) -- Gradual slowdown
-	-- 	bodyVelocity.Velocity = Vector3.new(slowedHorizVel.X, currentVel.Y, slowedHorizVel.Z)
-	-- end
 end
 
 function HoverboardMovement.HandleMovement(
@@ -95,6 +72,7 @@ function HoverboardMovement.HandleMovement(
 	MOVEMENT_SMOOTHNESS,
 	MIN_MOVEMENT_THRESHOLD,
 	State,
+	isBoosting,
 	dt
 )
 	if not humanoid or not hoverboard or not hoverboard.PrimaryPart then
@@ -103,13 +81,19 @@ function HoverboardMovement.HandleMovement(
 	local moveDir = humanoid.MoveDirection
 	moveDir = Vector3.new(moveDir.X, 0, moveDir.Z)
 
+	local isMoving = moveDir.Magnitude > MIN_MOVEMENT_THRESHOLD
+	if isMoving and State.lastMoveDir then
+		if moveDir:Dot(State.lastMoveDir) < -0.5 then
+			HoverboardMovement.CurrentSpeed = 0
+		end
+	end
+
 	-- Update last movement direction only if actually moving
-	if moveDir.Magnitude > MIN_MOVEMENT_THRESHOLD then
+	if isMoving then
 		State.lastMoveDir = moveDir.Unit
 	end
 
 	-- Calculate target speed with directional modifiers
-	local isMoving = moveDir.Magnitude > MIN_MOVEMENT_THRESHOLD
 	local targetSpeed = isMoving and MAX_SPEED or 0
 
 	-- Apply speed calculation
@@ -129,6 +113,7 @@ function HoverboardMovement.HandleMovement(
 	end
 
 	HoverboardMovement.ApplyVelocity(dt, hrp, moveDir, bodyVelocity, hoverboard, HoverboardMovement.CurrentSpeed, State)
+
 	return moveDir
 end
 
@@ -138,10 +123,12 @@ function HoverboardMovement.UpdateOrientation(
 	hoverboard,
 	moveDir,
 	HoverboardJump,
+	SPEED_THRESHOLD,
 	ROTATION_SPEED,
 	ROTATION_SMOOTHNESS,
 	MAX_LEAN,
 	LEAN_SMOOTH,
+	LEAN_MULTIPLIER,
 	State,
 	dt
 )
@@ -154,11 +141,22 @@ function HoverboardMovement.UpdateOrientation(
 	then
 		return
 	end
-
 	-----------------------------
-	-- 1. ROTATION
+	-- 1. DETERMINE MOVEMENT STATE
 	-----------------------------
 	moveDir = State.lastMoveDir
+	local speed = HoverboardMovement.CurrentSpeed
+	local isMoving = moveDir.Magnitude > 0.1 and speed > SPEED_THRESHOLD -- Additional check for actual movement
+
+	-- Define multipliers based on movement state
+	local rotationMultiplier = isMoving and 0.8 or 1 -- 2.5x rotation when still
+	ROTATION_SMOOTHNESS = isMoving and 0.2 or ROTATION_SMOOTHNESS
+	--LEAN_SMOOTH = isMoving and 50 or LEAN_SMOOTH
+	local leanMultiplier = isMoving and 1 or 0.25 -- 1/4 leaning when still
+
+	-----------------------------
+	-- 2. ROTATION
+	-----------------------------
 	local candidateNormal = State.smoothedGroundNormal or Vector3.new(0, 1, 0)
 
 	-- 90-degree facing offset (right side)
@@ -172,12 +170,14 @@ function HoverboardMovement.UpdateOrientation(
 	local primary = hoverboard.PrimaryPart
 	local targetPlayerCFrame = CFrame.lookAt(primary.Position, primary.Position + facingDir, candidateNormal)
 
-	local rotSmooth = 1 - math.exp(-ROTATION_SPEED * ROTATION_SMOOTHNESS * dt) -- exponential smoothing
+	-- Apply rotation multiplier based on movement state
+	local adjustedRotation = ROTATION_SPEED * rotationMultiplier
+	local rotSmooth = 1 - math.exp(-adjustedRotation * ROTATION_SMOOTHNESS * dt) -- exponential smoothing
 	local currentCF = bodyGyro.CFrame
 	local newRot = (currentCF - currentCF.Position):Lerp(targetPlayerCFrame - targetPlayerCFrame.Position, rotSmooth)
 
 	-----------------------------
-	-- 2. LEANING
+	-- 3. LEANING
 	-----------------------------
 	local grounded = HoverboardJump.IsGrounded()
 	if grounded and not HoverboardJump.IsJumping then
@@ -185,32 +185,26 @@ function HoverboardMovement.UpdateOrientation(
 		local yawDelta = currentYaw - prevYaw
 		prevYaw = currentYaw
 
-		if HoverboardMovement.CurrentSpeed > 2 then
-			local targetLean = math.clamp(yawDelta * 50, -MAX_LEAN, MAX_LEAN)
-			smoothedLean = smoothedLean + (targetLean - smoothedLean) * math.clamp(dt * LEAN_SMOOTH, 0, 1)
-		else
-			smoothedLean = smoothedLean * 0.9 -- Reset lean when not moving
-		end
+		-- Apply lean multiplier based on movement state
+		if yawDelta ~= 0 then
+			local adjustedLean = yawDelta * LEAN_MULTIPLIER * leanMultiplier
+			adjustedLean = math.clamp(adjustedLean, -MAX_LEAN, MAX_LEAN)
+			local leanT = 1 - math.exp(-50 * dt)
+			smoothedLean = smoothedLean + (adjustedLean - smoothedLean) * leanT
 
-		-- Apply lean to rotation
-		newRot = newRot * CFrame.Angles(-math.rad(smoothedLean), 0, 0)
+			-- Apply lean to rotation
+			newRot = newRot * CFrame.Angles(-math.rad(smoothedLean), 0, 0)
+		end
 	else
 		smoothedLean = smoothedLean * 0.85
 	end
 
 	-----------------------------
-	-- 3. UPDATE PLAYER ORIENTATION
+	-- 4. UPDATE PLAYER ORIENTATION
 	-----------------------------
 	if bodyGyro then
 		bodyGyro.CFrame = CFrame.new(primary.Position) * newRot
 	end
-
-	-----------------------------
-	-- 4. UPDATE HOVERBOARD ORIENTATION
-	-----------------------------
-	-- if hoverboard.PrimaryPart then
-	-- 	hoverboard.PrimaryPart.CFrame = bodyGyro.CFrame * CFrame.new(hoverboardOffset)
-	-- end
 end
 
 function HoverboardMovement.UpdateSurfaceAlignment(
@@ -224,11 +218,7 @@ function HoverboardMovement.UpdateSurfaceAlignment(
 	hoverboard,
 	dt
 )
-	if not rootPart or not hoverboard or not hoverboard.PrimaryPart or not ready then
-		return
-	end
-	if not HoverboardJump.IsGrounded() then
-		print("Not grounded")
+	if not rootPart or not hoverboard or not hoverboard.PrimaryPart or not HoverboardJump.IsGrounded() then
 		return
 	end
 	local primaryPart = hoverboard.PrimaryPart
@@ -278,7 +268,8 @@ function HoverboardMovement.UpdateSurfaceAlignment(
 		end
 	end
 
-	local orientSmooth = math.clamp(dt * ORIENTATION_SMOOTHNESS, 0, 1)
+	--local orientSmooth = math.clamp(dt * ORIENTATION_SMOOTHNESS, 0, 1)
+	local orientSmooth = 1 - math.exp(-ORIENTATION_SMOOTHNESS * dt)
 
 	-- Initialize smoothed normal if needed
 	if not State.smoothedGroundNormal then
@@ -300,12 +291,14 @@ function HoverboardMovement.UpdateSurfaceAlignment(
 
 	if bodyGyro then
 		local currentOrient = bodyGyro.CFrame
-		--local currentPos = rootPart.Position
 		local currentPos = primaryPart.Position
-		local lerpT = orientSmooth
-		local newRot = (currentOrient - currentOrient.Position):Lerp(targetCFrame - targetCFrame.Position, lerpT)
+		local newRot = (currentOrient - currentOrient.Position):Lerp(targetCFrame - targetCFrame.Position, orientSmooth)
 		bodyGyro.CFrame = CFrame.new(currentPos) * newRot
 	end
+
+
+
+
 
 	-- if not rootPart or not hoverboard or not hoverboard.PrimaryPart then return end
 
@@ -352,6 +345,93 @@ function HoverboardMovement.UpdateSurfaceAlignment(
 	-- 	bodyGyro.CFrame = CFrame.new(currentPos) * newRot
 	-- end
 end
+
+function HoverboardMovement.UpdateBoardAlignment(
+	rootPart,
+	hoverboard,
+	HOVER_HEIGHT,
+	HOVER_SMOOTHNESS,
+	ORIENTATION_SMOOTHNESS,
+	dt
+)
+	if not hoverboard or not hoverboard.PrimaryPart then
+		return
+	end
+
+	local boardCF = hoverboard.PrimaryPart.CFrame
+	local halfSize = hoverboard.PrimaryPart.Size * 0.5
+
+	-- Ray origin offsets (4 corners)
+	local offsets = {
+		Vector3.new( halfSize.X, 0,  halfSize.Z),
+		Vector3.new(-halfSize.X, 0,  halfSize.Z),
+		Vector3.new( halfSize.X, 0, -halfSize.Z),
+		Vector3.new(-halfSize.X, 0, -halfSize.Z),
+	}
+
+	local normalSum = Vector3.zero
+	local bestDistance = math.huge
+	local bestPosition
+
+	--------------------------------------------
+	-- 4-Corner RAYCAST - strongest + optimized
+	--------------------------------------------
+	for _, offset in ipairs(offsets) do
+		local origin = boardCF:PointToWorldSpace(offset + Vector3.new(0, 3, 0))
+		local result = workspace:Raycast(origin, Vector3.new(0, -15, 0))
+
+		if result then
+			normalSum = normalSum + result.Normal
+
+			if result.Distance < bestDistance then
+				bestDistance = result.Distance
+				bestPosition = result.Position
+			end
+		end
+	end
+
+	--------------------------------------------
+	-- If no ground detected → keep current tilt
+	--------------------------------------------
+	if bestDistance == math.huge then
+		return
+	end
+
+	--------------------------------------------
+	-- 1. Compute averaged surface normal
+	--------------------------------------------
+	local avgNormal = normalSum.Unit
+
+	--------------------------------------------
+	-- 2. Compute target hover position
+	--------------------------------------------
+	local targetPos = bestPosition + (avgNormal * HOVER_HEIGHT)
+
+	--------------------------------------------
+	-- 3. Smooth vertical hover height
+	--------------------------------------------
+	local hoverT = 1 - math.exp(-HOVER_SMOOTHNESS * dt)
+	local newPos = hoverboard.PrimaryPart.Position:Lerp(targetPos, hoverT)
+
+	--------------------------------------------
+	-- 4. Compute new orientation based on avgNormal
+	--------------------------------------------
+	local forward = boardCF.LookVector
+	forward = forward - forward:Dot(avgNormal) * avgNormal
+	forward = forward.Magnitude > 0.01 and forward.Unit or boardCF.LookVector
+
+	local targetCFrame = CFrame.lookAt(newPos, newPos + forward, avgNormal)
+
+	--------------------------------------------
+	-- 5. Smooth the final CFrame (position + rotation)
+	--------------------------------------------
+	local orientT = 1 - math.exp(-ORIENTATION_SMOOTHNESS * dt)
+	local finalCF = boardCF:Lerp(targetCFrame, orientT)
+
+	hoverboard:PivotTo(finalCF)
+end
+
+
 
 function HoverboardMovement.ProjectVectorOnPlane(vector, planeNormal)
 	return vector - planeNormal * vector:Dot(planeNormal)

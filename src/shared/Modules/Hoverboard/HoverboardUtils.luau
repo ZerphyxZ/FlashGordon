@@ -3,69 +3,55 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
-local HoverboardJump = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Modules")
-	:WaitForChild("Hoverboard"):WaitForChild("HoverboardJump"))
-
 local HoverboardUtils = {}
-HoverboardUtils.MoveVector = Vector3.zero
 
-local function SetupHumanoidTracking(player)
-	local character = player.Character or player.CharacterAdded:Wait()
-	local humanoid = character:WaitForChild("Humanoid")
+local JumpConnections = {
+	JumpRequest = nil,
+	InputEnded = nil,
+	Heartbeat = nil,
+}
 
-	-- Update MoveVector every frame based on humanoid MoveDirection
-	RunService.Heartbeat:Connect(function()
-		-- if humanoid and humanoid.Parent then
-		-- 	local dir = humanoid.MoveDirection
-		-- 	if dir.Magnitude > 0.05 then
-		-- 		HoverboardUtils.MoveVector = dir
-		-- 	else
-		-- 		HoverboardUtils.MoveVector = Vector3.zero
-		-- 	end
-		-- else
-		-- 	HoverboardUtils.MoveVector = Vector3.zero
-		-- end
-	end)
+local function EnableJumpInput(HoverboardJump)
+	-- Prevent duplicates
+	if JumpConnections.JumpRequest then return end
 
-	
-
-
-end
-
-local function SetupJumpUpdate()
-	-- Jump input handling
-	UserInputService.JumpRequest:Connect(function()
-		print("Jump requested!")
+	JumpConnections.JumpRequest = UserInputService.JumpRequest:Connect(function()
 		HoverboardJump.State.isJumpHeld = true
 		HoverboardJump.AttemptJump()
 	end)
 
-	-- Handle jump release
-	UserInputService.InputEnded:Connect(function(input, gameProcessed)
+	JumpConnections.InputEnded = UserInputService.InputEnded:Connect(function(input, gp)
 		if input.KeyCode == Enum.KeyCode.Space then
-			print("Got here")
 			HoverboardJump.State.isJumpHeld = false
 		end
 
-		-- Check for touch input (mobile)
 		if input.UserInputType == Enum.UserInputType.Touch then
-			-- For mobile, we need to check if this was a jump touch
-			if HoverboardJump.State.isJumpHeld then
-				HoverboardJump.State.isJumpHeld = false
-			end
+			HoverboardJump.State.isJumpHeld = false
 		end
 	end)
-	RunService.Heartbeat:Connect(function(deltaTime)
-		HoverboardJump.UpdateJump(deltaTime)
+
+	JumpConnections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
+		HoverboardJump.UpdateJump(dt)
 	end)
+
+	print("Jump Input ENABLED")
 end
 
-function HoverboardUtils.BindInput(player)
-	SetupJumpUpdate() -- Start the jump/fly update loop
-	player.CharacterAdded:Connect(function()
-		task.wait(0.1)
-		SetupJumpUpdate()
-	end)
+local function DisableJumpInput()
+	for key, conn in pairs(JumpConnections) do
+		if conn then conn:Disconnect() end
+		JumpConnections[key] = nil
+	end
+
+	print("Jump Input DISABLED")
+end
+
+function HoverboardUtils.BindJump(HoverboardJump)
+	EnableJumpInput(HoverboardJump)
+end
+
+function HoverboardUtils.UnBindJump()
+	DisableJumpInput()
 end
 
 return HoverboardUtils
