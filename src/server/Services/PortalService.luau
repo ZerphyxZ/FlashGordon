@@ -13,8 +13,8 @@ local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 -- === REAL PLACE IDS (UPDATED) ===============================================
 local WORLD_PLACE_IDS = {
     [1] = 95954065660891,   -- Place 1 → World 1
-    [2] = 90678723238530,   -- Place 2 → World 2
-    [3] = 127054520314978,  -- Place 3 → World 3
+    [2] = 129835454913823,   -- Place 2 → World 2
+    [3] = 76680813943017,  -- Place 3 → World 3
 }
 
 local NEXT_PORTAL_NAME = "NextWorld"
