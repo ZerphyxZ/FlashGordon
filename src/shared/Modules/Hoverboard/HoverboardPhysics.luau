@@ -1,7 +1,7 @@
 --// HoverboardPhysics.lua
 local HoverboardPhysics = {}
 
-local MAX_BODY_FORCE = 100000
+HoverboardPhysics.MAX_BODY_FORCE = 100000
 
 function HoverboardPhysics.AttachPhysics(hoverboard)
 	if not hoverboard or not hoverboard.PrimaryPart then return end
@@ -21,7 +21,7 @@ function HoverboardPhysics.AttachPhysics(hoverboard)
 
 	local bp = Instance.new("BodyPosition")
 	bp.Name = "BodyPosition"
-	bp.MaxForce = Vector3.new(0, MAX_BODY_FORCE, 0)
+	bp.MaxForce = Vector3.new(0, HoverboardPhysics.MAX_BODY_FORCE, 0)
 	bp.P = 6000
 	bp.D = 600
 	bp.Position = primaryPart.Position
@@ -33,19 +33,15 @@ end
 function HoverboardPhysics.Cleanup(hoverboard, bv, bg, bp)
 	if hoverboard then 
 		hoverboard:Destroy()
-		hoverboard = nil
 	end
 	if bv then 
 		bv:Destroy()
-		bv = nil
 	end
 	if bg then 
 		bg:Destroy() 
-		bg = nil
 	end
 	if bp then 
 		bp:Destroy()
-		bp = nil
 	end
 end
 

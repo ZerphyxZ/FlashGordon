@@ -5,8 +5,8 @@ local TweenService = game:GetService("TweenService")
 
 local HoverboardSpeed = {}
 local player = Players.LocalPlayer
-local mainGUI = player:WaitForChild("PlayerGui"):WaitForChild("MainGui")
-local speedGUI = mainGUI:WaitForChild("SpeedGUI")
+local gameHUD = player:WaitForChild("PlayerGui"):WaitForChild("GameHUD")
+local speedGUI = gameHUD:WaitForChild("SpeedGUI")
 local speedLabel = speedGUI:WaitForChild("SpeedVal")
 local bars = speedGUI:WaitForChild("Bars")
 local speedBars = {}
@@ -39,8 +39,8 @@ end
 ---------------------------------------------------------------------
 local function LoadGUI()
 	local pg = player:WaitForChild("PlayerGui")
-	mainGUI = pg:WaitForChild("MainGui")
-	speedGUI = mainGUI:WaitForChild("SpeedGUI")
+	gameHUD = pg:WaitForChild("GameHUD")
+	speedGUI = gameHUD:WaitForChild("SpeedGUI")
 	speedLabel = speedGUI:WaitForChild("SpeedVal")
 	bars = speedGUI:WaitForChild("Bars")
 	speedBars = {}
