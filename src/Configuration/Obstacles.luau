@@ -2,6 +2,11 @@ return {
     Translation = {
         Speed = 1
     },
+    Rock = {
+        FallingSpeed = 1,
+        RotationSpeed = 180,
+        Frequency = 10,
+    },
 
     Monster = {
         -- attack configs
