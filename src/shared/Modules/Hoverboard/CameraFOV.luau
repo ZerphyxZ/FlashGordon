@@ -4,36 +4,41 @@ local HoverboardFOV = {}
 local IDLE_FOV = 70
 local MOVE_FOV = 80
 local BOOST_FOV = 85
+local JUMP_FOV = 77
 
-local FAR_SMOOTHNESS = 0.8
-local NEAR_SMOOTHNESS = 2.2
-local BOOST_SMOOTHNESS = 1.5
+local SMOOTHNESS = 2
 
-function HoverboardFOV.Update(dt, moveDir, isBoosting)
+function HoverboardFOV.Update(dt, moveDir, isBoosting, isJumping, isFalling)
 	local cam = workspace.CurrentCamera
 	if not cam then return end
 
 	local isMoving = moveDir.Magnitude > 0.1
-	local target
-	local smoothFactor
-
-	-- BOOST HAS PRIORITY ABOVE EVERYTHING
+	local target = IDLE_FOV
+	
 	if isBoosting then
 		target = BOOST_FOV
-		smoothFactor = BOOST_SMOOTHNESS
-
-	else
-		-- NORMAL INPUT-BASED FOV
+	
+	elseif isJumping then
+		if isMoving then
+			target = MOVE_FOV + 3
+		else
+			target = JUMP_FOV
+		end
+		
+	elseif isFalling then
 		if isMoving then
 			target = MOVE_FOV
-			smoothFactor = FAR_SMOOTHNESS
 		else
 			target = IDLE_FOV
-			smoothFactor = NEAR_SMOOTHNESS
 		end
+		
+	elseif isMoving then
+		target = MOVE_FOV
+	else
+		target = IDLE_FOV
 	end
 
-	local smooth = 1 - math.exp(-smoothFactor * dt)
+	local smooth = 1 - math.exp(-SMOOTHNESS * dt)
 	cam.FieldOfView = cam.FieldOfView + (target - cam.FieldOfView) * smooth
 end
 

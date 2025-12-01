@@ -18,8 +18,9 @@ local HoverboardPhysics = require(HoverboardModules:WaitForChild("HoverboardPhys
 local Speed = require(HoverboardModules:WaitForChild("HoverboardSpeed"))
 local HoverboardUtils = require(HoverboardModules:WaitForChild("HoverboardUtils"))
 local BoostAbility = require(HoverboardModules:WaitForChild("HoverboardBoost"))
-local DashAbility = require(HoverboardModules:WaitForChild("DashAbility"))
+local DashAbility = require(HoverboardModules:WaitForChild("HoverboardDash"))
 local cameraFOV = require(HoverboardModules:WaitForChild("CameraFOV"))
+local HoverboardBobbing = require(HoverboardModules:WaitForChild("HoverboardBobbing"))
 
 -- UI References
 local playerGUI = player:WaitForChild("PlayerGui")
@@ -45,11 +46,11 @@ local DECELERATION = 2
 local MOVEMENT_SMOOTHNESS = 1
 local MIN_THROTTLING_THRESHOLD = 0.1
 local MIN_SPEED_THRESHOLD = 20
-local ROTATION_SPEED = 20
+local ROTATION_SPEED = 15
 local ROTATION_SMOOTHNESS = 0.9
 local LEAN_SMOOTH = 25
-local MAX_LEAN = 1
-local LEAN_MULTIPLIER = 60
+local MAX_LEAN = 1.5
+local LEAN_MULTIPLIER = 80
 local HOVER_HEIGHT = 3
 local RAY_DISTANCE = 20
 local MAX_BODY_FORCE = 100000
@@ -91,6 +92,7 @@ function HoverboardController:StartHoverboard(config)
 	local topSpeed = config.TopSpeed or MAX_SPEED
 	currentAccelerationRef.value = acceleration
 	currentTopSpeedRef.value = topSpeed
+	HoverboardJump.SetMaxSpeed(topSpeed)
 	BoostAbility.BindBoost(character, humanoid, rootPart, function() return HoverboardMovement.CurrentSpeed end, currentAccelerationRef, currentTopSpeedRef)
 	DashAbility.BindDash(character, humanoid, rootPart, function() return HoverboardMovement.CurrentSpeed end, hoverboard, State)
 	HoverboardController:EnableHUD()
@@ -104,6 +106,8 @@ function HoverboardController:StartHoverboard(config)
 		local moveDir = HoverboardMovement.HandleMovement(humanoid, rootPart, hoverboard, bodyVelocity, topSpeed, acceleration, DECELERATION,
 			MOVEMENT_SMOOTHNESS, MIN_THROTTLING_THRESHOLD, State, BoostAbility.isBoosting, dt)
 
+		HoverboardJump.State.moveDir = moveDir
+
 		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HoverboardJump, MIN_SPEED_THRESHOLD, ROTATION_SPEED, ROTATION_SMOOTHNESS,
 			MAX_LEAN, LEAN_SMOOTH, LEAN_MULTIPLIER, State, dt)
 
@@ -111,7 +115,8 @@ function HoverboardController:StartHoverboard(config)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
 		HoverboardJump.UpdateLanding(humanoid, dt) --Check for the ground detection
 		--HoverboardMovement.HandleHovering(character, rootPart, bodyPosition, hoverboard, RAY_DISTANCE, HOVER_HEIGHT, MAX_BODY_FORCE, HoverboardJump, dt)
-		cameraFOV.Update(dt, moveDir, BoostAbility.isBoosting)
+		cameraFOV.Update(dt, moveDir, BoostAbility.isBoosting, HoverboardJump.State.isJumping, HoverboardJump.State.isFalling)
+		--HoverboardBobbing.Update(dt, moveDir, HoverboardMovement.CurrentSpeed, workspace, hoverboard, bodyPosition)
 	end)
 	Speed.UpdateSpeed(function() return HoverboardMovement.CurrentSpeed end, function() return topSpeed end)
 end
@@ -175,14 +180,6 @@ function HoverboardController:WaitForHoverboard(config)
 	end
 end
 
-function HoverboardController:ApplyBoost()
-	BoostAbility.ApplyBoost(HoverboardMovement.CurrentSpeed, currentAccelerationRef, currentTopSpeedRef)
-end
-
-function HoverboardController:ApplyDash()
-	DashAbility.ApplyDash(HoverboardMovement.CurrentSpeed, hoverboard, State)
-end
-
 --[[
     State Management
 ]]
@@ -229,20 +226,8 @@ function HoverboardController:DisableAnimations(char)
 	end
 
 	if bodyVelocity and bodyGyro and bodyPosition then
+		--hum.PlatformStand = true
 		hum:ChangeState(Enum.HumanoidStateType.Physics)
-	else
-		-- If physics aren't ready, wait a frame and try again
-		task.spawn(function()
-			local maxWait = 10 -- 10 frames max
-			local waited = 0
-			while waited < maxWait and (not bodyVelocity or not bodyGyro or not bodyPosition) do
-				task.wait()
-				waited = waited + 1
-			end
-			if hum and hum.Parent then
-				--hum:ChangeState(Enum.HumanoidStateType.Physics)
-			end
-		end)
 	end
 
 

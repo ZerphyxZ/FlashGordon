@@ -31,7 +31,7 @@ local function EnableJumpInput(HoverboardJump)
 	end)
 
 	JumpConnections.Heartbeat = RunService.Heartbeat:Connect(function(dt)
-		HoverboardJump.UpdateJump(dt)
+		HoverboardJump.UpdateJump(HoverboardJump.State.moveDir, dt)
 	end)
 
 	print("Jump Input ENABLED")
