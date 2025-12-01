@@ -23,7 +23,7 @@ local FolderName: string = "Laser"
 -- ===== References	 ===============================================================
 
 local Assets: Folder = ReplicatedStorage:WaitForChild("Assets")
-local MonsterTemplates: Folder = Assets:WaitForChild("Obstacle")
+local ObstacleTemplates: Folder = Assets:WaitForChild("Obstacle")
 
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 local Controller = Knit.CreateController({ Name = "FireLaserController" })
@@ -243,12 +243,19 @@ function makeLaserAlien(MonsterPlaceholder: Model)
 		monster.Config = config
 		monster.HitAttachment = MonsterPlaceholder.Hit
 		monster.StartAttachment = MonsterPlaceholder.Start
-		monster.Model = MonsterPlaceholder.Shooter
+		local model = ObstacleTemplates:FindFirstChild("Shooter")
+
+		if not model then warn("No monster model") return end
+
+		warn("laser")
+
+		monster.Model = model:Clone()
+		monster.Model.Parent = MonsterPlaceholder
 		monster.Size = monster.Model:GetExtentsSize()
 
 		monster.Delay = MonsterPlaceholder:GetAttribute("Delay") or 0
 
-		local monsterPosition = monster.Model:GetPivot().Position
+		local monsterPosition = MonsterPlaceholder.CharPosition.WorldCFrame.Position
 
 		monster.Model:PivotTo(CFrame.new(
 			monsterPosition, 
