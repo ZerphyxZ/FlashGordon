@@ -1,4 +1,8 @@
 return {
+    Translation = {
+        Speed = 1
+    },
+
     Monster = {
         -- attack configs
         ImpactDuration = .75,
