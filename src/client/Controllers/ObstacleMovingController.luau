@@ -241,7 +241,7 @@ function Controller:KnitStart()
 					-- local newPosition = midpoint + (movingVector * 0.5) + ((movingVector.Magnitude) * math.sin(serverTime)) * movingVector.Unit
 
 					local newPosition = endPos + movingVector * sinFunc(serverTime * ObstacleConfigs.Translation.Speed)
-					part.CFrame = CFrame.new(newPosition)
+					part.CFrame = CFrame.new(newPosition) * obstacle.initialRot
 				end
 			end 
 		end
