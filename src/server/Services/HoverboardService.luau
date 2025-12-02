@@ -43,68 +43,6 @@ local function CleanupCharacterHoverboard(character)
 	end
 end
 
--- Calculate offset such that the hoverboard sits flush to player's feet
-local function CalculateBoardOffset(character, boardModel)
-	if not character or not boardModel then
-		return 0
-	end
-
-	-- Try to base on actual feet parts first (LeftFoot / RightFoot)
-	local leftFoot = character:FindFirstChild("LeftFoot")
-		or character:FindFirstChild("Left Leg")
-		or character:FindFirstChild("LeftLowerLeg")
-	local rightFoot = character:FindFirstChild("RightFoot")
-		or character:FindFirstChild("Right Leg")
-		or character:FindFirstChild("RightLowerLeg")
-
-	local lowestY = math.huge
-	if leftFoot or rightFoot then
-		if leftFoot and leftFoot:IsA("BasePart") then
-			local bottomY = (leftFoot.Position - Vector3.new(0, leftFoot.Size.Y / 2, 0)).Y
-			lowestY = math.min(lowestY, bottomY)
-		end
-		if rightFoot and rightFoot:IsA("BasePart") then
-			local bottomY = (rightFoot.Position - Vector3.new(0, rightFoot.Size.Y / 2, 0)).Y
-			lowestY = math.min(lowestY, bottomY)
-		end
-	end
-
-	-- If no explicit foot parts found, fallback to previous character bottom calculation
-	if lowestY == math.huge then
-		for _, part in ipairs(character:GetDescendants()) do
-			if part:IsA("BasePart") then
-				local bottomY = (part.Position - Vector3.new(0, part.Size.Y / 2, 0)).Y
-				if bottomY < lowestY then
-					lowestY = bottomY
-				end
-			end
-		end
-	end
-
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if not hrp or lowestY == math.huge then
-		return 0
-	end
-
-	local rootY = hrp.Position.Y
-	local footOffset = rootY - lowestY
-	local boardSizeY = boardModel:GetExtentsSize().Y
-	return (footOffset + (boardSizeY / 2)) - 0.5
-end
-
-function HoverboardService.Client:GetBoardOffset(player)
-	local character = player.Character
-	if not character then
-		return 0
-	end
-
-	local hoverboard = character:FindFirstChild("Hoverboard")
-	if not hoverboard then
-		return 0
-	end
-
-	return CalculateBoardOffset(character, hoverboard)
-end
 ----------------------------------------------------------
 -- Give Default Hoverboard (only if player doesn't already have one)
 ----------------------------------------------------------
@@ -167,16 +105,15 @@ function HoverboardService:SpawnHoverboard(player, boardName)
 		return
 	end
 
-	local offset = CalculateBoardOffset(character, hoverboard)
-	primary.CFrame = hrp.CFrame * CFrame.new(0, -offset, 0)
-	print("Offset: ", offset)
+	local heightOffset = humanoid.HipHeight + hrp.Size.Y / 2
+	primary.CFrame = hrp.CFrame * CFrame.Angles(0, 0, 0) - Vector3.new(0, heightOffset, 0)
 
 	-- Create Motor6D (server-owned) between HRP and board primary for exact visuals
 	local motor = Instance.new("Motor6D")
 	motor.Name = "HoverboardMotor"
 	motor.Part0 = hrp
 	motor.Part1 = primary
-	motor.C0 = CFrame.new(0, -offset, 0)
+	motor.C0 = CFrame.new(0, -heightOffset, 0)
 	motor.Parent = hrp
 
 	if HoverboardPhysics and hoverboard and hoverboard.PrimaryPart then
@@ -377,7 +314,7 @@ function HoverboardService:OnCharacterAdded(player)
 	self.Client.ControlSignal:Fire(player, "Disable")
 
 	-- slight delay to ensure character parts exist
-	task.wait(3)
+	--task.wait(3)
 
 	-- If player has no stored hoverboard, give default. Otherwise spawn stored board.
 	if not playerHoverboards[player.UserId] or not playerHoverboards[player.UserId].Name then
