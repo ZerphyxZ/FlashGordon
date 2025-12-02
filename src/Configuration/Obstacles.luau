@@ -1,4 +1,14 @@
 return {
+    Translation = {
+        Speed = 1
+    },
+    
+    Rock = {
+        FallingSpeed = .5,
+        RotationSpeed = 180,
+        Frequency = 10,
+    },
+
     Monster = {
         -- attack configs
         ImpactDuration = .75,

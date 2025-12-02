@@ -376,9 +376,9 @@ function HoverboardMovement.UpdateBoardAlignment(
 
 	-- Ray origin offsets (4 corners)
 	local offsets = {
-		Vector3.new( halfSize.X, 0,  halfSize.Z),
-		Vector3.new(-halfSize.X, 0,  halfSize.Z),
-		Vector3.new( halfSize.X, 0, -halfSize.Z),
+		Vector3.new(halfSize.X, 0, halfSize.Z),
+		Vector3.new(-halfSize.X, 0, halfSize.Z),
+		Vector3.new(halfSize.X, 0, -halfSize.Z),
 		Vector3.new(-halfSize.X, 0, -halfSize.Z),
 	}
 

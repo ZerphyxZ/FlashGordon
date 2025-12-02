@@ -14,12 +14,17 @@ local Knit              = require(ReplicatedStorage.Packages:WaitForChild("Knit"
 local Controller = Knit.CreateController { Name = "ObstacleSwingController" }
 
 local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+	Character = char
+end)
 
 -- ===== Tunables (preserved) ==================================================
 local SWING_MAX_ANGLE_DEG     = 55
 local DEFAULT_SWING_SPEED_DEG = 70
 local DEFAULT_MOVING_SPEED    = 6
-local MAX_UPDATE_DISTANCE     = 220
+local MAX_UPDATE_DISTANCE     = 50
 local RECHECK_ATTEMPTS        = 20
 local RECHECK_DELAY           = 0.15
 
@@ -205,8 +210,7 @@ end
 -- ===== Per-frame update ======================================================
 
 local function updateAll(swingStartTime: number)
-	local char = LocalPlayer.Character
-	local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+	local hrp  = Character and Character:FindFirstChild("HumanoidRootPart")
 	local playerPos = hrp and hrp.Position
 	local t   = Workspace:GetServerTimeNow()
 

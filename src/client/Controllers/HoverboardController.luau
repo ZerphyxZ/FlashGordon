@@ -57,7 +57,6 @@ local MAX_BODY_FORCE = 100000
 local HOVER_SMOOTHNESS = 8
 local ORIENTATION_SMOOTHNESS = 6
 
-
 -- Mutable refs so BoostModule can modify them
 local currentAccelerationRef = { value = ACCELERATION }
 local currentTopSpeedRef = { value = MAX_SPEED }
@@ -65,7 +64,9 @@ local currentTopSpeedRef = { value = MAX_SPEED }
 -- References to PlayerModule controls
 local controls
 local function GetControls()
-	if controls then return controls end
+	if controls then
+		return controls
+	end
 	local playerScripts = player:WaitForChild("PlayerScripts")
 	controls = require(playerScripts:WaitForChild("PlayerModule")):GetControls()
 	return controls
@@ -99,26 +100,61 @@ function HoverboardController:StartHoverboard(config)
 	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
 
 	runningConnection = RunService.Heartbeat:Connect(function(dt)
-		if not rootPart or not character or not hoverboard or not isOnHoverboard or not bodyVelocity or not bodyGyro or not bodyPosition then
-			print("physics not attached yet") return
+		if
+			not rootPart
+			or not character
+			or not hoverboard
+			or not isOnHoverboard
+			or not bodyVelocity
+			or not bodyGyro
+			or not bodyPosition
+		then
+			print("physics not attached yet")
+			return
 		end
 
-		local moveDir = HoverboardMovement.HandleMovement(humanoid, rootPart, hoverboard, bodyVelocity, topSpeed, acceleration, DECELERATION,
-			MOVEMENT_SMOOTHNESS, MIN_THROTTLING_THRESHOLD, State, BoostAbility.isBoosting, dt)
+		local moveDir = HoverboardMovement.HandleMovement(
+			humanoid,
+			rootPart,
+			hoverboard,
+			bodyVelocity,
+			topSpeed,
+			acceleration,
+			DECELERATION,
+			MOVEMENT_SMOOTHNESS,
+			MIN_THROTTLING_THRESHOLD,
+			State,
+			BoostAbility.isBoosting,
+			dt
+		)
 
 		HoverboardJump.State.moveDir = moveDir
 
 		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HoverboardJump, MIN_SPEED_THRESHOLD, ROTATION_SPEED, ROTATION_SMOOTHNESS,
 			MAX_LEAN, LEAN_SMOOTH, LEAN_MULTIPLIER, State, dt)
 
-		HoverboardMovement.UpdateSurfaceAlignment(character, rootPart, bodyGyro, RAY_DISTANCE, ORIENTATION_SMOOTHNESS, State, HoverboardJump, hoverboard, dt)
+		HoverboardMovement.UpdateSurfaceAlignment(
+			character,
+			rootPart,
+			bodyGyro,
+			RAY_DISTANCE,
+			ORIENTATION_SMOOTHNESS,
+			State,
+			HoverboardJump,
+			hoverboard,
+			dt
+		)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
 		HoverboardJump.UpdateLanding(humanoid, dt) --Check for the ground detection
 		--HoverboardMovement.HandleHovering(character, rootPart, bodyPosition, hoverboard, RAY_DISTANCE, HOVER_HEIGHT, MAX_BODY_FORCE, HoverboardJump, dt)
 		cameraFOV.Update(dt, moveDir, BoostAbility.isBoosting, HoverboardJump.State.isJumping, HoverboardJump.State.isFalling)
 		--HoverboardBobbing.Update(dt, moveDir, HoverboardMovement.CurrentSpeed, workspace, hoverboard, bodyPosition)
 	end)
-	Speed.UpdateSpeed(function() return HoverboardMovement.CurrentSpeed end, function() return topSpeed end)
+	Speed.UpdateSpeed(function()
+		return HoverboardMovement.CurrentSpeed
+	end, function()
+		return topSpeed
+	end)
 end
 
 function HoverboardController:SetActiveConfig(boardName)
@@ -166,7 +202,7 @@ function HoverboardController:WaitForHoverboard(config)
 			HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition)
 			HoverboardJump.SetHoverHeight(HOVER_HEIGHT)
 			HoverboardController:DisableAnimations(character)
-			HoverboardController:StartHoverboard(config) 
+			HoverboardController:StartHoverboard(config)
 		else
 			warn("Hoverboard: Physics objects not ready, retrying...")
 			-- Retry after a brief moment
@@ -230,13 +266,12 @@ function HoverboardController:DisableAnimations(char)
 		hum:ChangeState(Enum.HumanoidStateType.Physics)
 	end
 
-
 	--hum:ChangeState(Enum.HumanoidStateType.Physics)
 end
 
 local function OnCharacterAdded(char)
 	ResetStates()
-	
+
 	character = char
 	humanoid = char:WaitForChild("Humanoid")
 	rootPart = char:WaitForChild("HumanoidRootPart")

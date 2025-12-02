@@ -14,6 +14,10 @@ local Controller = Knit.CreateController { Name = "ObstacleMovingController" }
 
 local LocalPlayer = Players.LocalPlayer
 
+local Configuration = ReplicatedStorage:WaitForChild("Configuration")
+local ObstacleConfigs = require(Configuration:WaitForChild("Obstacles"))
+
+
 -- Tunables (unchanged)
 local MAX_UPDATE_DISTANCE = 200
 local DEFAULT_SPEED       = 5
@@ -194,6 +198,8 @@ function Controller:KnitStart()
 	local startTimes  = (syncService and syncService:GetObstacleStartTimes()) or {}
 	local movingStartTime = startTimes.Moving or Workspace:GetServerTimeNow()
 
+
+
 	-- World-aware wiring
 	eachWorld(wireWorld)
 	-- Legacy fallback to root if someone still has that layout
@@ -221,23 +227,23 @@ function Controller:KnitStart()
 						skip = true
 					end
 				end
-				if not skip then
-					local cycle = serverTime
-					local phase = cycle % 2
-					local alpha = math.abs(phase - 1)
-					local newPos = startPos:Lerp(endPos, alpha)
-					part.CFrame = CFrame.new(newPos) * obstacle.initialRot
-				end
-
 				-- if not skip then
-				-- 	local movingVector: Vector3 = startPos - endPos
-
-				-- 	-- local newPosition = midpoint + (movingVector * 0.5) + ((movingVector.Magnitude) * math.sin(serverTime)) * movingVector.Unit
-					
-				-- 	local newPosition = endPos + movingVector * sinFunc(serverTime)
-				-- 	part.CFrame = CFrame.new(newPosition)
+				-- 	local cycle = serverTime
+				-- 	local phase = cycle % 2
+				-- 	local alpha = math.abs(phase - 1)
+				-- 	local newPos = startPos:Lerp(endPos, alpha)
+				-- 	part.CFrame = CFrame.new(newPos) * obstacle.initialRot
 				-- end
-			end
+
+				if not skip then
+					local movingVector: Vector3 = startPos - endPos
+
+					-- local newPosition = midpoint + (movingVector * 0.5) + ((movingVector.Magnitude) * math.sin(serverTime)) * movingVector.Unit
+
+					local newPosition = endPos + movingVector * sinFunc(serverTime * ObstacleConfigs.Translation.Speed)
+					part.CFrame = CFrame.new(newPosition) * obstacle.initialRot
+				end
+			end 
 		end
 	end)
 end

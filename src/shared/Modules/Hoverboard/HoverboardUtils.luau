@@ -13,7 +13,9 @@ local JumpConnections = {
 
 local function EnableJumpInput(HoverboardJump)
 	-- Prevent duplicates
-	if JumpConnections.JumpRequest then return end
+	if JumpConnections.JumpRequest then
+		return
+	end
 
 	JumpConnections.JumpRequest = UserInputService.JumpRequest:Connect(function()
 		HoverboardJump.State.isJumpHeld = true
@@ -39,7 +41,9 @@ end
 
 local function DisableJumpInput()
 	for key, conn in pairs(JumpConnections) do
-		if conn then conn:Disconnect() end
+		if conn then
+			conn:Disconnect()
+		end
 		JumpConnections[key] = nil
 	end
 
