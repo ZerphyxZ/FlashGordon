@@ -26,12 +26,12 @@ local FolderName: string = "Rocks"
 
 local Packages = ReplicatedStorage:WaitForChild("Packages")
 
-local CameraShaker = require(Packages:WaitForChild("CameraShaker"))
+-- local CameraShaker = require(Packages:WaitForChild("CameraShaker"))
 
-local cam = workspace.CurrentCamera
-local camShake = CameraShaker.new(Enum.RenderPriority.Camera.Value + 1, function(cframe)
-    cam.CFrame = cam.CFrame * cframe
-end)
+-- local cam = workspace.CurrentCamera
+-- local camShake = CameraShaker.new(Enum.RenderPriority.Camera.Value + 1, function(cframe)
+--     cam.CFrame = cam.CFrame * cframe
+-- end)
 
 local Assets: Folder = ReplicatedStorage:WaitForChild("Assets")
 local ObstacleTemplates: Folder = Assets:WaitForChild("Obstacle")
