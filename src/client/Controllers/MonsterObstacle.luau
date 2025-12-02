@@ -172,7 +172,12 @@ function Attack(Monster: {})
 	local translation = TweenService:Create(
 		Monster.Model.PrimaryPart,
 		TweenInfo.new(Monster.Config.AnimationTime),
-		{ CFrame = CFrame.new( hitboxPos + (Vector3.yAxis * Monster.Size.Y / 2), hitboxPos + (hitboxPos - startPos ).Unit + (Vector3.yAxis * Monster.Size.Y / 2) )}
+		{
+			CFrame = CFrame.new(
+				hitboxPos + (Vector3.yAxis * Monster.Size.Y / 2),
+				hitboxPos + (hitboxPos - startPos).Unit + (Vector3.yAxis * Monster.Size.Y / 2)
+			),
+		}
 	)
 
 	-- play animation
@@ -220,7 +225,6 @@ function MakeMonster(MonsterPlaceholder: Model)
 		monster.Hitbox.CanTouch = false
 		connectObstaclePart(monster.Hitbox)
 
-		
 		local serverTime = workspace:GetServerTimeNow()
 		local attackDelay = monster.Config.Frequency + monster.Delay
 		monster.NextAttack = serverTime - (serverTime % attackDelay) + attackDelay

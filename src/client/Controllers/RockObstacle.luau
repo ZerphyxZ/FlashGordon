@@ -19,8 +19,19 @@ local ObstacleConfigs = require(Configuration:WaitForChild("Obstacles"))
 local Utility = ReplicatedStorage:WaitForChild("Utility")
 
 local SimpleParticleEmit = require(Utility:WaitForChild("SimpleParticleEmit"))
+local CubicBezier: (number) -> () = require(Utility:WaitForChild("CubicBezier"))
+
 local FolderName: string = "Rocks"
 -- ===== References	 ===============================================================
+
+local Packages = ReplicatedStorage:WaitForChild("Packages")
+
+local CameraShaker = require(Packages:WaitForChild("CameraShaker"))
+
+local cam = workspace.CurrentCamera
+local camShake = CameraShaker.new(Enum.RenderPriority.Camera.Value + 1, function(cframe)
+    cam.CFrame = cam.CFrame * cframe
+end)
 
 local Assets: Folder = ReplicatedStorage:WaitForChild("Assets")
 local ObstacleTemplates: Folder = Assets:WaitForChild("Obstacle")
@@ -120,7 +131,6 @@ local function attachToStaticFolder(staticFolder: Instance)
 			monsters[child] = laserObject
 		end
 	end
-
 end
 
 local function wireWorld(world: Instance)
@@ -159,7 +169,7 @@ end
 -- ===== Knit lifecycle ========================================================
 function Damage(Rock)
 	local hitbox = Instance.new("Part")
-	
+
 	hitbox.Anchored = true
 	hitbox.CanCollide = false
 	hitbox.Transparency = 1
@@ -173,22 +183,23 @@ function Damage(Rock)
 
 	for _, part in partList do
 		if hitBelongsToLocalCharacter(part) then
-			
 			local dieCtrl = Knit.GetController("DiePlayerController")
+
+			
 			if dieCtrl and dieCtrl.Die then
 				dieCtrl:Die()
 			elseif dieCtrl and dieCtrl.PlayDeath then
 				dieCtrl:PlayDeath()
 			end
 
-			return 
+			return
 		end
 	end
 end
 
 function Attack(Rock: {})
 	--SimpleParticleEmit(Monster.Config.SpawnEffect, "Burst", CFrame.new(Monster.SpawnPoint.Position)) -- + (Vector3.yAxis * Monster.Size.Y / monsterSizeDivider)))
-	
+
 	local lerpIndex = 0
 	local angle = 0
 	local falling = true
@@ -210,9 +221,9 @@ function Attack(Rock: {})
 
 				Damage(Rock)
 				return
-			end	
+			end
 
-			local newCFrame = Rock.StartCFrame:Lerp(Rock.EndCFrame, lerpIndex)
+			local newCFrame = Rock.StartCFrame:Lerp(Rock.EndCFrame, CubicBezier(lerpIndex))
 			Rock.Model:PivotTo(CFrame.new(newCFrame.Position) * CFrame.fromEulerAnglesXYZ(0, 0, math.rad(angle)))
 		end
 	end)
@@ -226,8 +237,10 @@ function CreateLaserPart(Monster)
 	local endPosition = Monster.HitAttachment.WorldCFrame.Position
 
 	local desiredVector = endPosition - startPosition
-	cylinder.CFrame = CFrame.new(startPosition + desiredVector / 2, endPosition) * CFrame.fromEulerAngles(0, math.rad(90), 0)
-	cylinder.Size = Vector3.new((startPosition - endPosition).Magnitude, Monster.Config.LaserWidth, Monster.Config.LaserWidth)	
+	cylinder.CFrame = CFrame.new(startPosition + desiredVector / 2, endPosition)
+		* CFrame.fromEulerAngles(0, math.rad(90), 0)
+	cylinder.Size =
+		Vector3.new((startPosition - endPosition).Magnitude, Monster.Config.LaserWidth, Monster.Config.LaserWidth)
 	cylinder.Anchored = true
 	cylinder.CanCollide = false
 	cylinder.CanTouch = false
@@ -245,33 +258,19 @@ function CreateLaserPart(Monster)
 end
 
 function createLaserTween(Monster)
+	Monster.AppearTween = TweenService:Create(Monster.Hitbox, TweenInfo.new(0.2), {
+		CFrame = Monster.HitboxCFrame,
+		Size = Monster.HitboxSize,
+	})
 
-	Monster.AppearTween = TweenService:Create(
-		Monster.Hitbox,
-		TweenInfo.new(.2),
-		{ 
-			CFrame = Monster.HitboxCFrame,
-			Size = Monster.HitboxSize
-		}
-	)
-
-	Monster.DisappearTween = TweenService:Create(
-		Monster.Hitbox,
-		TweenInfo.new(Monster.Config.LaserFadeOut),
-		{ 
-			Transparency = 1,
-			--Size = Vector3.new(1, Monster.Config.LaserWidth, Monster.Config.LaserWidth),
-			--Position = Monster.HitboxAttachment.WorldCFrame.Position
-		}
-	)
-end
-
-function UpdateRock()
-	
+	Monster.DisappearTween = TweenService:Create(Monster.Hitbox, TweenInfo.new(Monster.Config.LaserFadeOut), {
+		Transparency = 1,
+		--Size = Vector3.new(1, Monster.Config.LaserWidth, Monster.Config.LaserWidth),
+		--Position = Monster.HitboxAttachment.WorldCFrame.Position
+	})
 end
 
 function makeRock(RockPlaceholder: Model)
-	
 	print("Creating laser alien")
 	local config = ObstacleConfigs.Rock
 
@@ -285,8 +284,10 @@ function makeRock(RockPlaceholder: Model)
 
 		local model = ObstacleTemplates:FindFirstChild("Rock")
 
-		if not model then warn("No monster model") return end
-
+		if not model then
+			warn("No monster model")
+			return
+		end
 
 		rock.Model = model:Clone()
 		rock.Size = rock.Model:GetExtentsSize()
@@ -299,7 +300,7 @@ function makeRock(RockPlaceholder: Model)
 		rock.EndCFrame += rock.EndCFrame.UpVector * rock.Size.Y / 2
 
 		-- rock.Model:PivotTo(CFrame.new(
-		-- 	rockPosition, 
+		-- 	rockPosition,
 		-- 	Vector3.new(
 		-- 		rock.HitAttachment.WorldCFrame.Position.X,
 		-- 		rockPosition.Y,
@@ -315,7 +316,6 @@ function makeRock(RockPlaceholder: Model)
 		rock.Hitbox = CreateLaserPart(rock)
 
 		connectObstaclePart(rock.Model.PrimaryPart)
-		
 
 		local serverTime = workspace:GetServerTimeNow()
 		local attackDelay = rock.Config.Frequency + rock.Delay

@@ -3,42 +3,53 @@
 -- Listens to both ResetProgressUI (new) and ResetUI (legacy).
 -- Shows ResetProgressFrame; confirmation in SureResetProgressFrame.
 
-local Players           = game:GetService("Players")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Knit              = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
+local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 
-local Controller = Knit.CreateController { Name = "ResetProgressController" }
+local Controller = Knit.CreateController({ Name = "ResetProgressController" })
 
 local player = Players.LocalPlayer
 
 -- UI refs
-local FramePrimary  : Frame?      -- ResetProgressFrame
-local FrameConfirm  : Frame?      -- SureResetProgressFrame
-local BtnPrimary    : TextButton? -- ResetProgressButton
-local BtnClosePrim  : TextButton?
-local BtnYes        : TextButton?
-local BtnNo         : TextButton?
-local BtnCloseConf  : TextButton?
+local FramePrimary: Frame? -- ResetProgressFrame
+local FrameConfirm: Frame? -- SureResetProgressFrame
+local BtnPrimary: TextButton? -- ResetProgressButton
+local BtnClosePrim: TextButton?
+local BtnYes: TextButton?
+local BtnNo: TextButton?
+local BtnCloseConf: TextButton?
 
 local _bound = false
 local _bindConn
 
 -- ---------- helpers ----------------------------------------------------------
 
-local function findDesc(root: Instance?, names: {string}): Instance?
-	if not root then return nil end
+local function findDesc(root: Instance?, names: { string }): Instance?
+	if not root then
+		return nil
+	end
 	for _, n in ipairs(names) do
 		local inst = root:FindFirstChild(n, true)
-		if inst then return inst end
+		if inst then
+			return inst
+		end
 	end
 	return nil
 end
 
 local function bindUi(): boolean
 	local pg = player:FindFirstChild("PlayerGui")
-	if not pg then print("[ResetProgressController] MainGui not ready"); return false end
+	if not pg then
+		print("[ResetProgressController] MainGui not ready")
+		return false
+	end
+
 	local main = pg:FindFirstChild("MainGui")
-	if not main then print("[ResetProgressController] MainGui not ready"); return false end
+	if not main then
+		print("[ResetProgressController] MainGui not ready")
+		return false
+	end
 
 	FramePrimary = (findDesc(main, { "ResetProgressFrame", "RestartFrame" })) :: Frame
 	FrameConfirm = (findDesc(main, { "SureResetProgressFrame", "SureRestartFrame" })) :: Frame
@@ -48,10 +59,10 @@ local function bindUi(): boolean
 		return false
 	end
 
-	BtnPrimary   = (findDesc(FramePrimary, { "ResetProgressButton", "RestartProgressButton" })) :: TextButton
+	BtnPrimary = (findDesc(FramePrimary, { "ResetProgressButton", "RestartProgressButton" })) :: TextButton
 	BtnClosePrim = (findDesc(FramePrimary, { "CloseButton", "CloseRestartButton" })) :: TextButton
-	BtnYes       = (findDesc(FrameConfirm, { "YesResetProgressButton", "YesRestartProgressButton" })) :: TextButton
-	BtnNo        = (findDesc(FrameConfirm, { "NoResetProgressButton", "NoRestartProgressButton" })) :: TextButton
+	BtnYes = (findDesc(FrameConfirm, { "YesResetProgressButton", "YesRestartProgressButton" })) :: TextButton
+	BtnNo = (findDesc(FrameConfirm, { "NoResetProgressButton", "NoRestartProgressButton" })) :: TextButton
 	BtnCloseConf = (findDesc(FrameConfirm, { "SureCloseButton", "CloseButton" })) :: TextButton
 
 	FramePrimary.Visible = false
@@ -60,14 +71,22 @@ local function bindUi(): boolean
 	if BtnPrimary then
 		BtnPrimary.MouseButton1Click:Connect(function()
 			print("[ResetProgressController] Primary clicked → open confirm")
-			if FramePrimary then FramePrimary.Visible = false end
-			if FrameConfirm then FrameConfirm.Visible = true end
+			if FramePrimary then
+				FramePrimary.Visible = false
+			end
+			if FrameConfirm then
+				FrameConfirm.Visible = true
+			end
 		end)
 	end
 	if BtnClosePrim then
 		BtnClosePrim.MouseButton1Click:Connect(function()
-			if FramePrimary then FramePrimary.Visible = false end
-			if FrameConfirm then FrameConfirm.Visible = false end
+			if FramePrimary then
+				FramePrimary.Visible = false
+			end
+			if FrameConfirm then
+				FrameConfirm.Visible = false
+			end
 			player:SetAttribute("ResetProgressUI", false)
 			player:SetAttribute("ResetUI", false)
 		end)
@@ -75,16 +94,24 @@ local function bindUi(): boolean
 	if BtnNo then
 		BtnNo.MouseButton1Click:Connect(function()
 			print("[ResetProgressController] NO clicked")
-			if FrameConfirm then FrameConfirm.Visible = false end
-			if FramePrimary then FramePrimary.Visible = false end
+			if FrameConfirm then
+				FrameConfirm.Visible = false
+			end
+			if FramePrimary then
+				FramePrimary.Visible = false
+			end
 			player:SetAttribute("ResetProgressUI", false)
 			player:SetAttribute("ResetUI", false)
 		end)
 	end
 	if BtnCloseConf then
 		BtnCloseConf.MouseButton1Click:Connect(function()
-			if FrameConfirm then FrameConfirm.Visible = false end
-			if FramePrimary then FramePrimary.Visible = false end
+			if FrameConfirm then
+				FrameConfirm.Visible = false
+			end
+			if FramePrimary then
+				FramePrimary.Visible = false
+			end
 			player:SetAttribute("ResetProgressUI", false)
 			player:SetAttribute("ResetUI", false)
 		end)
@@ -115,7 +142,9 @@ local function bindUi(): boolean
 end
 
 local function watchGui()
-	if _bindConn then _bindConn:Disconnect() end
+	if _bindConn then
+		_bindConn:Disconnect()
+	end
 	local pg = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
 	_bindConn = pg.ChildAdded:Connect(function(ch)
 		if ch.Name == "MainGui" then
@@ -128,7 +157,9 @@ end
 
 local function applyVisibility(open: boolean)
 	if not _bound then
-		if not bindUi() then return end
+		if not bindUi() then
+			return
+		end
 	end
 	if FramePrimary and FrameConfirm then
 		FramePrimary.Visible = open

@@ -30,7 +30,7 @@ local function OpenGUI()
 
 					-- enable the desired gui
 					local targetGui = playerGui:FindFirstChild(guiName)
-                    print("GUI requested: ", guiName)
+					print("GUI requested: ", guiName)
 					if targetGui then
 						targetGui.Enabled = true
 					else
@@ -43,7 +43,7 @@ local function OpenGUI()
 end
 
 function HUDController:KnitStart()
-    OpenGUI()
+	OpenGUI()
 end
 
 return HUDController

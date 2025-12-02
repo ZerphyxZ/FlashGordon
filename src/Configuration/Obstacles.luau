@@ -2,8 +2,9 @@ return {
     Translation = {
         Speed = 1
     },
+    
     Rock = {
-        FallingSpeed = 1,
+        FallingSpeed = .5,
         RotationSpeed = 180,
         Frequency = 10,
     },

@@ -23,6 +23,11 @@ version = "1.0.0"
 dependencies = []
 
 [[package]]
+name = "encrxyptedethan/camerashaker"
+version = "1.0.0"
+dependencies = []
+
+[[package]]
 name = "evaera/promise"
 version = "4.0.0"
 dependencies = []
@@ -105,4 +110,4 @@ dependencies = [["Roact", "roblox/roact@1.4.4"]]
 [[package]]
 name = "user/flashgordon"
 version = "0.1.0"
-dependencies = [["Component", "azutreo/component@2.4.10"], ["Knit", "sleitnick/knit@1.7.0"], ["Observers", "sleitnick/observers@0.4.0"], ["roact", "roblox/roact@1.4.4"], ["roact-flipper", "reselim/roact-flipper@2.1.0"], ["roact-hooks", "kampfkarren/roact-hooks@0.5.1"], ["roactRodux", "roblox/roact-rodux@0.3.0"], ["roactSpring", "chriscerie/roact-spring@1.1.6"], ["rodux", "roblox/rodux@3.0.0"], ["roduxhooks", "solarhorizon/rodux-hooks@0.3.1"], ["sift", "csqrl/sift@0.0.8"], ["trove", "sleitnick/trove@1.8.0"], ["Profilestore", "detourious/loleris-profilestore@1.0.0"]]
+dependencies = [["CameraShaker", "encrxyptedethan/camerashaker@1.0.0"], ["Component", "azutreo/component@2.4.10"], ["Knit", "sleitnick/knit@1.7.0"], ["Observers", "sleitnick/observers@0.4.0"], ["roact", "roblox/roact@1.4.4"], ["roact-flipper", "reselim/roact-flipper@2.1.0"], ["roact-hooks", "kampfkarren/roact-hooks@0.5.1"], ["roactRodux", "roblox/roact-rodux@0.3.0"], ["roactSpring", "chriscerie/roact-spring@1.1.6"], ["rodux", "roblox/rodux@3.0.0"], ["roduxhooks", "solarhorizon/rodux-hooks@0.3.1"], ["sift", "csqrl/sift@0.0.8"], ["trove", "sleitnick/trove@1.8.0"], ["Profilestore", "detourious/loleris-profilestore@1.0.0"]]
