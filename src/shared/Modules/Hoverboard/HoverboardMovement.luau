@@ -296,10 +296,6 @@ function HoverboardMovement.UpdateSurfaceAlignment(
 		bodyGyro.CFrame = CFrame.new(currentPos) * newRot
 	end
 
-
-
-
-
 	-- if not rootPart or not hoverboard or not hoverboard.PrimaryPart then return end
 
 	-- local origin = hoverboard.PrimaryPart.Position
@@ -363,9 +359,9 @@ function HoverboardMovement.UpdateBoardAlignment(
 
 	-- Ray origin offsets (4 corners)
 	local offsets = {
-		Vector3.new( halfSize.X, 0,  halfSize.Z),
-		Vector3.new(-halfSize.X, 0,  halfSize.Z),
-		Vector3.new( halfSize.X, 0, -halfSize.Z),
+		Vector3.new(halfSize.X, 0, halfSize.Z),
+		Vector3.new(-halfSize.X, 0, halfSize.Z),
+		Vector3.new(halfSize.X, 0, -halfSize.Z),
 		Vector3.new(-halfSize.X, 0, -halfSize.Z),
 	}
 
@@ -430,8 +426,6 @@ function HoverboardMovement.UpdateBoardAlignment(
 
 	hoverboard:PivotTo(finalCF)
 end
-
-
 
 function HoverboardMovement.ProjectVectorOnPlane(vector, planeNormal)
 	return vector - planeNormal * vector:Dot(planeNormal)

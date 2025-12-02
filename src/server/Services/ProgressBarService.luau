@@ -9,10 +9,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 local PlayerDataHandler = require(ReplicatedStorage.Shared.Modules.PlayerDataHandler)
 
-local ProgressBarService = Knit.CreateService {
-	Name = "ProgressBarService";
-	Client = {};
-}
+local ProgressBarService = Knit.CreateService({
+	Name = "ProgressBarService",
+	Client = {},
+})
 
 local CHECKPOINT_PATTERN = "^checkpoint_l%d+_i%d+$"
 
@@ -24,7 +24,9 @@ local function locateCheckpointsFolder()
 	for _, child in ipairs(Workspace:GetChildren()) do
 		if tostring(child.Name):match("^World_%d+") then
 			local f = child:FindFirstChild("Checkpoints")
-			if f then return f end
+			if f then
+				return f
+			end
 		end
 	end
 	return Workspace:FindFirstChild("Checkpoints")
@@ -32,10 +34,14 @@ end
 
 local function countCheckpoints()
 	local folder = locateCheckpointsFolder()
-	if not folder then return 0 end
+	if not folder then
+		return 0
+	end
 	local total = 0
 	for _, d in ipairs(folder:GetDescendants()) do
-		if isCheckpointPart(d) then total = total + 1 end
+		if isCheckpointPart(d) then
+			total = total + 1
+		end
 	end
 	return total
 end
@@ -45,12 +51,16 @@ local function getCurrentWorldIndex(player)
 	if typeof(idx) ~= "number" then
 		idx = ReplicatedStorage:GetAttribute("WorldIndex")
 	end
-	if typeof(idx) ~= "number" or idx < 1 then idx = 1 end
+	if typeof(idx) ~= "number" or idx < 1 then
+		idx = 1
+	end
 	return idx
 end
 
 function ProgressBarService:UpdatePlayerNow(player)
-	if not player then return end
+	if not player then
+		return
+	end
 	local total = self.TotalCheckpoints or countCheckpoints()
 	local data = PlayerDataHandler:GetData(player)
 
@@ -60,7 +70,11 @@ function ProgressBarService:UpdatePlayerNow(player)
 		local w = getCurrentWorldIndex(player)
 		local set = (data.VisitedCheckpointsByWorld and data.VisitedCheckpointsByWorld[w]) or data.VisitedCheckpoints
 		if set then
-			for _, v in pairs(set) do if v then visited = visited + 1 end end
+			for _, v in pairs(set) do
+				if v then
+					visited = visited + 1
+				end
+			end
 		end
 	end
 
@@ -103,7 +117,9 @@ function ProgressBarService:KnitStart()
 	end
 
 	Players.PlayerAdded:Connect(function(p)
-		task.delay(0.2, function() self:UpdatePlayerNow(p) end)
+		task.delay(0.2, function()
+			self:UpdatePlayerNow(p)
+		end)
 	end)
 
 	task.spawn(function()

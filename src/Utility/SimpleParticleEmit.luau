@@ -8,12 +8,18 @@ if not vfxFolder then
 	vfxFolder = Instance.new("Folder")
 	vfxFolder.Name = "ParticleEffect"
 	vfxFolder.Parent = workspace
-end	
+end
 
 local module = {}
 
 -- Play a single burst of particles
-local function SimpleParticleBurst(effectTemplateName: string, cframe: CFrame | Vector3, attachTo: BasePart?, Color: Color3?,DirectionAcceleration: Vector3?)
+local function SimpleParticleBurst(
+	effectTemplateName: string,
+	cframe: CFrame | Vector3,
+	attachTo: BasePart?,
+	Color: Color3?,
+	DirectionAcceleration: Vector3?
+)
 	--print("In particle emitter")
 	local effect = vfxTemplateFolder:FindFirstChild(effectTemplateName)
 	if effect == nil or not effect:IsA("BasePart") then
@@ -21,7 +27,7 @@ local function SimpleParticleBurst(effectTemplateName: string, cframe: CFrame | 
 		return
 	end
 
-    cframe = typeof(cframe) == 'CFrame' and cframe or CFrame.new(cframe)
+	cframe = typeof(cframe) == "CFrame" and cframe or CFrame.new(cframe)
 
 	--print("Effect Templete",effectTemplateName)
 	effect = effect:Clone()
@@ -45,16 +51,18 @@ local function SimpleParticleBurst(effectTemplateName: string, cframe: CFrame | 
 
 		lifetime = math.max(lifetime, v.Lifetime.Max)
 
-		local emitAmount = v:GetAttribute("EmitCount") or v:GetAttribute(EMIT_COUNT_ATTRIBUTE.Value) 
+		local emitAmount = v:GetAttribute("EmitCount") or v:GetAttribute(EMIT_COUNT_ATTRIBUTE.Value)
 		if DirectionAcceleration then
-			local acceleration :Vector3 = v:GetAttribute(DirectionAcceleration)
+			local acceleration: Vector3 = v:GetAttribute(DirectionAcceleration)
 			--emitAmount = 5
 
 			v.Acceleration = acceleration
 		end
 		if emitAmount then
-			if Color then v.Color = ColorSequence.new(Color) end
-			--print(`emitting: {emitAmount}`)	
+			if Color then
+				v.Color = ColorSequence.new(Color)
+			end
+			--print(`emitting: {emitAmount}`)
 			--print(emitAmount,"Amount Emitin")
 			v:Emit(emitAmount)
 		end
@@ -67,15 +75,20 @@ local function SimpleParticleBurst(effectTemplateName: string, cframe: CFrame | 
 end
 
 -- Play a particle effect for a specific amount of time, allowing extra time for the particles to fade at the end
-local function SimpleParticleTimed(effectTemplateName: string, cframe: CFrame | Vector3, lifetime: number, attachTo: BasePart?, Color: Color3?)
-
+local function SimpleParticleTimed(
+	effectTemplateName: string,
+	cframe: CFrame | Vector3,
+	lifetime: number,
+	attachTo: BasePart?,
+	Color: Color3?
+)
 	local effect = vfxTemplateFolder:FindFirstChild(effectTemplateName)
 	if effect == nil or not effect:IsA("BasePart") then
 		warn("Requested VFX to play is either nil or not a BasePart")
 		return
-	end	
+	end
 
-    cframe = typeof(cframe) == 'CFrame' and cframe or CFrame.new(cframe)
+	cframe = typeof(cframe) == "CFrame" and cframe or CFrame.new(cframe)
 
 	effect = effect:Clone()
 	effect.CFrame = if attachTo then attachTo.CFrame * cframe else cframe
@@ -114,13 +127,19 @@ local function SimpleParticleTimed(effectTemplateName: string, cframe: CFrame | 
 	end)
 end
 
-return function(particleName: string, particleType: "Timed" | "Burst", cframe: CFrame, attachTo: BasePart?, Color: Color3?, DirectionAcceleration: Vector3?)
+return function(
+	particleName: string,
+	particleType: "Timed" | "Burst",
+	cframe: CFrame,
+	attachTo: BasePart?,
+	Color: Color3?,
+	DirectionAcceleration: Vector3?
+)
 	if particleType == "Timed" then
 		SimpleParticleTimed(particleName, cframe, attachTo, Color)
 	elseif particleType == "Burst" then
-		SimpleParticleBurst(particleName, cframe, attachTo, Color,DirectionAcceleration)
+		SimpleParticleBurst(particleName, cframe, attachTo, Color, DirectionAcceleration)
 	else
 		warn("Invalid particle type provided")
 	end
 end
-

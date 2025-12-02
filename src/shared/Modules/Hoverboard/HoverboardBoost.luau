@@ -37,7 +37,9 @@ local boostConnection
 -- GUI Refresh
 ---------------------------------------------------------------------
 local function RefreshGUI()
-	if not player then return end
+	if not player then
+		return
+	end
 
 	local pg = player:WaitForChild("PlayerGui")
 	local mg = pg:WaitForChild("GameHUD")
@@ -103,10 +105,22 @@ end
 ---------------------------------------------------------------------
 function BoostModule.ApplyBoost(currentSpeed, accelRef, topSpeedRef)
 	-- sanity checks
-	if not humanoid then print("Humanoid: ", humanoid) return end
-	if not boostReady then print("boostReady: ", boostReady) return end
-	if humanoid.MoveDirection.Magnitude < 0.1 then print("humanoid.MoveDirection.Magnitude ", humanoid.MoveDirection.Magnitude) return end
-	if not currentSpeed or currentSpeed < 20 then print("currentSpeed: ", currentSpeed) return end
+	if not humanoid then
+		print("Humanoid: ", humanoid)
+		return
+	end
+	if not boostReady then
+		print("boostReady: ", boostReady)
+		return
+	end
+	if humanoid.MoveDirection.Magnitude < 0.1 then
+		print("humanoid.MoveDirection.Magnitude ", humanoid.MoveDirection.Magnitude)
+		return
+	end
+	if not currentSpeed or currentSpeed < 20 then
+		print("currentSpeed: ", currentSpeed)
+		return
+	end
 	if type(accelRef) ~= "table" or type(topSpeedRef) ~= "table" then
 		warn("BoostModule: ApplyBoost expects accelRef and topSpeedRef as tables with .value")
 		return
@@ -140,8 +154,12 @@ function BoostModule.ApplyBoost(currentSpeed, accelRef, topSpeedRef)
 	task.delay(BOOST_DURATION, function()
 		BoostModule.isBoosting = false
 		-- double-check refs still exist
-		if accelRef then accelRef.value = originalAcceleration end
-		if topSpeedRef then topSpeedRef.value = originalTopSpeed end
+		if accelRef then
+			accelRef.value = originalAcceleration
+		end
+		if topSpeedRef then
+			topSpeedRef.value = originalTopSpeed
+		end
 	end)
 
 	-- Start cooldown UI / timer

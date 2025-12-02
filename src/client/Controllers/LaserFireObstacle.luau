@@ -23,7 +23,7 @@ local FolderName: string = "Laser"
 -- ===== References	 ===============================================================
 
 local Assets: Folder = ReplicatedStorage:WaitForChild("Assets")
-local MonsterTemplates: Folder = Assets:WaitForChild("Obstacle")
+local ObstacleTemplates: Folder = Assets:WaitForChild("Obstacle")
 
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 local Controller = Knit.CreateController({ Name = "FireLaserController" })
@@ -120,7 +120,6 @@ local function attachToStaticFolder(staticFolder: Instance)
 			monsters[child] = laserObject
 		end
 	end
-
 end
 
 local function wireWorld(world: Instance)
@@ -163,9 +162,9 @@ function Attack(Monster: {})
 
 	local animation = Instance.new("Animation")
 	animation.AnimationId = Monster.Config.AnimationId
-	
-	Monster.AnimationTrack = Monster.Model.AnimationController.Animator:LoadAnimation(animation)	
-	
+
+	Monster.AnimationTrack = Monster.Model.AnimationController.Animator:LoadAnimation(animation)
+
 	Monster.AnimationTrack:Play()
 
 	-- play attack sequence
@@ -191,8 +190,10 @@ function CreateLaserPart(Monster)
 	local endPosition = Monster.HitAttachment.WorldCFrame.Position
 
 	local desiredVector = endPosition - startPosition
-	cylinder.CFrame = CFrame.new(startPosition + desiredVector / 2, endPosition) * CFrame.fromEulerAngles(0, math.rad(90), 0)
-	cylinder.Size = Vector3.new((startPosition - endPosition).Magnitude, Monster.Config.LaserWidth, Monster.Config.LaserWidth)	
+	cylinder.CFrame = CFrame.new(startPosition + desiredVector / 2, endPosition)
+		* CFrame.fromEulerAngles(0, math.rad(90), 0)
+	cylinder.Size =
+		Vector3.new((startPosition - endPosition).Magnitude, Monster.Config.LaserWidth, Monster.Config.LaserWidth)
 	cylinder.Anchored = true
 	cylinder.CanCollide = false
 	cylinder.CanTouch = false
@@ -210,29 +211,19 @@ function CreateLaserPart(Monster)
 end
 
 function createLaserTween(Monster)
+	Monster.AppearTween = TweenService:Create(Monster.Hitbox, TweenInfo.new(0.2), {
+		CFrame = Monster.HitboxCFrame,
+		Size = Monster.HitboxSize,
+	})
 
-	Monster.AppearTween = TweenService:Create(
-		Monster.Hitbox,
-		TweenInfo.new(.2),
-		{ 
-			CFrame = Monster.HitboxCFrame,
-			Size = Monster.HitboxSize
-		}
-	)
-
-	Monster.DisappearTween = TweenService:Create(
-		Monster.Hitbox,
-		TweenInfo.new(Monster.Config.LaserFadeOut),
-		{ 
-			Transparency = 1,
-			--Size = Vector3.new(1, Monster.Config.LaserWidth, Monster.Config.LaserWidth),
-			--Position = Monster.HitboxAttachment.WorldCFrame.Position
-		}
-	)
+	Monster.DisappearTween = TweenService:Create(Monster.Hitbox, TweenInfo.new(Monster.Config.LaserFadeOut), {
+		Transparency = 1,
+		--Size = Vector3.new(1, Monster.Config.LaserWidth, Monster.Config.LaserWidth),
+		--Position = Monster.HitboxAttachment.WorldCFrame.Position
+	})
 end
 
 function makeLaserAlien(MonsterPlaceholder: Model)
-	
 	print("Creating laser alien")
 	local config = ObstacleConfigs[MonsterPlaceholder.Name]
 
@@ -243,21 +234,33 @@ function makeLaserAlien(MonsterPlaceholder: Model)
 		monster.Config = config
 		monster.HitAttachment = MonsterPlaceholder.Hit
 		monster.StartAttachment = MonsterPlaceholder.Start
-		monster.Model = MonsterPlaceholder.Shooter
+		local model = ObstacleTemplates:FindFirstChild("Shooter")
+
+		if not model then
+			warn("No monster model")
+			return
+		end
+
+		warn("laser")
+
+		monster.Model = model:Clone()
+		monster.Model.Parent = MonsterPlaceholder
 		monster.Size = monster.Model:GetExtentsSize()
 
 		monster.Delay = MonsterPlaceholder:GetAttribute("Delay") or 0
 
-		local monsterPosition = monster.Model:GetPivot().Position
+		local monsterPosition = MonsterPlaceholder.CharPosition.WorldCFrame.Position
 
-		monster.Model:PivotTo(CFrame.new(
-			monsterPosition, 
-			Vector3.new(
-				monster.HitAttachment.WorldCFrame.Position.X,
-				monsterPosition.Y,
-				monster.HitAttachment.WorldCFrame.Position.Z
+		monster.Model:PivotTo(
+			CFrame.new(
+				monsterPosition,
+				Vector3.new(
+					monster.HitAttachment.WorldCFrame.Position.X,
+					monsterPosition.Y,
+					monster.HitAttachment.WorldCFrame.Position.Z
+				)
 			)
-		))
+		)
 
 		monster.StartAttachment.WorldCFrame = monster.Model.Weapon.CFrame
 		if not monster.HitAttachment or not monster.StartAttachment or not monster.Model then
@@ -269,7 +272,6 @@ function makeLaserAlien(MonsterPlaceholder: Model)
 
 		createLaserTween(monster)
 		connectObstaclePart(monster.Hitbox)
-		
 
 		local serverTime = workspace:GetServerTimeNow()
 		local attackDelay = monster.Config.Frequency + monster.Delay

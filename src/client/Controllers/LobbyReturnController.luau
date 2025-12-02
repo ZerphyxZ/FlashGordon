@@ -2,12 +2,12 @@
 -- Teleport the local player to SpawnLocation or StartSpawn inside the active World_### folder.
 -- Compatible with new Workspace.World_### structure.
 
-local Players           = game:GetService("Players")
-local Workspace         = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
-local Controller = Knit.CreateController { Name = "LobbyReturnController" }
+local Controller = Knit.CreateController({ Name = "LobbyReturnController" })
 
 local LOCAL_PLAYER = Players.LocalPlayer
 
@@ -18,10 +18,14 @@ local _bound = false
 -- ===== Find button recursively =====
 local function findButton(): TextButton?
 	local pg = LOCAL_PLAYER:FindFirstChild("PlayerGui")
-	if not pg then return nil end
+	if not pg then
+		return nil
+	end
 	local node: Instance? = pg:FindFirstChild(BUTTON_PATH[1])
 	for i = 2, #BUTTON_PATH do
-		if not node then return nil end
+		if not node then
+			return nil
+		end
 		node = node:FindFirstChild(BUTTON_PATH[i])
 	end
 	return (node and node:IsA("TextButton")) and node or nil
@@ -40,7 +44,9 @@ local function locateSpawnPart(): BasePart?
 	end
 	-- Fallback to legacy Workspace parts
 	local top = Workspace:FindFirstChild("SpawnLocation") or Workspace:FindFirstChild("StartSpawn")
-	if top and top:IsA("BasePart") then return top end
+	if top and top:IsA("BasePart") then
+		return top
+	end
 	return nil
 end
 
@@ -49,7 +55,9 @@ local function teleportToSpawn()
 	local char = LOCAL_PLAYER.Character or LOCAL_PLAYER.CharacterAdded:Wait()
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not (hrp and hum) then return end
+	if not (hrp and hum) then
+		return
+	end
 
 	local spawnPart = locateSpawnPart()
 	if not spawnPart then
@@ -75,9 +83,13 @@ local function teleportToSpawn()
 end
 
 local function bindButtonIfPresent()
-	if _bound then return end
+	if _bound then
+		return
+	end
 	local btn = findButton()
-	if not btn then return end
+	if not btn then
+		return
+	end
 	btn.MouseButton1Click:Connect(teleportToSpawn)
 	_bound = true
 	print("[LobbyReturnController] Bound LobbyRetureButton.")
@@ -89,7 +101,10 @@ function Controller:KnitStart()
 	if pg then
 		pg.ChildAdded:Connect(function(child)
 			if child.Name == "MainGui" then
-				task.delay(0.05, function() _bound = false; bindButtonIfPresent() end)
+				task.delay(0.05, function()
+					_bound = false
+					bindButtonIfPresent()
+				end)
 			end
 		end)
 	else
@@ -97,15 +112,27 @@ function Controller:KnitStart()
 			local gui = LOCAL_PLAYER:WaitForChild("PlayerGui")
 			gui.ChildAdded:Connect(function(child)
 				if child.Name == "MainGui" then
-					task.delay(0.05, function() _bound = false; bindButtonIfPresent() end)
+					task.delay(0.05, function()
+						_bound = false
+						bindButtonIfPresent()
+					end)
 				end
 			end)
-			task.delay(0.05, function() _bound = false; bindButtonIfPresent() end)
+			task.delay(0.05, function()
+				_bound = false
+				bindButtonIfPresent()
+			end)
 		end)
 	end
 
-	task.delay(0.25, function() _bound = false; bindButtonIfPresent() end)
-	task.delay(1.0,  function() _bound = false; bindButtonIfPresent() end)
+	task.delay(0.25, function()
+		_bound = false
+		bindButtonIfPresent()
+	end)
+	task.delay(1.0, function()
+		_bound = false
+		bindButtonIfPresent()
+	end)
 end
 
 return Controller

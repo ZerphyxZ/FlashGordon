@@ -46,7 +46,7 @@ local Jump = {
 	IsDeadFalling = false,
 	originalHoverHeight = HOVER.HOVER_HEIGHT or 2,
 	baseHoverHeight = HOVER.HOVER_HEIGHT,
-	hasLandedAfterSpawn = false
+	hasLandedAfterSpawn = false,
 }
 
 -- Fly system constants
@@ -386,39 +386,39 @@ function HoverboardJump.UpdateLanding(humanoid, dt)
 	-- Always keep hover height consistent when NOT jumping
 	if hoverBodyPosition and hoverboard.PrimaryPart then
 		--if grounded then
-			-- local primary = hoverboard.PrimaryPart
-			-- local targetY = groundPos.Y + Jump.baseHoverHeight
-			-- local currentPos = primary.Position
+		-- local primary = hoverboard.PrimaryPart
+		-- local targetY = groundPos.Y + Jump.baseHoverHeight
+		-- local currentPos = primary.Position
 
-			-- -- Smooth transition to target height
-			-- local smoothFactor = math.clamp(1 - math.exp(-20 * dt), 0, 1)
-			-- local smoothedY = currentPos.Y + (targetY - currentPos.Y) * smoothFactor
+		-- -- Smooth transition to target height
+		-- local smoothFactor = math.clamp(1 - math.exp(-20 * dt), 0, 1)
+		-- local smoothedY = currentPos.Y + (targetY - currentPos.Y) * smoothFactor
 
-			-- hoverBodyPosition.Position = Vector3.new(currentPos.X, smoothedY, currentPos.Z)
-			-- hoverBodyPosition.MaxForce = PHYSICS.BODY_POSITION_MAX_FORCE
+		-- hoverBodyPosition.Position = Vector3.new(currentPos.X, smoothedY, currentPos.Z)
+		-- hoverBodyPosition.MaxForce = PHYSICS.BODY_POSITION_MAX_FORCE
 
-			local primary = hoverboard.PrimaryPart
-			local origin = primary.Position
+		local primary = hoverboard.PrimaryPart
+		local origin = primary.Position
 
-			local params = RaycastParams.new()
-			params.FilterType = Enum.RaycastFilterType.Exclude
-			params.FilterDescendantsInstances = { character, hoverboard }
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { character, hoverboard }
 
-			local result = workspace:Raycast(origin, Vector3.new(0, -(HOVER.RAYCAST_DISTANCE + 1), 0), params)
-			if result then
-				local groundY = result.Position.Y
-				local targetY = groundY + Jump.baseHoverHeight
+		local result = workspace:Raycast(origin, Vector3.new(0, -(HOVER.RAYCAST_DISTANCE + 1), 0), params)
+		if result then
+			local groundY = result.Position.Y
+			local targetY = groundY + Jump.baseHoverHeight
 
-				local heightSmooth = 1 - math.exp(-100 * dt)
-				local currentY = hoverBodyPosition.Position.Y
-				local newY = currentY + (targetY - currentY) * heightSmooth
+			local heightSmooth = 1 - math.exp(-100 * dt)
+			local currentY = hoverBodyPosition.Position.Y
+			local newY = currentY + (targetY - currentY) * heightSmooth
 
-				hoverBodyPosition.Position = Vector3.new(origin.X, newY, origin.Z)
-				hoverBodyPosition.MaxForce = PHYSICS.BODY_POSITION_MAX_FORCE
-			else
-				-- No ground detected within ray distance -> let physics take over and fall
-				hoverBodyPosition.MaxForce = Vector3.zero
-			end
+			hoverBodyPosition.Position = Vector3.new(origin.X, newY, origin.Z)
+			hoverBodyPosition.MaxForce = PHYSICS.BODY_POSITION_MAX_FORCE
+		else
+			-- No ground detected within ray distance -> let physics take over and fall
+			hoverBodyPosition.MaxForce = Vector3.zero
+		end
 		--else
 		--	hoverBodyPosition.MaxForce = Vector3.zero
 		--end

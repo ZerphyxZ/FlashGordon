@@ -373,11 +373,6 @@ function PlayerDataHandler:SetEquippedHoverboard(player: Player, boardName: stri
 	end
 	return false
 
-
-
-
-
-
 	-- local profile = Profiles[player]
 	-- if profile and profile:IsActive() then
 	-- 	profile.Data.HoverboardName = boardName
@@ -401,33 +396,33 @@ function PlayerDataHandler:PlayerOwnsHoverboard(player: Player, boardName: strin
 	return false
 end
 
-function PlayerDataHandler:GetOwnedHoverboards(player: Player): {string}
+function PlayerDataHandler:GetOwnedHoverboards(player: Player): { string }
 	local profile = Profiles[player]
 	if profile and profile:IsActive() then
-		return profile.Data.OwnedHoverboards or {"Hoverboard1"}
+		return profile.Data.OwnedHoverboards or { "Hoverboard1" }
 	end
-	return {"Hoverboard1"}
+	return { "Hoverboard1" }
 end
 
 function PlayerDataHandler:AddHoverboardToInventory(player: Player, boardName: string): boolean
 	local profile = Profiles[player]
 	if profile and profile:IsActive() then
 		-- Initialize if not exists
-		profile.Data.OwnedHoverboards = profile.Data.OwnedHoverboards or {"Hoverboard1"}
-		
+		profile.Data.OwnedHoverboards = profile.Data.OwnedHoverboards or { "Hoverboard1" }
+
 		-- Check if already owned
 		if self:PlayerOwnsHoverboard(player, boardName) then
 			warn("[PlayerDataHandler] Player", player.Name, "already owns hoverboard:", boardName)
 			return false
 		end
-		
+
 		-- Add to owned hoverboards
 		table.insert(profile.Data.OwnedHoverboards, boardName)
-		
+
 		pcall(function()
 			profile:Save()
 		end)
-		
+
 		print("[PlayerDataHandler] Added hoverboard to inventory for", player.Name, "→", boardName)
 		return true
 	end
@@ -438,7 +433,7 @@ function PlayerDataHandler:RemoveHoverboardFromInventory(player: Player, boardNa
 	local profile = Profiles[player]
 	if profile and profile:IsActive() then
 		local owned = profile.Data.OwnedHoverboards or {}
-		
+
 		-- Find and remove the hoverboard
 		for i, ownedBoard in ipairs(owned) do
 			if ownedBoard == boardName then
@@ -447,24 +442,24 @@ function PlayerDataHandler:RemoveHoverboardFromInventory(player: Player, boardNa
 					warn("[PlayerDataHandler] Cannot remove last hoverboard for", player.Name)
 					return false
 				end
-				
+
 				table.remove(owned, i)
-				
+
 				-- If player had this hoverboard equipped, switch to first available
 				if profile.Data.EquippedHoverboard == boardName then
 					profile.Data.EquippedHoverboard = owned[1] or "Hoverboard1"
 					print("[PlayerDataHandler] Auto-equipped new hoverboard:", profile.Data.EquippedHoverboard)
 				end
-				
+
 				pcall(function()
 					profile:Save()
 				end)
-				
+
 				print("[PlayerDataHandler] Removed hoverboard from inventory for", player.Name, "→", boardName)
 				return true
 			end
 		end
-		
+
 		warn("[PlayerDataHandler] Hoverboard not found in inventory:", boardName)
 	end
 	return false
@@ -473,7 +468,6 @@ end
 function PlayerDataHandler:GetTotalHoverboards(): number
 	return PlayerDataTemplate.TotalHoverboards or 20
 end
-
 
 --[Daily Reward Helpers]
 function PlayerDataHandler:SetLastDailyClaim(player: Player)

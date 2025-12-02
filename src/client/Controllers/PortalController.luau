@@ -1,30 +1,30 @@
 -- StarterPlayer/StarterPlayerScripts/Client/Controllers/PortalController.luau
 -- Adds promise handling + toast notifications when teleports are blocked (Studio).
 
-local Players       = game:GetService("Players")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui    = game:GetService("StarterGui")
+local StarterGui = game:GetService("StarterGui")
 
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
-local Controller = Knit.CreateController { Name = "PortalController" }
+local Controller = Knit.CreateController({ Name = "PortalController" })
 
 local player = Players.LocalPlayer
 
 -- UI refs
-local SurePortalFrame : Frame?
-local YesPortalButton : TextButton?
-local NoPortalButton  : TextButton?
-local SureCloseButton : TextButton?
-local PortalText      : TextLabel?
+local SurePortalFrame: Frame?
+local YesPortalButton: TextButton?
+local NoPortalButton: TextButton?
+local SureCloseButton: TextButton?
+local PortalText: TextLabel?
 
 local _yesConn, _noConn, _closeConn
 
 local function sendToast(title: string, text: string, dur: number?)
 	local ok, err = pcall(function()
 		StarterGui:SetCore("SendNotification", {
-			Title = title or "Notice";
-			Text  = text or "";
-			Duration = dur or 5;
+			Title = title or "Notice",
+			Text = text or "",
+			Duration = dur or 5,
 		})
 	end)
 	if not ok then
@@ -32,19 +32,25 @@ local function sendToast(title: string, text: string, dur: number?)
 	end
 end
 
-local function findDescendantByNames(root: Instance, names: {string}): Instance?
+local function findDescendantByNames(root: Instance, names: { string }): Instance?
 	for _, n in ipairs(names) do
 		local inst = root:FindFirstChild(n, true)
-		if inst then return inst end
+		if inst then
+			return inst
+		end
 	end
 	return nil
 end
 
 local function captureUiRefs(): boolean
 	local gui = player:FindFirstChild("PlayerGui")
-	if not gui then return false end
+	if not gui then
+		return false
+	end
 	local main = gui:FindFirstChild("MainGui")
-	if not main then return false end
+	if not main then
+		return false
+	end
 
 	SurePortalFrame = main:FindFirstChild("SurePortalFrame") or main:FindFirstChild("SurePortalFrame", true)
 	if not (SurePortalFrame and SurePortalFrame:IsA("Frame")) then
@@ -52,16 +58,29 @@ local function captureUiRefs(): boolean
 		return false
 	end
 
-	YesPortalButton = findDescendantByNames(SurePortalFrame, { "YesPortalButton", "YesResetProgressButton", "YesResetProgressButton" }) :: TextButton
-	NoPortalButton  = findDescendantByNames(SurePortalFrame, { "NoPortalButton", "NoPortalProgressButton", "NoResetProgressButton" }) :: TextButton
+	YesPortalButton = findDescendantByNames(
+		SurePortalFrame,
+		{ "YesPortalButton", "YesResetProgressButton", "YesResetProgressButton" }
+	) :: TextButton
+	NoPortalButton = findDescendantByNames(
+		SurePortalFrame,
+		{ "NoPortalButton", "NoPortalProgressButton", "NoResetProgressButton" }
+	) :: TextButton
 	SureCloseButton = findDescendantByNames(SurePortalFrame, { "SureCloseButton" }) :: TextButton
-	PortalText      = findDescendantByNames(SurePortalFrame, { "PortalText" }) :: TextLabel
+	PortalText = findDescendantByNames(SurePortalFrame, { "PortalText" }) :: TextLabel
 
-	print("[PortalController] Found refs: Frame=",tostring(SurePortalFrame~=nil),
-		"Yes=",tostring(YesPortalButton~=nil),
-		"No=",tostring(NoPortalButton~=nil),
-		"Close=",tostring(SureCloseButton~=nil),
-		"Text=",tostring(PortalText~=nil))
+	print(
+		"[PortalController] Found refs: Frame=",
+		tostring(SurePortalFrame ~= nil),
+		"Yes=",
+		tostring(YesPortalButton ~= nil),
+		"No=",
+		tostring(NoPortalButton ~= nil),
+		"Close=",
+		tostring(SureCloseButton ~= nil),
+		"Text=",
+		tostring(PortalText ~= nil)
+	)
 
 	return true
 end
@@ -74,7 +93,9 @@ local function setVisible(show: boolean)
 end
 
 local function updateText()
-	if not PortalText then return end
+	if not PortalText then
+		return
+	end
 	local idx = player:GetAttribute("PortalTargetIndex")
 	PortalText.Text = string.format("Are you sure you want to Teleported to World %d?", idx or 0)
 	print("[PortalController] PortalText set to:", PortalText.Text)
@@ -83,14 +104,22 @@ end
 local function closeUiAndCancel()
 	local svc = Knit.GetService("PortalService")
 	print("[PortalController] Closing UI → CancelTeleport()")
-	if svc and svc.CancelTeleport then svc:CancelTeleport() end
+	if svc and svc.CancelTeleport then
+		svc:CancelTeleport()
+	end
 	setVisible(false)
 end
 
 local function bindButtons()
-	if _yesConn then _yesConn:Disconnect() end
-	if _noConn then _noConn:Disconnect() end
-	if _closeConn then _closeConn:Disconnect() end
+	if _yesConn then
+		_yesConn:Disconnect()
+	end
+	if _noConn then
+		_noConn:Disconnect()
+	end
+	if _closeConn then
+		_closeConn:Disconnect()
+	end
 
 	local svc = Knit.GetService("PortalService")
 	if not svc then
@@ -153,10 +182,16 @@ function Controller:KnitStart()
 		local show = player:GetAttribute("PortalUI") == true
 		if show then
 			if captureUiRefs() then
-				updateText(); bindButtons(); setVisible(true)
+				updateText()
+				bindButtons()
+				setVisible(true)
 			else
 				task.delay(0.2, function()
-					if captureUiRefs() then updateText(); bindButtons(); setVisible(true) end
+					if captureUiRefs() then
+						updateText()
+						bindButtons()
+						setVisible(true)
+					end
 				end)
 			end
 		else
@@ -166,7 +201,9 @@ function Controller:KnitStart()
 
 	-- Update text if destination changes while open
 	player:GetAttributeChangedSignal("PortalTargetIndex"):Connect(function()
-		if player:GetAttribute("PortalUI") == true then updateText() end
+		if player:GetAttribute("PortalUI") == true then
+			updateText()
+		end
 	end)
 
 	-- Show notices coming from server (Studio block, TeleportInitFailed, etc.)
@@ -186,7 +223,9 @@ function Controller:KnitStart()
 				if captureUiRefs() then
 					bindButtons()
 					setVisible(player:GetAttribute("PortalUI") == true)
-					if player:GetAttribute("PortalUI") == true then updateText() end
+					if player:GetAttribute("PortalUI") == true then
+						updateText()
+					end
 				end
 			end)
 		end
