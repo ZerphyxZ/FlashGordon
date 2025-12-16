@@ -8,11 +8,11 @@ local JUMP_FOV = 77
 
 local SMOOTHNESS = 2
 
-function HoverboardFOV.Update(dt, moveDir, isBoosting, isJumping, isFalling)
+function HoverboardFOV.Update(dt, humanoid, isBoosting, isJumping, isFalling)
 	local cam = workspace.CurrentCamera
 	if not cam then return end
 
-	local isMoving = moveDir.Magnitude > 0.1
+	local isMoving = humanoid.MoveDirection.Magnitude > 0.1
 	local target = IDLE_FOV
 	
 	if isBoosting then
