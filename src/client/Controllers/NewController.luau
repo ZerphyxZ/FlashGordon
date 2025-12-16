@@ -47,18 +47,18 @@ local SmoothBoardRotation --= OgBoardRotation
 local SmoothHorizontalLean = 0
 local SmoothForwardLean = 0
 local SmoothingSpeed = 14   -- higher = faster smoothing
-local HorizontalSmoothingSpeed = 10
+local HorizontalSmoothingSpeed = 240
 
 -- CONSTANT VALUES
-local HORIZONTAL_LEAN_AMOUNT = 15
+local HORIZONTAL_LEAN_AMOUNT = 35
 local FORWARD_LEAN_AMOUNT = 0
 local ROTATION_AMOUNT = 30
 local JUMP_POWER = 70
-local INSTANT_TURN_SMOOTHING = 0.01
-local NORMAL_TURN_SMOOTHING = 0.05
+local INSTANT_TURN_SMOOTHING = 0.02
+local NORMAL_TURN_SMOOTHING = 4
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
-local DECELERATION = 200
+local DECELERATION = 150
 local MOVEMENT_SMOOTHNESS = 0.5
 
 local currentAccelerationRef = { value = ACCELERATION }
@@ -238,7 +238,7 @@ local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector
 	NormalVector = NormalVector or Vector3.yAxis
 
 	local crossProduct = ReferenceVector:Cross(OtherVector)
-	local direction = crossProduct:Dot(NormalVector) >= 0 and -1 or 1
+	local direction = crossProduct:Dot(NormalVector) >= 0 and 1 or -1
 
 	ReferenceVector *= Vector3.new(1, 0, 1)
 	OtherVector = OtherVector * Vector3.new(1, 0, 1)
@@ -320,13 +320,14 @@ local function SetCharacterOrientation(Normal : Vector3, DeltaTime)
 
             local deltaFactor = 4
 
-			if InstantTurn and tonumber(SpeedVar) <= 10 then
+			if InstantTurn and tonumber(SpeedVar) <= 15 then
 
 				local currentForward = rootPart.CFrame.LookVector
 				local goalForward = (GetGoal(MoveDirection) - Board.Position).unit
 
-				rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
-				--RootPart.CFrame = RootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean)), 0.05) 
+				-- rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
+				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
+                --RootPart.CFrame = RootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean)), 0.05) 
 			else
 
 				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), DeltaTime * 4) 
@@ -461,13 +462,17 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 	local angleInDegrees = IsFacingRightDirection(currentForward, goalForward)
 	local direction, angle = ReturnDirectionAndTiltAngle(currentForward, goalForward)
 
+    if MoveDirection.X ~= 0 and MoveDirection.Z ~= 0 then
+        direction *= -1
+    end
+
 	if angle >= 130 then
 		IsDecelerating = true
 		if tonumber(SpeedVar) <= 10 then
 			InstantTurn = true
 		end
 	elseif angle > 50 then
-		SpeedVar = math.max(0, SpeedVar - (SpeedVar * .2 * 10) * deltaTime)
+		SpeedVar = math.max(0, SpeedVar - (SpeedVar * .35 * 10) * deltaTime)
 	elseif angle < 20 then
 		InstantTurn = false
 	end
@@ -517,6 +522,7 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 		_G.MoveVector = Vector3.new(1,0,1)
 	elseif MoveDirection.Z > 0 and MoveDirection.X > 0 then
 		BoardRotation = OgBoardRotation + ROTATION_AMOUNT
+        --direction *= -1
 		-- HorizontalLean = HORIZONTAL_LEAN_AMOUNT
 		_G.MoveVector = Vector3.new(-1,0,1)
 	elseif MoveDirection.Z == 0 and MoveDirection.X == 0 then
@@ -591,7 +597,7 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 	--elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
 	--	BoardRotation = OgBoardRotation
 	--	HorizontalLean = 0
-	--end
+	--endp
 
 	--if MoveDirection.Z == 0 and MoveDirection.X == 0 and IsDecelerating then
 	--	IsDecelerating = false
@@ -620,6 +626,15 @@ local function CalculateSpeed(Acceleration, Deceleration, MaxSpeed, dt)
 end
 
 local function SetSpeed(dt, acceleration, topSpeed)
+
+	SpeedVar = math.max(SpeedVar + (CurrentSpeed - SpeedVar) * acceleration * dt, 0)
+
+	local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
+    -- local goalDirection = GetGoal(GetControls():GetMoveVector()).Unit
+	bodyVelocity.Velocity = BoardCF.LookVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+end
+
+local function SetSpeedOld(dt, acceleration, topSpeed)
 	if IsDecelerating then
 		if tonumber(SpeedVar) > 0 then
 			SpeedVar = math.max(SpeedVar - DECELERATION * dt, 0)
@@ -629,7 +644,7 @@ local function SetSpeed(dt, acceleration, topSpeed)
 	else
 		local SpeedDifference = CurrentSpeed - SpeedVar
 		if math.abs(SpeedDifference) > Diff then
-			SpeedVar = SpeedVar + math.sign(SpeedDifference) * acceleration * dt
+			SpeedVar = SpeedVar + (SpeedDifference) * acceleration * dt
 			SpeedVar = math.round(SpeedVar)
 		else
 			SpeedVar = math.round(CurrentSpeed)
@@ -738,8 +753,8 @@ function NewController:StartHoverboard(config)
 	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
 	runningConnection = RunService.Heartbeat:Connect(function(dt)
 		Hover(dt, jumpPower)
-		SetSpeed(dt, acceleration, topSpeed)
 		ManageMoveDirection(dt, topSpeed)
+		SetSpeed(dt, acceleration, topSpeed)
 		UpdateFOV(dt)
 		
 		if speedGUI and speedLabel and bars then
