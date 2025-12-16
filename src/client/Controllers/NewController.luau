@@ -46,7 +46,7 @@ local Rayvelocity = 0.2
 local SmoothBoardRotation --= OgBoardRotation
 local SmoothHorizontalLean = 0
 local SmoothForwardLean = 0
-local SmoothingSpeed = 3.5   -- higher = faster smoothing
+local SmoothingSpeed = 14   -- higher = faster smoothing
 local HorizontalSmoothingSpeed = 10
 
 -- CONSTANT VALUES
@@ -279,7 +279,7 @@ local function IsFacingRightDirection(currentForward, goalForward)
 	return angleInDegrees
 end
 
-local function SetCharacterOrientation(Normal : Vector3)
+local function SetCharacterOrientation(Normal : Vector3, DeltaTime)
 	controls = GetControls()
 	local MoveDirection = controls:GetMoveVector()
 	local BoardCF = Board.CFrame
@@ -318,6 +318,8 @@ local function SetCharacterOrientation(Normal : Vector3)
 			local UpVector = newNormal
 			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector)
 
+            local deltaFactor = 4
+
 			if InstantTurn and tonumber(SpeedVar) <= 10 then
 
 				local currentForward = rootPart.CFrame.LookVector
@@ -327,7 +329,7 @@ local function SetCharacterOrientation(Normal : Vector3)
 				--RootPart.CFrame = RootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean)), 0.05) 
 			else
 
-				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), 1) 
+				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), DeltaTime * 4) 
 				--BG.CFrame = AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean))
 
 			end
@@ -448,7 +450,7 @@ local function Hover(DeltaTime, JumpPower)
 		LastJump = false
 	end
 
-	SetCharacterOrientation(Normal)
+	SetCharacterOrientation(Normal, DeltaTime)
 end
 
 local function ManageMoveDirection(deltaTime, MaxSpeed)
@@ -641,7 +643,7 @@ local function UpdateFOV(dt)
 	local diff = MAX_FOV - MIN_FOV
 	Camera.FieldOfView =  math.clamp(math.lerp(Camera.FieldOfView,  MIN_FOV + (diff * (CurrentSpeed / MAX_SPEED)), dt), MIN_FOV, MAX_FOV)
 end
--------------------------------------------------------------------
+-----------------------------------------------------------
 
 
 -- PLAYER LIFECYCLE
