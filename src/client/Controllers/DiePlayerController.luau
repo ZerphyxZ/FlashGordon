@@ -61,7 +61,7 @@ local function restoreCharacterMovement(character)
 	local hum = character:FindFirstChildOfClass("Humanoid")
 	local hrp = character:FindFirstChild("HumanoidRootPart")
 	if hum then
-		hum.PlatformStand = false
+		--hum.PlatformStand = false
 		hum.WalkSpeed = 16
 		hum.JumpPower = 50
 		hum.AutoRotate = true
