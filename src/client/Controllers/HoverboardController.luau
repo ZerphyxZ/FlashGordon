@@ -46,11 +46,11 @@ local DECELERATION = 2
 local MOVEMENT_SMOOTHNESS = 1
 local MIN_THROTTLING_THRESHOLD = 0.1
 local MIN_SPEED_THRESHOLD = 20
-local ROTATION_SPEED = 10
+local ROTATION_SPEED = 20
 local ROTATION_SMOOTHNESS = 0.9
 local LEAN_SMOOTH = 25
 local MAX_LEAN = 1.5
-local LEAN_MULTIPLIER = 65
+local LEAN_MULTIPLIER = 70
 local HOVER_HEIGHT = 3
 local RAY_DISTANCE = 20
 local MAX_BODY_FORCE = 100000
@@ -133,7 +133,7 @@ function HoverboardController:StartHoverboard(config)
 		HoverboardMovement.UpdateOrientation(rootPart, bodyGyro, hoverboard, moveDir, HoverboardJump, MIN_SPEED_THRESHOLD, ROTATION_SPEED, ROTATION_SMOOTHNESS,
 			MAX_LEAN, LEAN_SMOOTH, LEAN_MULTIPLIER, State, dt)
 
-		HoverboardMovement.UpdateSurfaceAlignment(
+		HoverboardMovement.UpdateSurfaceAlignment1(
 			character,
 			rootPart,
 			bodyGyro,
@@ -142,13 +142,14 @@ function HoverboardController:StartHoverboard(config)
 			State,
 			HoverboardJump,
 			hoverboard,
+			HOVER_HEIGHT,
 			dt
 		)
+
+		--HoverboardMovement.UpdateHoverboardOrientation(character, hoverboard, rootPart, RAY_DISTANCE, HOVER_SMOOTHNESS, State, dt)
 		HoverboardJump.SetCurrentSpeed(HoverboardMovement.CurrentSpeed)
 		HoverboardJump.UpdateLanding(humanoid, dt) --Check for the ground detection
-		--HoverboardMovement.HandleHovering(character, rootPart, bodyPosition, hoverboard, RAY_DISTANCE, HOVER_HEIGHT, MAX_BODY_FORCE, HoverboardJump, dt)
-		cameraFOV.Update(dt, moveDir, BoostAbility.isBoosting, HoverboardJump.State.isJumping, HoverboardJump.State.isFalling)
-		--HoverboardBobbing.Update(dt, moveDir, HoverboardMovement.CurrentSpeed, workspace, hoverboard, bodyPosition)
+		--cameraFOV.Update(dt, moveDir, BoostAbility.isBoosting, HoverboardJump.State.isJumping, HoverboardJump.State.isFalling)
 	end)
 	Speed.UpdateSpeed(function()
 		return HoverboardMovement.CurrentSpeed
@@ -199,7 +200,7 @@ function HoverboardController:WaitForHoverboard(config)
 		bodyGyro = primary:WaitForChild("BodyGyro")
 		bodyPosition = primary:WaitForChild("BodyPosition")
 		if bodyVelocity and bodyGyro and bodyPosition then
-			HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition)
+			HoverboardJump.SetReferences(hoverboard, character, rootPart, bodyPosition, humanoid)
 			HoverboardJump.SetHoverHeight(HOVER_HEIGHT)
 			HoverboardController:DisableAnimations(character)
 			HoverboardController:StartHoverboard(config)
@@ -262,11 +263,15 @@ function HoverboardController:DisableAnimations(char)
 	end
 
 	if bodyVelocity and bodyGyro and bodyPosition then
-		--hum.PlatformStand = true
-		hum:ChangeState(Enum.HumanoidStateType.Physics)
+		--hum:ChangeState(Enum.HumanoidStateType.Physics)
 	end
+end
 
-	--hum:ChangeState(Enum.HumanoidStateType.Physics)
+local function HumanoidSetup()
+	humanoid.MaxSlopeAngle = 0
+	humanoid.AutoRotate = false
+	humanoid.UseJumpPower = true
+	humanoid.JumpPower = 70
 end
 
 local function OnCharacterAdded(char)
@@ -275,6 +280,7 @@ local function OnCharacterAdded(char)
 	character = char
 	humanoid = char:WaitForChild("Humanoid")
 	rootPart = char:WaitForChild("HumanoidRootPart")
+	HumanoidSetup()
 	HoverboardUtils.BindJump(HoverboardJump)
 	Speed.RefreshSpeedGUI()
 end
