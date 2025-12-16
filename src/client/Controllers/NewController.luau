@@ -47,10 +47,10 @@ local SmoothBoardRotation --= OgBoardRotation
 local SmoothHorizontalLean = 0
 local SmoothForwardLean = 0
 local SmoothingSpeed = 14   -- higher = faster smoothing
-local HorizontalSmoothingSpeed = 240
+local HorizontalSmoothingSpeed = 120
 
 -- CONSTANT VALUES
-local HORIZONTAL_LEAN_AMOUNT = 35
+local HORIZONTAL_LEAN_AMOUNT = 15
 local FORWARD_LEAN_AMOUNT = 0
 local ROTATION_AMOUNT = 30
 local JUMP_POWER = 70
