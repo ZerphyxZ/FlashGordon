@@ -22,6 +22,7 @@ local HoverboardService = Knit.CreateService({
 		HoverboardRemoved = Knit.CreateSignal(),
 		SpawnOtherHoverboard = Knit.CreateSignal(),
 		ControlSignal = Knit.CreateSignal(),
+		GravitySignal = Knit.CreateSignal(),
 	},
 })
 
@@ -196,6 +197,30 @@ end
 function HoverboardService.Client:RequestRemoveHoverboard(player)
 	HoverboardService:RemoveHoverboard(player)
 end
+
+function HoverboardService.Client:RequestGravityCoil(player)
+	-- Validate if player owns the gravity coil product
+	local playerData = PlayerDataHandler:GetData(player)
+	
+	if not playerData then
+		return false, "Player data not found"
+	end
+	
+	-- Check if player owns the gravity coil (you need to implement this check based on your data structure)
+	local hasCoil = PlayerDataHandler:PlayerHasGravityCoil(player) -- You'll need to create this function
+	
+	if not hasCoil then
+		return false, "You don't own the Gravity Coil"
+	end
+	
+	-- Notify client to enable gravity coil
+	-- You'll need to add this signal to the service
+	print("Firing gravity signal")
+	self.GravitySignal:Fire(player, true)
+	
+	return true, "Gravity Coil activated"
+end
+
 
 ----------------------------------------------------------
 -- Hoverboard Store/Purchase Methods
