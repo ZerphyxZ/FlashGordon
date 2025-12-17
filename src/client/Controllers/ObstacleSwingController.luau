@@ -24,7 +24,7 @@ end)
 local SWING_MAX_ANGLE_DEG     = 55
 local DEFAULT_SWING_SPEED_DEG = 70
 local DEFAULT_MOVING_SPEED    = 6
-local MAX_UPDATE_DISTANCE     = 50
+local MAX_UPDATE_DISTANCE     = 500
 local RECHECK_ATTEMPTS        = 20
 local RECHECK_DELAY           = 0.15
 

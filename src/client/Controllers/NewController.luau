@@ -46,19 +46,19 @@ local Rayvelocity = 0.2
 local SmoothBoardRotation --= OgBoardRotation
 local SmoothHorizontalLean = 0
 local SmoothForwardLean = 0
-local SmoothingSpeed = 3.5   -- higher = faster smoothing
-local HorizontalSmoothingSpeed = 10
+local SmoothingSpeed = 14   -- higher = faster smoothing
+local HorizontalSmoothingSpeed = 100
 
 -- CONSTANT VALUES
 local HORIZONTAL_LEAN_AMOUNT = 15
 local FORWARD_LEAN_AMOUNT = 0
 local ROTATION_AMOUNT = 45
 local JUMP_POWER = 70
-local INSTANT_TURN_SMOOTHING = 0.01
-local NORMAL_TURN_SMOOTHING = 0.05
-local MAX_SPEED = 65
+local INSTANT_TURN_SMOOTHING = .5
+local NORMAL_TURN_SMOOTHING = 4
+local MAX_SPEED = 100
 local ACCELERATION = 0.3
-local DECELERATION = 100
+local DECELERATION = 150
 local MOVEMENT_SMOOTHNESS = 0.5
 
 local currentAccelerationRef = { value = ACCELERATION }
@@ -67,6 +67,11 @@ local currentTopSpeedRef = { value = MAX_SPEED }
 -- MOVEMENT / SPEED
 local IsDecelerating = false
 local Diff = 0.01
+local SpeedVar = 0
+local CurrentSpeed = 0
+local acceleration --= Config:GetAttribute("Acceleration") or ACCELERATION
+local topSpeed  = 100--= Config:GetAttribute("MaxSpeed") or MAX_SPEED
+local jumpPower --= Config:GetAttribute("JumpPower") or JUMP_POWER
 NewController.SpeedVar = 0
 NewController.CurrentSpeed = 0
 local acceleration
@@ -154,6 +159,8 @@ local gravityFrame = gameHUD:WaitForChild("GravityCoil")
 local gravityButton = gravityFrame:WaitForChild("GravityButton")
 
 local controls
+local RayParams
+
 local function GetControls()
 	if controls then
 		return controls
@@ -744,7 +751,7 @@ local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector
 	NormalVector = NormalVector or Vector3.yAxis
 
 	local crossProduct = ReferenceVector:Cross(OtherVector)
-	local direction = crossProduct:Dot(NormalVector) >= 0 and -1 or 1
+	local direction = crossProduct:Dot(NormalVector) >= 0 and 1 or -1
 
 	ReferenceVector *= Vector3.new(1, 0, 1)
 	OtherVector = OtherVector * Vector3.new(1, 0, 1)
@@ -757,24 +764,17 @@ local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector
 	return direction, angle
 end
 
-function NewController:GetGoal(MoveDirection)
-	local Goal
 
-	if MoveDirection.Z < 0 and MoveDirection.X == 0 then
-		Goal = (Camera.CFrame * CFrame.new(0, 0, -1000)).Position
-	elseif MoveDirection.Z > 0 then
-		Goal = (Camera.CFrame * CFrame.new(0, 0, 1000)).Position
-	elseif MoveDirection.Z < 0 and MoveDirection.X ~= 0 then
-		Goal = (Camera.CFrame * CFrame.new(0, 0, -1000)).Position
-	elseif MoveDirection.Z == 0 and MoveDirection.X > 0 then
-		Goal = (Camera.CFrame * CFrame.new(1000, 0, 0)).Position
-	elseif MoveDirection.Z == 0 and MoveDirection.X < 0 then
-		Goal = (Camera.CFrame * CFrame.new(-1000, 0, 0)).Position
-	else
-		Goal = (rootPart.CFrame * CFrame.new(0, 0, -1000)).Position
+local function GetGoal(MoveDirection)
+	if MoveDirection.Z ~= 0 then
+		return (Camera.CFrame * CFrame.new(0, 0, 1000 * math.sign(MoveDirection.Z))).Position
 	end
 
-	return Goal
+	if MoveDirection.X ~= 0 then
+		return (Camera.CFrame * CFrame.new(1000 * math.sign(MoveDirection.X), 0, 0)).Position
+	end
+
+	return (rootPart.CFrame * CFrame.new(0, 0, -1000)).Position
 end
 
 local function IsFacingRightDirection(currentForward, goalForward)
@@ -793,11 +793,9 @@ local function SetCharacterOrientation(Normal : Vector3)
 	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
 	local Direction = Vector3.new(0, -1, 0)
 	local CheckingDistance = HoverHeight + 4
-	local RayParams = RaycastParams.new()
-	RayParams.FilterType = Enum.RaycastFilterType.Exclude
-	RayParams.FilterDescendantsInstances = { Board, character }
-	local SwaySpeed = 2
-	local MaxSwayAngle = 1.5
+
+	local SwaySpeed = 0 --2
+	local MaxSwayAngle = 0 --1.5
 	local TiltAngle = math.sin(tick() * SwaySpeed) * MaxSwayAngle
 	local newNormal
 	local LerpFactor = 0.8
@@ -823,13 +821,16 @@ local function SetCharacterOrientation(Normal : Vector3)
 			local UpVector = newNormal
 			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector)
 
-			if InstantTurn and tonumber(NewController.SpeedVar) <= 10 then
+            local deltaFactor = 4
+
+			if InstantTurn and tonumber(SpeedVar) <= 15 then
 
 				local currentForward = rootPart.CFrame.LookVector
 				local goalForward = (NewController:GetGoal(MoveDirection) - Board.Position).unit
 
-				rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
-				--RootPart.CFrame = RootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean)), 0.05) 
+				-- rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
+				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
+                --RootPart.CFrame = RootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean)), 0.05) 
 			else
 
 				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), 1) 
@@ -941,10 +942,9 @@ local function Hover(DeltaTime, JumpPower)
 	local Direction = Vector3.new(0, -1, 0)
 	local CheckingDistance = HoverHeight + 4
 	local PotentialMap = workspace:FindFirstChild("CurrentMap")
-	local RayParams = RaycastParams.new()
-	RayParams.FilterType = Enum.RaycastFilterType.Exclude
-	RayParams.FilterDescendantsInstances = { Board, character }
+
 	local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
+
 	local SwaySpeed = 2.5
 	local MaxSwayHeight = 0.1
 	local HeightSway = math.sin(tick() * SwaySpeed) * MaxSwayHeight
@@ -988,10 +988,15 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 	--if isDashing then return end
 	controls = GetControls()
 	local MoveDirection = controls:GetMoveVector()
+
 	local currentForward = Board.CFrame.LookVector
 	local goalForward = (NewController:GetGoal(MoveDirection) - Board.Position).unit
 	local angleInDegrees = IsFacingRightDirection(currentForward, goalForward)
 	local direction, angle = ReturnDirectionAndTiltAngle(currentForward, goalForward)
+
+    if MoveDirection.X ~= 0 and MoveDirection.Z ~= 0 then
+        direction *= -1
+    end
 
 	if angle >= 130 then
 		IsDecelerating = true
@@ -999,67 +1004,33 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 			InstantTurn = true
 		end
 	elseif angle > 50 then
+		SpeedVar = math.max(0, SpeedVar - (SpeedVar * .35 * 10) * deltaTime)
 		NewController.SpeedVar = math.max(0, NewController.SpeedVar - (NewController.SpeedVar * .2 * 10) * deltaTime)
 	elseif angle < 20 then
 		InstantTurn = false
 	end
 	
-	if MoveDirection.Z == 0 then
-		NewController.CurrentSpeed = 0
+	if MoveDirection.Magnitude > 0 then
+		CurrentSpeed = MaxSpeed
+		ForwardLean = FORWARD_LEAN_AMOUNT
+	else
+		CurrentSpeed = 0
 		ForwardLean = 0
-	elseif MoveDirection.Z > 0 then
-		NewController.CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-	elseif MoveDirection.Z < 0 then
-		NewController.CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
+		BoardRotation = OgBoardRotation
+
+		if IsDecelerating then
+			IsDecelerating = false
+		end
 	end
 
-	if MoveDirection.X == 0 then
+	-- turning rotation
+	local zDirection = math.sign(MoveDirection.Z)
+	local xDirection = math.sign(MoveDirection.X)
+
+	if zDirection == 0 then
 		BoardRotation = OgBoardRotation
-		--HorizontalLean = 0
-
-	elseif MoveDirection.X < 0 then
-		NewController.CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-
-	elseif MoveDirection.X > 0 then
-		NewController.CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-
-	elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
-		BoardRotation = OgBoardRotation
-		--HorizontalLean = 0
-	end
-
-
-
-	if MoveDirection.Z < 0 and MoveDirection.X > 0 then
-		BoardRotation = OgBoardRotation - ROTATION_AMOUNT
-		-- HorizontalLean = -HORIZONTAL_LEAN_AMOUNT
-
-	elseif MoveDirection.Z < 0 and MoveDirection.X < 0 then
-		BoardRotation = OgBoardRotation + ROTATION_AMOUNT
-		-- HorizontalLean = HORIZONTAL_LEAN_AMOUNT
-	elseif MoveDirection.Z > 0 and MoveDirection.X < 0 then
-		BoardRotation = OgBoardRotation - ROTATION_AMOUNT
-
-		-- HorizontalLean = -HORIZONTAL_LEAN_AMOUNT
-		_G.MoveVector = Vector3.new(1,0,1)
-	elseif MoveDirection.Z > 0 and MoveDirection.X > 0 then
-		BoardRotation = OgBoardRotation + ROTATION_AMOUNT
-		-- HorizontalLean = HORIZONTAL_LEAN_AMOUNT
-		_G.MoveVector = Vector3.new(-1,0,1)
-	elseif MoveDirection.Z == 0 and MoveDirection.X == 0 then
-		BoardRotation = OgBoardRotation
-		-- HorizontalLean = 0
-	elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
-		BoardRotation = OgBoardRotation
-		-- HorizontalLean = 0
-	end
-
-	if MoveDirection.Z == 0 and MoveDirection.X == 0 and IsDecelerating then
-		IsDecelerating = false
+	else
+		BoardRotation = OgBoardRotation + (zDirection * xDirection * ROTATION_AMOUNT)
 	end
 
 
@@ -1067,72 +1038,60 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 	local leanRatio = math.clamp(angle / maxAngle, -1, 1)
 	HorizontalLean = math.round(HORIZONTAL_LEAN_AMOUNT * leanRatio * direction)
 
-	-- Smoothing
 	SmoothBoardRotation = SmoothBoardRotation + (BoardRotation - SmoothBoardRotation) * deltaTime * SmoothingSpeed
-	SmoothHorizontalLean = SmoothHorizontalLean + (HorizontalLean - SmoothHorizontalLean) * deltaTime * HorizontalSmoothingSpeed
+	SmoothHorizontalLean = SmoothHorizontalLean + (HorizontalLean - SmoothHorizontalLean) * math.clamp(deltaTime * HorizontalSmoothingSpeed, 0, 1)
 	SmoothForwardLean = SmoothForwardLean + (ForwardLean - SmoothForwardLean) * deltaTime * SmoothingSpeed
-	
-	
-	
-	--if MoveDirection.Z == 0 then
-	--	CurrentSpeed = 0
-	--	ForwardLean = 0
-	--elseif MoveDirection.Z > 0 then
-	--	CurrentSpeed = MaxSpeed
-	--	ForwardLean = FORWARD_LEAN_AMOUNT
-	--elseif MoveDirection.Z < 0 then
-	--	CurrentSpeed = MaxSpeed
-	--	ForwardLean = FORWARD_LEAN_AMOUNT
-	--end
-
-	--if MoveDirection.X == 0 then
-	--	BoardRotation = OgBoardRotation
-	--	HorizontalLean = 0
-
-	--elseif MoveDirection.X < 0 then
-	--	CurrentSpeed = MaxSpeed
-	--	ForwardLean = FORWARD_LEAN_AMOUNT
-
-	--elseif MoveDirection.X > 0 then
-	--	CurrentSpeed = MaxSpeed
-	--	ForwardLean = FORWARD_LEAN_AMOUNT
-
-	--elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
-	--	BoardRotation = OgBoardRotation
-	--	HorizontalLean = 0
-	--end
-
-	--if MoveDirection.Z < 0 and MoveDirection.X > 0 then
-	--	BoardRotation = OgBoardRotation - ROTATION_AMOUNT
-	--	HorizontalLean = -HORIZONTAL_LEAN_AMOUNT
-	--elseif MoveDirection.Z < 0 and MoveDirection.X < 0 then
-	--	BoardRotation = OgBoardRotation + ROTATION_AMOUNT
-	--	HorizontalLean = HORIZONTAL_LEAN_AMOUNT
-	--elseif MoveDirection.Z > 0 and MoveDirection.X < 0 then
-	--	BoardRotation = OgBoardRotation - ROTATION_AMOUNT
-	--	HorizontalLean = -HORIZONTAL_LEAN_AMOUNT
-	--	_G.MoveVector = Vector3.new(1,0,1)
-	--elseif MoveDirection.Z > 0 and MoveDirection.X > 0 then
-	--	BoardRotation = OgBoardRotation + ROTATION_AMOUNT
-	--	HorizontalLean = HORIZONTAL_LEAN_AMOUNT
-	--	_G.MoveVector = Vector3.new(-1,0,1)
-	--elseif MoveDirection.Z == 0 and MoveDirection.X == 0 then
-	--	BoardRotation = OgBoardRotation
-	--	HorizontalLean = 0
-	--elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
-	--	BoardRotation = OgBoardRotation
-	--	HorizontalLean = 0
-	--end
-
-	--if MoveDirection.Z == 0 and MoveDirection.X == 0 and IsDecelerating then
-	--	IsDecelerating = false
-	--end
-
-	---- Smoothing
-	--SmoothBoardRotation = SmoothBoardRotation + (BoardRotation - SmoothBoardRotation) * deltaTime * SmoothingSpeed
-	--SmoothHorizontalLean = SmoothHorizontalLean + (HorizontalLean - SmoothHorizontalLean) * deltaTime * SmoothingSpeed
-	--SmoothForwardLean = SmoothForwardLean + (ForwardLean - SmoothForwardLean) * deltaTime * SmoothingSpeed
 end
+
+local function CalculateSpeed(Acceleration, Deceleration, MaxSpeed, dt)
+	local isMoving = Acceleration > 0
+	local rate = isMoving and Acceleration or Deceleration
+	local minRate = 0.1
+	rate = math.max(rate, minRate)
+	local smooth = 1 - math.exp(-rate * MOVEMENT_SMOOTHNESS * dt)
+	print("Max speed :", MaxSpeed)
+	print("Current speed: ", CurrentSpeed)
+	CurrentSpeed = CurrentSpeed + (MaxSpeed - CurrentSpeed) * smooth
+	CurrentSpeed = math.clamp(CurrentSpeed, 0, MAX_SPEED)
+	
+	if CurrentSpeed <= 0 then
+		CurrentSpeed = 0
+	end
+end
+
+
+
+-- local function SetSpeed(dt, acceleration, topSpeed)
+
+
+-- 	local acceleration = IsDecelerating and acceleration * 50 or acceleration
+-- 	SpeedVar = math.max(SpeedVar + (CurrentSpeed - SpeedVar) * acceleration * dt, 0)
+		
+-- 	if SpeedVar == 0 then
+-- 		IsDecelerating = false
+-- 	end
+
+-- 	local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
+   
+-- 	local goalDirection = GetGoal(GetControls():GetMoveVector())
+-- 	local BoardCF = Board.CFrame
+-- 	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
+-- 	local Goal = Vector3.new(goalDirection.X, Origin.Y, goalDirection.Z)
+-- 	local velocityVector = CFrame.new(Origin, Goal).LookVector
+	
+-- 	-- local _, angle = ReturnDirectionAndTiltAngle(velocityVector, BoardCF.LookVector)
+
+-- 	-- -- if math.abs(angle) >= 90  then
+-- 	-- if SpeedVar >= 35  then
+-- 	-- 	bodyVelocity.Velocity = velocityVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- 	-- else
+--  	-- 	-- bodyVelocity.Velocity = BoardCF.LookVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- 	-- 	bodyVelocity.Velocity = velocityVector:Lerp(BoardCF.LookVector, math.clamp(SpeedVar/topSpeed, 0, 1)) * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- 	-- end
+
+-- 	-- bodyVelocity.Velocity = velocityVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- 	bodyVelocity.Velocity = BoardCF.LookVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- end
 
 local function SetSpeed(dt, acceleration, topSpeed)
 	if isDashing then return end
@@ -1146,12 +1105,23 @@ local function SetSpeed(dt, acceleration, topSpeed)
 	else
 		local SpeedDifference = NewController.CurrentSpeed - NewController.SpeedVar
 		if math.abs(SpeedDifference) > Diff then
+			SpeedVar = SpeedVar + (SpeedDifference) * acceleration * dt
+		else
+			SpeedVar = CurrentSpeed
 			NewController.SpeedVar = NewController.SpeedVar + math.sign(SpeedDifference) * acceleration * dt
 			NewController.SpeedVar = math.round(NewController.SpeedVar)
 		else
 			NewController.SpeedVar = math.round(NewController.CurrentSpeed)
 		end
 	end
+
+ 
+	local goalDirection = GetGoal(GetControls():GetMoveVector())
+	local BoardCF = Board.CFrame
+	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
+	local Goal = Vector3.new(goalDirection.X, Origin.Y, goalDirection.Z)
+	local velocityVector = CFrame.new(Origin, Goal).LookVector
+
 	local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
 	bodyVelocity.Velocity = BoardCF.LookVector * NewController.SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
 end
@@ -1334,7 +1304,6 @@ function NewController:StartHoverboard(config, HoverboardService)
 	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
 	runningConnection = RunService.Heartbeat:Connect(function(dt)
 		Hover(dt, jumpPower)
-		SetSpeed(dt, acceleration, topSpeed)
 		ManageMoveDirection(dt, topSpeed)
 		cameraFOV.Update(dt, humanoid, isBoosting, isJumping, isFalling, jumpPower)
 		
