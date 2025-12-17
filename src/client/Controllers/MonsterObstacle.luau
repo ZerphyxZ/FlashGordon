@@ -160,7 +160,7 @@ end
 -- ===== Knit lifecycle ========================================================
 
 function Attack(Monster: {})
-	print("Attack", Monster)
+	--print("Attack", Monster)
 
 	SimpleParticleEmit(Monster.Config.SpawnEffect, "Burst", CFrame.new(Monster.SpawnPoint.Position)) -- + (Vector3.yAxis * Monster.Size.Y / monsterSizeDivider)))
 	Monster.Model.Parent = workspace
