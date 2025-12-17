@@ -70,7 +70,7 @@ local Diff = 0.01
 local SpeedVar = 0
 local CurrentSpeed = 0
 local acceleration --= Config:GetAttribute("Acceleration") or ACCELERATION
-local topSpeed --= Config:GetAttribute("MaxSpeed") or MAX_SPEED
+local topSpeed  = 100--= Config:GetAttribute("MaxSpeed") or MAX_SPEED
 local jumpPower --= Config:GetAttribute("JumpPower") or JUMP_POWER
 
 -- JUMP
@@ -111,6 +111,8 @@ local speedLabel = speedGUI:WaitForChild("SpeedVal")
 local bars = speedGUI:WaitForChild("Bars")
 
 local controls
+local RayParams
+
 local function GetControls()
 	if controls then
 		return controls
@@ -286,9 +288,7 @@ local function SetCharacterOrientation(Normal : Vector3, DeltaTime)
 	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
 	local Direction = Vector3.new(0, -1, 0)
 	local CheckingDistance = HoverHeight + 4
-	local RayParams = RaycastParams.new()
-	RayParams.FilterType = Enum.RaycastFilterType.Exclude
-	RayParams.FilterDescendantsInstances = { Board, character }
+
 	local SwaySpeed = 0 --2
 	local MaxSwayAngle = 0 --1.5
 	local TiltAngle = math.sin(tick() * SwaySpeed) * MaxSwayAngle
@@ -403,15 +403,18 @@ local function ExponentialDecay(InitialValue : number, FinalValue : number, Deca
 	return FinalValue + (InitialValue - FinalValue) * math.exp(-DecayRate * TimeDelta)
 end
 
+local RayParams = RaycastParams.new()
+RayParams.FilterType = Enum.RaycastFilterType.Exclude
+RayParams.FilterDescendantsInstances = { Board, character }
+
 local function Hover(DeltaTime, JumpPower)
 	local Origin = Board.Position
 	local Direction = Vector3.new(0, -1, 0)
 	local CheckingDistance = HoverHeight + 4
 	local PotentialMap = workspace:FindFirstChild("CurrentMap")
-	local RayParams = RaycastParams.new()
-	RayParams.FilterType = Enum.RaycastFilterType.Exclude
-	RayParams.FilterDescendantsInstances = { Board, character }
+
 	local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
+
 	local SwaySpeed = 2.5
 	local MaxSwayHeight = 0.1
 	local HeightSway = math.sin(tick() * SwaySpeed) * MaxSwayHeight
@@ -625,16 +628,41 @@ local function CalculateSpeed(Acceleration, Deceleration, MaxSpeed, dt)
 	end
 end
 
+
+
+-- local function SetSpeed(dt, acceleration, topSpeed)
+
+
+-- 	local acceleration = IsDecelerating and acceleration * 50 or acceleration
+-- 	SpeedVar = math.max(SpeedVar + (CurrentSpeed - SpeedVar) * acceleration * dt, 0)
+		
+-- 	if SpeedVar == 0 then
+-- 		IsDecelerating = false
+-- 	end
+
+-- 	local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
+   
+-- 	local goalDirection = GetGoal(GetControls():GetMoveVector())
+-- 	local BoardCF = Board.CFrame
+-- 	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
+-- 	local Goal = Vector3.new(goalDirection.X, Origin.Y, goalDirection.Z)
+-- 	local velocityVector = CFrame.new(Origin, Goal).LookVector
+	
+-- 	-- local _, angle = ReturnDirectionAndTiltAngle(velocityVector, BoardCF.LookVector)
+
+-- 	-- -- if math.abs(angle) >= 90  then
+-- 	-- if SpeedVar >= 35  then
+-- 	-- 	bodyVelocity.Velocity = velocityVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- 	-- else
+--  	-- 	-- bodyVelocity.Velocity = BoardCF.LookVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- 	-- 	bodyVelocity.Velocity = velocityVector:Lerp(BoardCF.LookVector, math.clamp(SpeedVar/topSpeed, 0, 1)) * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- 	-- end
+
+-- 	-- bodyVelocity.Velocity = velocityVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- 	bodyVelocity.Velocity = BoardCF.LookVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+-- end
+
 local function SetSpeed(dt, acceleration, topSpeed)
-
-	SpeedVar = math.max(SpeedVar + (CurrentSpeed - SpeedVar) * acceleration * dt, 0)
-
-	local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
-    -- local goalDirection = GetGoal(GetControls():GetMoveVector()).Unit
-	bodyVelocity.Velocity = BoardCF.LookVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
-end
-
-local function SetSpeedOld(dt, acceleration, topSpeed)
 	if IsDecelerating then
 		if tonumber(SpeedVar) > 0 then
 			SpeedVar = math.max(SpeedVar - DECELERATION * dt, 0)
@@ -645,12 +673,22 @@ local function SetSpeedOld(dt, acceleration, topSpeed)
 		local SpeedDifference = CurrentSpeed - SpeedVar
 		if math.abs(SpeedDifference) > Diff then
 			SpeedVar = SpeedVar + (SpeedDifference) * acceleration * dt
-			SpeedVar = math.round(SpeedVar)
+			SpeedVar = SpeedVar
 		else
-			SpeedVar = math.round(CurrentSpeed)
+			SpeedVar = CurrentSpeed
 		end
 	end
+
+
+	local goalDirection = GetGoal(GetControls():GetMoveVector())
+	local BoardCF = Board.CFrame
+	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
+	local Goal = Vector3.new(goalDirection.X, Origin.Y, goalDirection.Z)
+	local velocityVector = CFrame.new(Origin, Goal).LookVector
+
 	local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
+
+	-- bodyVelocity.Velocity = velocityVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
 	bodyVelocity.Velocity = BoardCF.LookVector * SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
 end
 
@@ -755,7 +793,7 @@ function NewController:StartHoverboard(config)
 		Hover(dt, jumpPower)
 		ManageMoveDirection(dt, topSpeed)
 		SetSpeed(dt, acceleration, topSpeed)
-		UpdateFOV(dt)
+		--UpdateFOV(dt)
 		
 		if speedGUI and speedLabel and bars then
 			UpdateSpeedGUI(topSpeed)
