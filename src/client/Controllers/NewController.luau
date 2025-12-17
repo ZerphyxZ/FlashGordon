@@ -47,14 +47,14 @@ local SmoothBoardRotation --= OgBoardRotation
 local SmoothHorizontalLean = 0
 local SmoothForwardLean = 0
 local SmoothingSpeed = 14   -- higher = faster smoothing
-local HorizontalSmoothingSpeed = 120
+local HorizontalSmoothingSpeed = 100
 
 -- CONSTANT VALUES
 local HORIZONTAL_LEAN_AMOUNT = 15
 local FORWARD_LEAN_AMOUNT = 0
 local ROTATION_AMOUNT = 30
 local JUMP_POWER = 70
-local INSTANT_TURN_SMOOTHING = 0.02
+local INSTANT_TURN_SMOOTHING = .5
 local NORMAL_TURN_SMOOTHING = 4
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
@@ -255,23 +255,15 @@ end
 
 
 local function GetGoal(MoveDirection)
-	local Goal
-
-	if MoveDirection.Z < 0 and MoveDirection.X == 0 then
-		Goal = (Camera.CFrame * CFrame.new(0, 0, -1000)).Position
-	elseif MoveDirection.Z > 0 then
-		Goal = (Camera.CFrame * CFrame.new(0, 0, 1000)).Position
-	elseif MoveDirection.Z < 0 and MoveDirection.X ~= 0 then
-		Goal = (Camera.CFrame * CFrame.new(0, 0, -1000)).Position
-	elseif MoveDirection.Z == 0 and MoveDirection.X > 0 then
-		Goal = (Camera.CFrame * CFrame.new(1000, 0, 0)).Position
-	elseif MoveDirection.Z == 0 and MoveDirection.X < 0 then
-		Goal = (Camera.CFrame * CFrame.new(-1000, 0, 0)).Position
-	else
-		Goal = (rootPart.CFrame * CFrame.new(0, 0, -1000)).Position
+	if MoveDirection.Z ~= 0 then
+		return (Camera.CFrame * CFrame.new(0, 0, 1000 * math.sign(MoveDirection.Z))).Position
 	end
 
-	return Goal
+	if MoveDirection.X ~= 0 then
+		return (Camera.CFrame * CFrame.new(1000 * math.sign(MoveDirection.X), 0, 0)).Position
+	end
+
+	return (rootPart.CFrame * CFrame.new(0, 0, -1000)).Position
 end
 
 local function IsFacingRightDirection(currentForward, goalForward)
@@ -460,8 +452,10 @@ end
 local function ManageMoveDirection(deltaTime, MaxSpeed)
 	controls = GetControls()
 	local MoveDirection = controls:GetMoveVector()
+
 	local currentForward = Board.CFrame.LookVector
 	local goalForward = (GetGoal(MoveDirection) - Board.Position).unit
+
 	local angleInDegrees = IsFacingRightDirection(currentForward, goalForward)
 	local direction, angle = ReturnDirectionAndTiltAngle(currentForward, goalForward)
 
@@ -480,64 +474,27 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 		InstantTurn = false
 	end
 	
-	if MoveDirection.Z == 0 then
+	if MoveDirection.Magnitude > 0 then
+		CurrentSpeed = MaxSpeed
+		ForwardLean = FORWARD_LEAN_AMOUNT
+	else
 		CurrentSpeed = 0
 		ForwardLean = 0
-	elseif MoveDirection.Z > 0 then
-		CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-	elseif MoveDirection.Z < 0 then
-		CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
+		BoardRotation = OgBoardRotation
 
+		if IsDecelerating then
+			IsDecelerating = false
+		end
 	end
 
-	if MoveDirection.X == 0 then
+	-- turning rotation
+	local zDirection = math.sign(MoveDirection.Z)
+	local xDirection = math.sign(MoveDirection.X)
+
+	if zDirection == 0 then
 		BoardRotation = OgBoardRotation
-		--HorizontalLean = 0
-
-	elseif MoveDirection.X < 0 then
-		CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-
-	elseif MoveDirection.X > 0 then
-		CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-
-	elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
-		BoardRotation = OgBoardRotation
-		--HorizontalLean = 0
-	end
-
-
-
-	if MoveDirection.Z < 0 and MoveDirection.X > 0 then
-		BoardRotation = OgBoardRotation - ROTATION_AMOUNT
-		-- HorizontalLean = -HORIZONTAL_LEAN_AMOUNT
-
-	elseif MoveDirection.Z < 0 and MoveDirection.X < 0 then
-		BoardRotation = OgBoardRotation + ROTATION_AMOUNT
-		-- HorizontalLean = HORIZONTAL_LEAN_AMOUNT
-	elseif MoveDirection.Z > 0 and MoveDirection.X < 0 then
-		BoardRotation = OgBoardRotation - ROTATION_AMOUNT
-
-		-- HorizontalLean = -HORIZONTAL_LEAN_AMOUNT
-		_G.MoveVector = Vector3.new(1,0,1)
-	elseif MoveDirection.Z > 0 and MoveDirection.X > 0 then
-		BoardRotation = OgBoardRotation + ROTATION_AMOUNT
-        --direction *= -1
-		-- HorizontalLean = HORIZONTAL_LEAN_AMOUNT
-		_G.MoveVector = Vector3.new(-1,0,1)
-	elseif MoveDirection.Z == 0 and MoveDirection.X == 0 then
-		BoardRotation = OgBoardRotation
-		-- HorizontalLean = 0
-	elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
-		BoardRotation = OgBoardRotation
-		-- HorizontalLean = 0
-	end
-
-	if MoveDirection.Z == 0 and MoveDirection.X == 0 and IsDecelerating then
-		IsDecelerating = false
+	else
+		BoardRotation = OgBoardRotation + (zDirection * xDirection * ROTATION_AMOUNT)
 	end
 
 
@@ -545,71 +502,9 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 	local leanRatio = math.clamp(angle / maxAngle, -1, 1)
 	HorizontalLean = math.round(HORIZONTAL_LEAN_AMOUNT * leanRatio * direction)
 
-	-- Smoothing
 	SmoothBoardRotation = SmoothBoardRotation + (BoardRotation - SmoothBoardRotation) * deltaTime * SmoothingSpeed
-	SmoothHorizontalLean = SmoothHorizontalLean + (HorizontalLean - SmoothHorizontalLean) * deltaTime * HorizontalSmoothingSpeed
+	SmoothHorizontalLean = SmoothHorizontalLean + (HorizontalLean - SmoothHorizontalLean) * math.clamp(deltaTime * HorizontalSmoothingSpeed, 0, 1)
 	SmoothForwardLean = SmoothForwardLean + (ForwardLean - SmoothForwardLean) * deltaTime * SmoothingSpeed
-	
-	
-	
-	--if MoveDirection.Z == 0 then
-	--	CurrentSpeed = 0
-	--	ForwardLean = 0
-	--elseif MoveDirection.Z > 0 then
-	--	CurrentSpeed = MaxSpeed
-	--	ForwardLean = FORWARD_LEAN_AMOUNT
-	--elseif MoveDirection.Z < 0 then
-	--	CurrentSpeed = MaxSpeed
-	--	ForwardLean = FORWARD_LEAN_AMOUNT
-	--end
-
-	--if MoveDirection.X == 0 then
-	--	BoardRotation = OgBoardRotation
-	--	HorizontalLean = 0
-
-	--elseif MoveDirection.X < 0 then
-	--	CurrentSpeed = MaxSpeed
-	--	ForwardLean = FORWARD_LEAN_AMOUNT
-
-	--elseif MoveDirection.X > 0 then
-	--	CurrentSpeed = MaxSpeed
-	--	ForwardLean = FORWARD_LEAN_AMOUNT
-
-	--elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
-	--	BoardRotation = OgBoardRotation
-	--	HorizontalLean = 0
-	--end
-
-	--if MoveDirection.Z < 0 and MoveDirection.X > 0 then
-	--	BoardRotation = OgBoardRotation - ROTATION_AMOUNT
-	--	HorizontalLean = -HORIZONTAL_LEAN_AMOUNT
-	--elseif MoveDirection.Z < 0 and MoveDirection.X < 0 then
-	--	BoardRotation = OgBoardRotation + ROTATION_AMOUNT
-	--	HorizontalLean = HORIZONTAL_LEAN_AMOUNT
-	--elseif MoveDirection.Z > 0 and MoveDirection.X < 0 then
-	--	BoardRotation = OgBoardRotation - ROTATION_AMOUNT
-	--	HorizontalLean = -HORIZONTAL_LEAN_AMOUNT
-	--	_G.MoveVector = Vector3.new(1,0,1)
-	--elseif MoveDirection.Z > 0 and MoveDirection.X > 0 then
-	--	BoardRotation = OgBoardRotation + ROTATION_AMOUNT
-	--	HorizontalLean = HORIZONTAL_LEAN_AMOUNT
-	--	_G.MoveVector = Vector3.new(-1,0,1)
-	--elseif MoveDirection.Z == 0 and MoveDirection.X == 0 then
-	--	BoardRotation = OgBoardRotation
-	--	HorizontalLean = 0
-	--elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
-	--	BoardRotation = OgBoardRotation
-	--	HorizontalLean = 0
-	--endp
-
-	--if MoveDirection.Z == 0 and MoveDirection.X == 0 and IsDecelerating then
-	--	IsDecelerating = false
-	--end
-
-	---- Smoothing
-	--SmoothBoardRotation = SmoothBoardRotation + (BoardRotation - SmoothBoardRotation) * deltaTime * SmoothingSpeed
-	--SmoothHorizontalLean = SmoothHorizontalLean + (HorizontalLean - SmoothHorizontalLean) * deltaTime * SmoothingSpeed
-	--SmoothForwardLean = SmoothForwardLean + (ForwardLean - SmoothForwardLean) * deltaTime * SmoothingSpeed
 end
 
 local function CalculateSpeed(Acceleration, Deceleration, MaxSpeed, dt)
@@ -673,13 +568,12 @@ local function SetSpeed(dt, acceleration, topSpeed)
 		local SpeedDifference = CurrentSpeed - SpeedVar
 		if math.abs(SpeedDifference) > Diff then
 			SpeedVar = SpeedVar + (SpeedDifference) * acceleration * dt
-			SpeedVar = SpeedVar
 		else
 			SpeedVar = CurrentSpeed
 		end
 	end
 
-
+ 
 	local goalDirection = GetGoal(GetControls():GetMoveVector())
 	local BoardCF = Board.CFrame
 	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
