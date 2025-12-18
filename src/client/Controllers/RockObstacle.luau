@@ -271,7 +271,7 @@ function createLaserTween(Monster)
 end
 
 function makeRock(RockPlaceholder: Model)
-	print("Creating laser alien")
+	--print("Creating laser alien")
 	local config = ObstacleConfigs.Rock
 
 	local rock = nil
