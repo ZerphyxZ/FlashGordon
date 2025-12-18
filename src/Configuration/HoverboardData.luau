@@ -1,8 +1,8 @@
 local Hoverboards = {
 	Hoverboard1 = {
-		TopSpeed = 100,
-		Acceleration = 1,
-		JumpPower = 39,
+		TopSpeed = 65,
+		Acceleration = 100,
+		JumpPower = 55,
 	},
 	Hoverboard2 = {
 		TopSpeed = 80,

@@ -224,7 +224,7 @@ function createLaserTween(Monster)
 end
 
 function makeLaserAlien(MonsterPlaceholder: Model)
-	print("Creating laser alien")
+	--print("Creating laser alien")
 	local config = ObstacleConfigs[MonsterPlaceholder.Name]
 
 	local monster = nil
