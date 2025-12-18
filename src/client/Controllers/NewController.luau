@@ -58,9 +58,9 @@ local HorizontalSmoothingSpeed = 100
 -- CONSTANT VALUES
 local HORIZONTAL_LEAN_AMOUNT = 15
 local FORWARD_LEAN_AMOUNT = 0
-local ROTATION_AMOUNT = 30
+local ROTATION_AMOUNT = 45
 local JUMP_POWER = 70
-local INSTANT_TURN_SMOOTHING = .5
+local INSTANT_TURN_SMOOTHING = 2
 local NORMAL_TURN_SMOOTHING = 4
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
@@ -1138,7 +1138,7 @@ local function SetCharacterOrientation(Normal : Vector3, DeltaTime)
                 --RootPart.CFrame = RootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean)), 0.05) 
 			else
 
-				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), DeltaTime * 4) 
+				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), DeltaTime * 16) 
 				--BG.CFrame = AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean))
 
 			end
