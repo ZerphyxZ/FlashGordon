@@ -806,11 +806,9 @@ local function ExponentialDecay(InitialValue : number, FinalValue : number, Deca
 	return FinalValue + (InitialValue - FinalValue) * math.exp(-DecayRate * TimeDelta)
 end
 
-local function EnableDoubleJump(enable)
-	hasDoubleJump = enable
-end
 local function CheckForDoubleJump()
-	return hasDoubleJump and not CanJump and canDoubleJump and AirJumps > 0 and spaceReleasedAfterJump
+	return hasDoubleJump and not CanJump and canDoubleJump and AirJumps > 0 
+		   and spaceReleasedAfterJump
 end
 
 local function ExecuteDoubleJump(jumpPower)
