@@ -12,7 +12,7 @@ local JUMP_FOV_BOOST = 10
 
 local SMOOTHNESS = 2
 
-function HoverboardFOV.Update(dt, humanoid, isBoosting, isJumping, isFalling, jumpPower)
+function HoverboardFOV.Update(dt, humanoid, isBoosting, isDashing, isJumping, isFalling, jumpPower)
 	local cam = workspace.CurrentCamera
 	if not cam then return end
 
@@ -23,7 +23,7 @@ function HoverboardFOV.Update(dt, humanoid, isBoosting, isJumping, isFalling, ju
 	local target = IDLE_FOV
 
 	-- BOOST always wins
-	if isBoosting then
+	if isBoosting or isDashing then
 		target = BOOST_FOV
 
 	-- JUMPING (upwards)
