@@ -55,7 +55,9 @@ local SmoothForwardLean = 0
 local SmoothingSpeed = 14   -- higher = faster smoothing
 local HorizontalSmoothingSpeed = 100
 
+-- Global variables for controller
 local MoveVector
+local Normal
 
 -- CONSTANT VALUES
 local HORIZONTAL_LEAN_AMOUNT = 15
@@ -170,6 +172,21 @@ local gravityButton = gravityFrame:WaitForChild("GravityButton")
 
 local controls
 local RayParams
+
+
+local function ReturnFormattedFloat(Number: number, DecimalPlaces: number?)
+	DecimalPlaces = DecimalPlaces ~= nil and math.round(DecimalPlaces) or 2
+	local tenFactor = math.pow(10, DecimalPlaces)
+
+	Number = tonumber(Number)
+
+	if Number then
+		return math.floor(Number * tenFactor) / tenFactor
+	end
+
+	return 0
+end
+
 
 local function GetControls()
 	if controls then
@@ -1342,34 +1359,43 @@ function CalculateMoveDirection()
 	local cameraRightVector = cameraCFrame.RightVector
 
 	local factor = 1000
-	local goalCFrame = Camera.CFrame * CFrame.new(inputVector.X * factor, 0, inputVector.Z * factor)
-	local goalMoveVector = (goalCFrame - Camera.CFrame.Position).Unit
 
+	local goal
+	if inputVector.Magnitude > 0 then
+		local goalCFrame = Camera.CFrame * CFrame.new(inputVector.X * factor, 0, inputVector.Z * factor)
+		local goalMoveVector = (goalCFrame.Position - Camera.CFrame.Position)
 
-	NewController.MoveVector = goalMoveVector
-end
-
-function CalculateSpeed(acceleration, deltaTimeRender)
-	if IsDecelerating then
-		if tonumber(NewController.SpeedVar) > 0 then
-			NewController.SpeedVar = math.max(NewController.SpeedVar - DECELERATION * deltaTimeRender, 0)
-		elseif NewController.SpeedVar == 0 then
-			IsDecelerating = false
-		end
+		NewController.MoveVector = (goalMoveVector * Vector3.new(1, 0, 1)).Unit
 	else
-		local SpeedDifference = NewController.CurrentSpeed - NewController.SpeedVar
-		if math.abs(SpeedDifference) > Diff then
-			NewController.SpeedVar = NewController.SpeedVar + (SpeedDifference) * acceleration * deltaTimeRender
-		else
-			NewController.SpeedVar = NewController.CurrentSpeed
-		end
+		NewController.MoveVector = Vector3.zero
 	end
-
-	-- bodyVelocity.Velocity = velocityVector * NewController.SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
-	-- bodyVelocity.Velocity = BoardCF.LookVector * NewController.SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
 end
 
-function ApplyVelocity(acceleration, topSpeed, deltaTimeRender)
+function CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
+
+
+	NewController.CurrentSpeed = NewController.MoveVector.Magnitude == 0 and 0 or topSpeed
+
+	local SpeedDifference = NewController.CurrentSpeed - NewController.SpeedVar
+	NewController.SpeedVar = math.clamp(math.round(NewController.SpeedVar + (SpeedDifference) * acceleration * deltaTimeRender * 2), 0, topSpeed)
+
+	-- if IsDecelerating then
+	-- 	if tonumber(NewController.SpeedVar) > 0 then
+	-- 		NewController.SpeedVar = math.max(NewController.SpeedVar - DECELERATION * deltaTimeRender, 0)
+	-- 	elseif NewController.SpeedVar == 0 then
+	-- 		IsDecelerating = false
+	-- 	end
+	-- else
+	-- 	local SpeedDifference = NewController.CurrentSpeed - NewController.SpeedVar
+	-- 	if math.abs(SpeedDifference) > Diff then
+	-- 		NewController.SpeedVar = NewController.SpeedVar + (SpeedDifference) * acceleration * deltaTimeRender
+	-- 	else
+	-- 		NewController.SpeedVar = NewController.CurrentSpeed
+	-- 	end
+	-- end
+end
+
+function ApplyVelocity(deltaTimeRender)
 
 	local Origin = Board.Position
 	local Direction = Vector3.new(0, -1, 0)
@@ -1380,7 +1406,6 @@ function ApplyVelocity(acceleration, topSpeed, deltaTimeRender)
 	local SwaySpeed = 2.5
 	local MaxSwayHeight = 0.1
 	local HeightSway = math.sin(tick() * SwaySpeed) * MaxSwayHeight
-	local Normal
 
 	-- HandleJump(JumpPower)
 	-- CheckGravityCoil()
@@ -1419,7 +1444,9 @@ function ApplyVelocity(acceleration, topSpeed, deltaTimeRender)
 	end
 
 	local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.SpeedVar, yVelocityComponent, NewController.MoveVector.Z * NewController.SpeedVar)
-	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * 5)
+	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender)
+
+	print(`Velocity: {ReturnFormattedFloat(bodyVelocity.Velocity.X)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Y)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Z)}`)
 end
 
 function ApplyOrientation(deltaTimeRender)
@@ -1436,7 +1463,7 @@ function ApplyOrientation(deltaTimeRender)
 	local newNormal
 	local LerpFactor = 0.8
 
-	if NewController.MoveDirection then
+	if NewController.MoveVector then
 
 		local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
 
@@ -1452,28 +1479,18 @@ function ApplyOrientation(deltaTimeRender)
 
 		if newNormal then
 
-			local Goal = Vector3.new(NewController.MoveDirection.X, Origin.Y, NewController.MoveDirection.Z)
+			local Goal = Vector3.new(NewController.MoveVector.X, Origin.Y, NewController.MoveVector.Z)
 			local LookVector = CFrame.new(Origin, Goal).LookVector
-			local RightVector = LookVector:Cross(newNormal).Unit
+			local RightVector = newNormal:Cross(LookVector).Unit
 			local UpVector = newNormal
-			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector)
+			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector) 
 
-            local deltaFactor = 4
+			-- bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(0, 0, 0), 1) 
+			-- bodyGyro.CFrame = AlignedCFrame
 
-			if InstantTurn and tonumber(NewController.SpeedVar) <= 15 then
-				-- rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
-				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
-                --RootPart.CFrame = RootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean)), 0.05) 
-			else
-
-				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), DeltaTime * 18) 
-				--BG.CFrame = AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean))
-
-			end
-
+			rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame, deltaTimeRender * 5) 
 		else
-			bodyGyro.CFrame = CFrame.new(Origin, Vector3.new(Goal.X, Origin.Y, Goal.Z)) * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean))
-			--BG.CFrame = CFrame.new(Origin, Vector3.new(Goal.X, Origin.Y, Goal.Z)) * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean))
+			-- bodyGyro.CFrame = CFrame.new(Origin, Vector3.new(NewController.MoveVector.X, Origin.Y, NewController.MoveVector.Z)) * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean))
 		end
 
 	end
@@ -1502,23 +1519,25 @@ function NewController:StartHoverboard(config)
 	InputListeners(HoverboardService)
 	
 	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
-	runningConnection = RunService.Heartbeat:Connect(function(dt)
-		Hover(dt, jumpPower)
-		ManageMoveDirection(dt, topSpeed)
-		SetSpeed(dt, acceleration, topSpeed)
-		-- cameraFOV.Update(dt, humanoid, isBoosting, isJumping, isFalling, jumpPower)
+	-- runningConnection = RunService.Heartbeat:Connect(function(dt)
+	-- 	Hover(dt, jumpPower)
+	-- 	ManageMoveDirection(dt, topSpeed)
+	-- 	SetSpeed(dt, acceleration, topSpeed)
+	-- 	-- cameraFOV.Update(dt, humanoid, isBoosting, isJumping, isFalling, jumpPower)
 	
 		
-		if speedGUI and speedLabel and bars then
-			UpdateSpeedGUI(topSpeed)
-		end
-	end)
+	-- 	if speedGUI and speedLabel and bars then
+	-- 		UpdateSpeedGUI(topSpeed)
+	-- 	end
+	-- end)
 
 	runningConnection = RunService.PreRender:Connect(function(deltaTimeRender)
 		CalculateMoveDirection()
-		CalculateSpeed(acceleration, deltaTimeRender)
+		CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
 		ApplyVelocity(deltaTimeRender)
 		ApplyOrientation(deltaTimeRender)
+
+		print("Speed: ", NewController.SpeedVar)
 	end)
 
 end
