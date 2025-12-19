@@ -734,6 +734,10 @@ end
 function NewController:GetGoal(MoveDirection)
 	local Goal
 
+	if MoveDirection.Z ~= 0 then
+		return (Camera.CFrame * CFrame.new(0, 0, 1000 * math.sign(MoveDirection.Z))).Position
+	end
+
 	if MoveDirection.X ~= 0 then
 		return (Camera.CFrame * CFrame.new(1000 * math.sign(MoveDirection.X), 0, 0)).Position
 	end
@@ -792,7 +796,7 @@ local function SetCharacterOrientation(Normal : Vector3, DeltaTime)
 				rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
 			else
 
-				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), DeltaTime * 4) 
+				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), DeltaTime * 16) 
 			end
 
 		else
@@ -939,32 +943,16 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 		InstantTurn = false
 	end
 	
-	if MoveDirection.Z == 0 then
+	if MoveDirection.Magnitude > 0 then
+		NewController.CurrentSpeed = MaxSpeed
+		ForwardLean = FORWARD_LEAN_AMOUNT
+	else
 		NewController.CurrentSpeed = 0
 		ForwardLean = 0
-	elseif MoveDirection.Z > 0 then
-		NewController.CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-	elseif MoveDirection.Z < 0 then
-		NewController.CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-	end
 
-	if MoveDirection.X == 0 then
-		BoardRotation = OgBoardRotation
-		--HorizontalLean = 0
-
-	elseif MoveDirection.X < 0 then
-		NewController.CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-
-	elseif MoveDirection.X > 0 then
-		NewController.CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-
-	elseif MoveDirection.Z == 0 and MoveDirection.X ~= 0 then
-		BoardRotation = OgBoardRotation
-		--HorizontalLean = 0
+		if IsDecelerating then
+			IsDecelerating = false
+		end
 	end
 
 	-- turning rotation
