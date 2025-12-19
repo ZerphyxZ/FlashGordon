@@ -83,6 +83,8 @@ local canDoubleJump = false
 local hasDoubleJump = false
 local AirJumps = 1
 local JumpRequestTime = 0
+local firstJumpTime = 0
+local DOUBLE_JUMP_DELAY = 0.1
 local JUMP_INTERVAL = 1 -- Time between jumps when space is held
 
 -- GRAVITY
@@ -153,7 +155,7 @@ local flashCooldownFiller = flashFrame:WaitForChild("CooldownFill")
 local gravityFrame = gameHUD:WaitForChild("GravityCoil")
 local gravityButton = gravityFrame:WaitForChild("GravityButton")
 
--- 2X Jump UI
+-- Double Jump UI
 local doubleJumpFrame = gameHUD:WaitForChild("DoubleJumpFrame")
 local doubleJumpButton = doubleJumpFrame:WaitForChild("DoubleJumpButton")
 
@@ -810,15 +812,18 @@ local function ExponentialDecay(InitialValue : number, FinalValue : number, Deca
 	return FinalValue + (InitialValue - FinalValue) * math.exp(-DecayRate * TimeDelta)
 end
 
-local function EnableDoubleJump(enable)
-	hasDoubleJump = enable
-end
 local function CheckForDoubleJump()
-	return hasDoubleJump and not CanJump and canDoubleJump and AirJumps > 0 and spaceReleasedAfterJump
+	if not hasDoubleJump then print("Has double jump returning") return false end
+	if not canDoubleJump then print("Can double jump returning") return false end
+	if CanJump then print("Can jump returning") return false end
+	if AirJumps <= 0 then print("Air jumps returning") return false end
+	if not spaceReleasedAfterJump then print("Space released returning") return false end
+	if (tick() - firstJumpTime) < DOUBLE_JUMP_DELAY then print("Time returning") return false end
+	
+	return true
 end
 
 local function ExecuteDoubleJump(jumpPower)
-	print("Double jump triggered in mid-air!")
 	canDoubleJump = false  -- Use up the double jump
 	AirJumps = AirJumps - 1
 	spaceReleasedAfterJump = false  -- Reset for next time
@@ -835,8 +840,6 @@ local function ExecuteDoubleJump(jumpPower)
 	isFalling = false
 	LastJump = true
 	WaitForLanding = true  -- Prevent immediate triple jumps
-	
-	print("Double jump executed! Air jumps left: " .. AirJumps)
 end
 
 local function HandleJump(jumpPower)
@@ -847,18 +850,17 @@ local function HandleJump(jumpPower)
 			Jump = true
 			WaitForLanding = true
 			canDoubleJump = true
-			spaceReleasedAfterJump = false  -- Reset space release tracking
+			--spaceReleasedAfterJump = false  -- Reset space release tracking
 			JumpRequestTime = currentTime
-			print("Continuous jump triggered")
 		end
 	end
 
 	if Jump then
-		print("Jump Initiated")
 		Jump = false
 		LastJump = true
 		isJumping = true
 		isFalling = false
+		firstJumpTime = tick()
 		bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
 		bodyVelocity.Velocity = Vector3.new(
 			bodyVelocity.Velocity.X,
@@ -890,7 +892,7 @@ local function Hover(DeltaTime, JumpPower)
 		CanJump = true
 		WaitForLanding = false
 		canDoubleJump = true
-		spaceReleasedAfterJump = false  -- Reset on ground
+		--spaceReleasedAfterJump = false  -- Reset on ground
 	
 		if not LastJump then
 			bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
@@ -1104,11 +1106,7 @@ local function InputListeners(HoverboardService, JumpPower)
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
 			if Input.KeyCode == Enum.KeyCode.Space then
 				spaceHeld = false
-				-- Track that space was released after jumping
-				if not CanJump then  -- If in mid-air
-					spaceReleasedAfterJump = true
-					print("Space released in mid-air - ready for double jump")
-				end
+				spaceReleasedAfterJump = true
 			end
 		end
 
