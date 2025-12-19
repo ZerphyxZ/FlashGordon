@@ -1180,7 +1180,7 @@ local function ManageMoveDirection(deltaTime, MaxSpeed)
 	SmoothForwardLean = SmoothForwardLean + (ForwardLean - SmoothForwardLean) * deltaTime * SmoothingSpeed
 end
 
-local function CalculateSpeed(Acceleration, Deceleration, MaxSpeed, dt)
+local function CalculateSpeedOld(Acceleration, Deceleration, MaxSpeed, dt)
 	local isMoving = Acceleration > 0
 	local rate = isMoving and Acceleration or Deceleration
 	local minRate = 0.1
@@ -1346,13 +1346,30 @@ function CalculateMoveDirection()
 	local goalMoveVector = (goalCFrame - Camera.CFrame.Position).Unit
 
 
-	MoveVector = goalMoveVector
+	NewController.MoveVector = goalMoveVector
+end
+
+function CalculateSpeed(acceleration, deltaTimeRender)
+	if IsDecelerating then
+		if tonumber(NewController.SpeedVar) > 0 then
+			NewController.SpeedVar = math.max(NewController.SpeedVar - DECELERATION * deltaTimeRender, 0)
+		elseif NewController.SpeedVar == 0 then
+			IsDecelerating = false
+		end
+	else
+		local SpeedDifference = NewController.CurrentSpeed - NewController.SpeedVar
+		if math.abs(SpeedDifference) > Diff then
+			NewController.SpeedVar = NewController.SpeedVar + (SpeedDifference) * acceleration * deltaTimeRender
+		else
+			NewController.SpeedVar = NewController.CurrentSpeed
+		end
+	end
+
+	-- bodyVelocity.Velocity = velocityVector * NewController.SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
+	-- bodyVelocity.Velocity = BoardCF.LookVector * NewController.SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
 end
 
 function ApplyVelocity(acceleration, topSpeed, deltaTimeRender)
-	
-	-- calculate speed
-
 
 	local Origin = Board.Position
 	local Direction = Vector3.new(0, -1, 0)
@@ -1368,6 +1385,8 @@ function ApplyVelocity(acceleration, topSpeed, deltaTimeRender)
 	-- HandleJump(JumpPower)
 	-- CheckGravityCoil()
 
+	local yVelocityComponent = 0
+
 	if RaycastResult then
 		CanJump = true
 		WaitForLanding = true
@@ -1381,7 +1400,8 @@ function ApplyVelocity(acceleration, topSpeed, deltaTimeRender)
 			local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
 			local yoffset = (BoardCF.LookVector * NewController.SpeedVar * Vector3.new(0, 1, 0)).Y
 
-			bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, ExponentialDecay(Board.AssemblyLinearVelocity.Y, VelocityY + yoffset, 20, DeltaTime), bodyVelocity.Velocity.Z)
+			yVelocityComponent = ExponentialDecay(Board.AssemblyLinearVelocity.Y, VelocityY + yoffset, 20, deltaTimeRender)
+			bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, ExponentialDecay(Board.AssemblyLinearVelocity.Y, VelocityY + yoffset, 20, deltaTimeRender), bodyVelocity.Velocity.Z)
 		end
 
 		if not Jump then
@@ -1392,14 +1412,71 @@ function ApplyVelocity(acceleration, topSpeed, deltaTimeRender)
 		CanJump = false
 		if not LastJump then
 			bodyVelocity.MaxForce = Vector3.new(2e9, 0, 2e9)
+			yVelocityComponent = -HoverHeight
 			bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, -HoverHeight, bodyVelocity.Velocity.Z)
 		end
 		LastJump = false
 	end
+
+	local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.SpeedVar, yVelocityComponent, NewController.MoveVector.Z * NewController.SpeedVar)
+	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * 5)
 end
 
-function ApplyOrientation()
+function ApplyOrientation(deltaTimeRender)
 	
+	
+	local BoardCF = Board.CFrame
+	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
+	local Direction = Vector3.new(0, -1, 0)
+	local CheckingDistance = HoverHeight + 4
+
+	local SwaySpeed = 0 --2
+	local MaxSwayAngle = 0 --1.5
+	local TiltAngle = math.sin(tick() * SwaySpeed) * MaxSwayAngle
+	local newNormal
+	local LerpFactor = 0.8
+
+	if NewController.MoveDirection then
+
+		local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
+
+		if ForwardLean ~= 0 then
+			TiltAngle = ForwardLean
+		end
+
+		if RaycastResult then
+			newNormal = RaycastResult.Normal
+		else
+			newNormal = Normal
+		end
+
+		if newNormal then
+
+			local Goal = Vector3.new(NewController.MoveDirection.X, Origin.Y, NewController.MoveDirection.Z)
+			local LookVector = CFrame.new(Origin, Goal).LookVector
+			local RightVector = LookVector:Cross(newNormal).Unit
+			local UpVector = newNormal
+			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector)
+
+            local deltaFactor = 4
+
+			if InstantTurn and tonumber(NewController.SpeedVar) <= 15 then
+				-- rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
+				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
+                --RootPart.CFrame = RootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean)), 0.05) 
+			else
+
+				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), DeltaTime * 18) 
+				--BG.CFrame = AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean))
+
+			end
+
+		else
+			bodyGyro.CFrame = CFrame.new(Origin, Vector3.new(Goal.X, Origin.Y, Goal.Z)) * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean))
+			--BG.CFrame = CFrame.new(Origin, Vector3.new(Goal.X, Origin.Y, Goal.Z)) * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean))
+		end
+
+	end
 end
 
 function ApplyJump()
@@ -1439,7 +1516,9 @@ function NewController:StartHoverboard(config)
 
 	runningConnection = RunService.PreRender:Connect(function(deltaTimeRender)
 		CalculateMoveDirection()
-		ApplyVelocity(acceleration, topSpeed, deltaTimeRender)
+		CalculateSpeed(acceleration, deltaTimeRender)
+		ApplyVelocity(deltaTimeRender)
+		ApplyOrientation(deltaTimeRender)
 	end)
 
 end
