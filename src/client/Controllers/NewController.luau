@@ -61,6 +61,9 @@ local Normal
 local PreviousMoveVector = Vector3.zero
 local HorizontalTiltAngle = 0
 
+local RayParams = RaycastParams.new()
+RayParams.FilterType = Enum.RaycastFilterType.Exclude
+
 -- CONSTANT VALUES
 local VELOCITY_FACTOR = 3 
 local ORIENTATION_FACTOR = 20
@@ -175,10 +178,6 @@ local gravityFrame = gameHUD:WaitForChild("GravityCoil")
 local gravityButton = gravityFrame:WaitForChild("GravityButton")
 
 
-local controls
-local RayParams
-
-
 local function ReturnFormattedFloat(Number: number, DecimalPlaces: number?)
 	DecimalPlaces = DecimalPlaces ~= nil and math.round(DecimalPlaces) or 2
 	local tenFactor = math.pow(10, DecimalPlaces)
@@ -191,7 +190,6 @@ local function ReturnFormattedFloat(Number: number, DecimalPlaces: number?)
 
 	return 0
 end
-
 
 local function GetControls()
 	if controls then
@@ -217,29 +215,7 @@ local function InitBodyMovers()
 	bodyVelocity.Parent = Board
 end
 
-local function CalculateJumpInterval(jumpPower)
 
-	-- Scale linearly: interval = jumpPower / 70
-
-	return jumpPower / 60
-
-end
-
-
-
--- Add function to check if player is moving upward or downward
-
-local function IsMovingDownward()
-
-	if not rootPart or not Board then return false end
-
-	local verticalVelocity = Board.AssemblyLinearVelocity.Y
-
-	-- Negative Y velocity means moving downward (towards negative Y)
-
-	return verticalVelocity < 0
-
-end
 
 ------------------- UPDATE SPEED GUI -----------------------
 local TWEEN_INFO = TweenInfo.new(
@@ -271,24 +247,8 @@ local function AnimateFrame(frame, scale, visible)
 	frame.Visible = visible
 end
 
-function UpdateSpeedGUI(MaxSpeed)
-	--local Speed
-	
-	--print(`Speed: {NewController.SpeedVar} -> {NewController.CurrentSpeed}`)
+function UpdateSpeedGUI()
 	speedLabel.Text = string.format("Speed: %.0f", math.round(bodyVelocity.Velocity.Magnitude) or 0) 
-
-	-- if NewController.SpeedVar then
-	-- 	if tonumber(NewController.SpeedVar) >= 0 then
-	-- 		Speed = NewController.SpeedVar
-	-- 	else
-	-- 		Speed = NewController.SpeedVar * -1
-	-- 	end
-	-- 	if Speed and Speed / MaxSpeed < 1 then
-	-- 		speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0) 
-	-- 	else
-	-- 		speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0)
-	-- 	end
-	-- end
 end
 -----------------------------------------------------------
 
@@ -907,31 +867,6 @@ end
 -----------------------------------------------------------
 
 --------- ------ CONTROLLER METHODS -----------------------
-local function ReturnAngleBetweenVectors(VectorOne, VectorTwo, Plane: "XY" | "XZ" | "YZ" | nil)
-	local PlaneNormal = Vector3.one
-
-	if Plane == "XY" then
-		PlaneNormal = Vector3.new(1, 1, 0)
-	elseif Plane == "XZ" then
-		PlaneNormal = Vector3.new(1, 0, 1) 
-	elseif Plane == "YZ" then
-		PlaneNormal = Vector3.new(0, 1, 1)
-	end 
-
-	VectorOne = VectorOne * PlaneNormal
-	VectorTwo = VectorTwo * PlaneNormal
-
-	if VectorOne.Magnitude == 0 or VectorTwo.Magnitude == 0 then
-		return 0, 0
-	end
-
-	local DotProduct = VectorOne:Dot(VectorTwo) / (VectorOne.Magnitude * VectorTwo.Magnitude)
-	DotProduct = math.clamp(DotProduct, -1, 1)
-	local Angle = math.acos(DotProduct)
-	local AngleInDegrees = math.deg(Angle)
-
-	return Angle, AngleInDegrees
-end
 
 local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector: Vector3, NormalVector: Vector3 ?)
 	NormalVector = NormalVector or Vector3.yAxis
@@ -970,82 +905,12 @@ function NewController:GetGoal(MoveDirection)
 	return (rootPart.CFrame * CFrame.new(0, 0, -1000)).Position
 end
 
-local function IsFacingRightDirection(currentForward, goalForward)
-	local dotProduct = currentForward:Dot(goalForward)
-	local angle = math.acos(dotProduct)
-	local angleInDegrees = math.deg(angle)
-	return angleInDegrees
-end
-
-local function SetCharacterOrientation(Normal : Vector3, DeltaTime)
-	controls = GetControls()
-	local MoveDirection = controls:GetMoveVector()
-	local BoardCF = Board.CFrame
-	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
-	local Direction = Vector3.new(0, -1, 0)
-	local CheckingDistance = HoverHeight + 4
-
-	local SwaySpeed = 0 --2
-	local MaxSwayAngle = 0 --1.5
-	local TiltAngle = math.sin(tick() * SwaySpeed) * MaxSwayAngle
-	local newNormal
-	local LerpFactor = 0.8
-	local Goal = NewController:GetGoal(MoveDirection)
-
-	if Goal then
-
-		local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
-
-		if ForwardLean ~= 0 then
-			TiltAngle = ForwardLean
-		end
-
-		if RaycastResult then
-			newNormal = RaycastResult.Normal
-		else
-			newNormal = Normal
-		end
-
-		if newNormal then
-
-			local Goal = Vector3.new(Goal.X, Origin.Y, Goal.Z)
-			local LookVector = CFrame.new(Origin, Goal).LookVector
-			local RightVector = LookVector:Cross(newNormal).Unit
-			local UpVector = newNormal
-			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector)
-
-            local deltaFactor = 4
-
-			if InstantTurn and tonumber(NewController.SpeedVar) <= 15 then
-
-				local currentForward = rootPart.CFrame.LookVector
-				local goalForward = (NewController:GetGoal(MoveDirection) - Board.Position).unit
-
-				-- rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
-				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), INSTANT_TURN_SMOOTHING) 
-                --RootPart.CFrame = RootPart.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean)), 0.05) 
-			else
-
-				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean)), DeltaTime * 18) 
-				--BG.CFrame = AlignedCFrame * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean))
-
-			end
-
-		else
-			bodyGyro.CFrame = CFrame.new(Origin, Vector3.new(Goal.X, Origin.Y, Goal.Z)) * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean))
-			--BG.CFrame = CFrame.new(Origin, Vector3.new(Goal.X, Origin.Y, Goal.Z)) * CFrame.Angles(math.rad(TiltAngle), math.rad(BoardRotation), math.rad(HorizontalLean))
-		end
-
-	end
-
-end
 
 local function ExponentialDecay(InitialValue : number, FinalValue : number, DecayRate : number, TimeDelta : number)
 	return FinalValue + (InitialValue - FinalValue) * math.exp(-DecayRate * TimeDelta)
 end
 
-local RayParams = RaycastParams.new()
-RayParams.FilterType = Enum.RaycastFilterType.Exclude
+
 RayParams.FilterDescendantsInstances = { Board, character }
 
 
@@ -1100,164 +965,6 @@ local function HandleJump(jumpPower)
 	end
 
 end
-
-
-
-local function Hover(DeltaTime, JumpPower)
-
-	if isDashing then return end
-
-	local Origin = Board.Position
-	local Direction = Vector3.new(0, -1, 0)
-	local CheckingDistance = HoverHeight + 4
-	local PotentialMap = workspace:FindFirstChild("CurrentMap")
-
-	local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
-
-	local SwaySpeed = 2.5
-	local MaxSwayHeight = 0.1
-	local HeightSway = math.sin(tick() * SwaySpeed) * MaxSwayHeight
-	local Normal
-
-	HandleJump(JumpPower)
-	CheckGravityCoil()
-
-	if RaycastResult then
-		CanJump = true
-		WaitForLanding = true
-
-		if not LastJump then
-			bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
-			local HoverPosition = RaycastResult.Position + Vector3.new(0, HoverHeight + HeightSway, 0)
-			local VelocityY = ((HoverPosition - rootPart.Position).Y + HoverHeight) * HoverStiffness
-			Normal = RaycastResult.Normal
-
-			local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
-			local yoffset = (BoardCF.LookVector * NewController.SpeedVar * Vector3.new(0, 1, 0)).Y
-
-			bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, ExponentialDecay(Board.AssemblyLinearVelocity.Y, VelocityY + yoffset, 20, DeltaTime), bodyVelocity.Velocity.Z)
-		end
-
-		if not Jump then
-			AirJumps = 1
-		end
-
-	else
-		CanJump = false
-		if not LastJump then
-			bodyVelocity.MaxForce = Vector3.new(2e9, 0, 2e9)
-			bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, -HoverHeight, bodyVelocity.Velocity.Z)
-		end
-		LastJump = false
-	end
-
-	SetCharacterOrientation(Normal, DeltaTime)
-end
-
-local function ManageMoveDirection(deltaTime, MaxSpeed)
-	controls = GetControls()
-	local MoveDirection = controls:GetMoveVector()
-
-	local currentForward = Board.CFrame.LookVector
-	local goalForward = (NewController:GetGoal(MoveDirection) - Board.Position).unit
-
-	local angleInDegrees = IsFacingRightDirection(currentForward, goalForward)
-	local direction, angle = ReturnDirectionAndTiltAngle(currentForward, goalForward)
-
-    if MoveDirection.X ~= 0 and MoveDirection.Z ~= 0 then
-        direction *= -1
-    end
-
-	if angle >= 130 then
-		IsDecelerating = true
-		if tonumber(NewController.SpeedVar) <= 10 then
-			InstantTurn = true
-		end
-	elseif angle > 50 then
-		NewController.SpeedVar = math.max(0, NewController.SpeedVar - (NewController.SpeedVar * .35 * 10) * deltaTime)
-	elseif angle < 20 then
-		InstantTurn = false
-	end
-	
-	if MoveDirection.Magnitude > 0 then
-		NewController.CurrentSpeed = MaxSpeed
-		ForwardLean = FORWARD_LEAN_AMOUNT
-	else
-		NewController.CurrentSpeed = 0
-		ForwardLean = 0
-		BoardRotation = OgBoardRotation
-
-		if IsDecelerating then
-			IsDecelerating = false
-		end
-	end
-
-	-- turning rotation
-	local zDirection = math.sign(MoveDirection.Z)
-	local xDirection = math.sign(MoveDirection.X)
-
-	if zDirection == 0 then
-		BoardRotation = OgBoardRotation
-	else
-		BoardRotation = OgBoardRotation + (zDirection * xDirection * ROTATION_AMOUNT)
-	end
-
-
-	local maxAngle = 45
-	local leanRatio = math.clamp(angle / maxAngle, -1, 1)
-	HorizontalLean = math.round(HORIZONTAL_LEAN_AMOUNT * leanRatio * direction)
-
-	SmoothBoardRotation = SmoothBoardRotation + (BoardRotation - SmoothBoardRotation) * deltaTime * SmoothingSpeed
-	SmoothHorizontalLean = SmoothHorizontalLean + (HorizontalLean - SmoothHorizontalLean) * math.clamp(deltaTime * HorizontalSmoothingSpeed, 0, 1)
-	SmoothForwardLean = SmoothForwardLean + (ForwardLean - SmoothForwardLean) * deltaTime * SmoothingSpeed
-end
-
-local function CalculateSpeedOld(Acceleration, Deceleration, MaxSpeed, dt)
-	local isMoving = Acceleration > 0
-	local rate = isMoving and Acceleration or Deceleration
-	local minRate = 0.1
-	rate = math.max(rate, minRate)
-	local smooth = 1 - math.exp(-rate * MOVEMENT_SMOOTHNESS * dt)
-	print("Max speed :", MaxSpeed)
-	print("Current speed: ", NewController.CurrentSpeed)
-	NewController.CurrentSpeed = NewController.CurrentSpeed + (MaxSpeed - NewController.CurrentSpeed) * smooth
-	NewController.CurrentSpeed = math.clamp(NewController.CurrentSpeed, 0, MAX_SPEED)
-	
-	if NewController.CurrentSpeed <= 0 then
-		NewController.CurrentSpeed = 0
-	end
-end
-
-local function SetSpeed(dt, acceleration, topSpeed)
-	if IsDecelerating then
-		if tonumber(NewController.SpeedVar) > 0 then
-			NewController.SpeedVar = math.max(NewController.SpeedVar - DECELERATION * dt, 0)
-		elseif NewController.SpeedVar == 0 then
-			IsDecelerating = false
-		end
-	else
-		local SpeedDifference = NewController.CurrentSpeed - NewController.SpeedVar
-		if math.abs(SpeedDifference) > Diff then
-			NewController.SpeedVar = NewController.SpeedVar + (SpeedDifference) * acceleration * dt
-		else
-			NewController.SpeedVar = NewController.CurrentSpeed
-		end
-	end
-
- 
-	local goalDirection = NewController:GetGoal(GetControls():GetMoveVector())
-	local BoardCF = Board.CFrame
-	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
-	local Goal = Vector3.new(goalDirection.X, Origin.Y, goalDirection.Z)
-	local velocityVector = CFrame.new(Origin, Goal).LookVector
-
-	local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
-
-	-- bodyVelocity.Velocity = velocityVector * NewController.SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
-	bodyVelocity.Velocity = BoardCF.LookVector * NewController.SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
-end
-
-
 -----------------------------------------------------------
 
 -- PLAYER LIFECYCLE
