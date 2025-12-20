@@ -1137,7 +1137,7 @@ function CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
 	end
 
 	NewController.CurrentSpeed = newTargetSpeed
-	NewController.SpeedVar = Lerp(NewController.SpeedVar, NewController.CurrentSpeed, acceleration * deltaTimeRender)
+	NewController.SpeedVar = Lerp(NewController.SpeedVar, NewController.CurrentSpeed, acceleration * deltaTimeRender * 2)
 end
 
 function ApplyVelocity(jumpPower, deltaTimeRender)
@@ -1192,7 +1192,7 @@ function ApplyVelocity(jumpPower, deltaTimeRender)
 
 	local direction, tiltAngle = ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1), bodyVelocity.Velocity * Vector3.new(1, 0, 1))
 	HorizontalTiltAngle = - direction * tiltAngle
-	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender)-- * VELOCITY_FACTOR)
+	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * VELOCITY_FACTOR)
 
 	-- print(`Velocity: {ReturnFormattedFloat(bodyVelocity.Velocity.X)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Y)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Z)}`)
 end
