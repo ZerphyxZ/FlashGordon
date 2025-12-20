@@ -59,8 +59,13 @@ local HorizontalSmoothingSpeed = 100
 local MoveVector
 local Normal
 local PreviousMoveVector = Vector3.zero
+local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
+local VELOCITY_FACTOR = 3 
+local ORIENTATION_FACTOR = 20
+local MAX_HORIZONTAL_ROTATION = 15
+
 local HORIZONTAL_LEAN_AMOUNT = 15
 local FORWARD_LEAN_AMOUNT = 0
 local ROTATION_AMOUNT = 30
@@ -78,8 +83,6 @@ local currentTopSpeedRef = { value = MAX_SPEED }
 -- MOVEMENT / SPEED
 local IsDecelerating = false
 local Diff = 0.01
-local acceleration --= Config:GetAttribute("Acceleration") or ACCELERATION
-local topSpeed  = 100--= Config:GetAttribute("MaxSpeed") or MAX_SPEED
 local jumpPower --= Config:GetAttribute("JumpPower") or JUMP_POWER
 
 -- JUMP
@@ -271,7 +274,7 @@ function UpdateSpeedGUI(MaxSpeed)
 	--local Speed
 	
 	--print(`Speed: {NewController.SpeedVar} -> {NewController.CurrentSpeed}`)
-	speedLabel.Text = string.format("Speed: %.0f", math.round(NewController.SpeedVar) or 0) 
+	speedLabel.Text = string.format("Speed: %.0f", math.round(bodyVelocity.Velocity.Magnitude) or 0) 
 
 	-- if NewController.SpeedVar then
 	-- 	if tonumber(NewController.SpeedVar) >= 0 then
@@ -932,6 +935,10 @@ end
 local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector: Vector3, NormalVector: Vector3 ?)
 	NormalVector = NormalVector or Vector3.yAxis
 
+	if ReferenceVector.Magnitude == 0 or OtherVector.Magnitude == 0 then
+		return 1, 0
+	end
+
 	local crossProduct = ReferenceVector:Cross(OtherVector)
 	local direction = crossProduct:Dot(NormalVector) >= 0 and 1 or -1
 
@@ -940,8 +947,11 @@ local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector
 
 	local dotProduct = ReferenceVector:Dot(OtherVector)
 	local normalizedDotProduct = math.clamp( dotProduct / (ReferenceVector.Magnitude * OtherVector.Magnitude), -1, 1)
-	local angle = math.deg(math.acos(normalizedDotProduct))
 
+
+
+	local angle = math.deg(math.acos(normalizedDotProduct))
+	-- warn(dotProduct, "|", normalizedDotProduct, "|", angle)
 
 	return direction, angle
 end
@@ -1345,9 +1355,10 @@ function NewController:SetActiveConfig(boardName)
 		return
 	end
 	self.ActiveConfig = config
-	print("Hoverboard: Active config: ", self.ActiveConfig)
+	
 	isOnHoverboard = true
 	isHoverboardInitialized = true
+
 	self:StartHoverboard(config)
 end
 
@@ -1442,7 +1453,10 @@ function ApplyVelocity(deltaTimeRender)
 	end
 
 	local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.SpeedVar, yVelocityComponent, NewController.MoveVector.Z * NewController.SpeedVar)
-	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender)
+
+	local direction, tiltAngle = ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1), bodyVelocity.Velocity * Vector3.new(1, 0, 1))
+	HorizontalTiltAngle = - direction * tiltAngle
+	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * VELOCITY_FACTOR)
 
 	-- print(`Velocity: {ReturnFormattedFloat(bodyVelocity.Velocity.X)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Y)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Z)}`)
 end
@@ -1485,24 +1499,14 @@ function ApplyOrientation(deltaTimeRender)
 				LookVector = PreviousMoveVector
 			end
 
-			-- local LookVector = NewController.MoveVector -- CFrame.new(Origin, Goal).LookVector
 			local RightVector = LookVector:Cross(newNormal).Unit
 			local UpVector = newNormal
 			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector) 
+			
+			local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION)
 
-			warn("LookVector: ", LookVector, "RightVector: ", RightVector)
 
-			local direction, angle = ReturnDirectionAndTiltAngle(AlignedCFrame.LookVector, rootPart.CFrame.LookVector, UpVector)
-
-			-- bodyGyro.CFrame = AlignedCFrame * CFrame.Angles(0, angle, 0)
-			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame, deltaTimeRender * 10)
-
-			-- rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame, deltaTimeRender) 
-			-- rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame, 1) 
-		else
-			warn("Else")
-			--rootPart.CFrame = CFrame.new(Origin, Vector3.new(NewController.MoveVector.X, Origin.Y, NewController.MoveVector.Z)) 
-			-- bodyGyro.CFrame = CFrame.new(Origin, Vector3.new(NewController.MoveVector.X, Origin.Y, NewController.MoveVector.Z)) 
+			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt)), deltaTimeRender * ORIENTATION_FACTOR)
 		end
 
 	end
@@ -1513,7 +1517,7 @@ function ApplyJump()
 end
 
 function NewController:StartHoverboard(config)
-	print("StartHoverboard called")
+	
 	if runningConnection then
 		runningConnection:Disconnect()
 	end
@@ -1530,18 +1534,6 @@ function NewController:StartHoverboard(config)
 	CloneVFX()
 	InputListeners(HoverboardService)
 	
-	-- print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
-	-- runningConnection = RunService.Heartbeat:Connect(function(dt)
-	-- 	Hover(dt, jumpPower)
-	-- 	ManageMoveDirection(dt, topSpeed)
-	-- 	SetSpeed(dt, acceleration, topSpeed)
-	-- 	-- cameraFOV.Update(dt, humanoid, isBoosting, isJumping, isFalling, jumpPower)
-	
-		
-	-- 	if speedGUI and speedLabel and bars then
-	-- 		UpdateSpeedGUI(topSpeed)
-	-- 	end
-	-- end)
 
 	runningConnection = RunService.PreRender:Connect(function(deltaTimeRender)
 		CalculateMoveDirection()
@@ -1552,8 +1544,6 @@ function NewController:StartHoverboard(config)
 		if speedGUI and speedLabel and bars then
 			UpdateSpeedGUI(topSpeed)
 		end
-		
-		-- print("Speed: ", NewController.SpeedVar)
 	end)
 
 end
