@@ -61,6 +61,9 @@ local Normal
 local PreviousMoveVector = Vector3.zero
 local HorizontalTiltAngle = 0
 
+local canDoubleJump
+local firstJumpTime
+
 local RayParams = RaycastParams.new()
 RayParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -69,6 +72,7 @@ local VELOCITY_FACTOR = 3
 local ORIENTATION_FACTOR = 20
 local MAX_HORIZONTAL_ROTATION = 15
 local FOV_FACTOR = 5
+local MAX_FORCE = 10000
 
 local HORIZONTAL_LEAN_AMOUNT = 15
 local FORWARD_LEAN_AMOUNT = 0
@@ -211,7 +215,7 @@ local function InitBodyMovers()
 	bodyGyro.MaxTorque = Vector3.new(2e9, 2e9, 2e9)
 	bodyGyro.Parent = Board
 
-	bodyVelocity.MaxForce = Vector3.new(2e9, 0, 2e9)
+	bodyVelocity.MaxForce = Vector3.new(MAX_FORCE, 0, MAX_FORCE)
 	bodyVelocity.Parent = Board
 end
 
@@ -1066,6 +1070,34 @@ function NewController:SetActiveConfig(boardName)
 	self:StartHoverboard(config)
 end
 
+local function HandleJump(jumpPower)
+	local currentInterval = jumpPower / 60
+	if spaceHeld then
+		local currentTime = tick()
+		if CanJump and not WaitForLanding and (currentTime - JumpRequestTime >= JUMP_INTERVAL) then
+			Jump = true
+			WaitForLanding = true
+			canDoubleJump = true
+			--spaceReleasedAfterJump = false  -- Reset space release tracking
+			JumpRequestTime = currentTime
+		end
+	end
+
+	if Jump then
+		Jump = false
+		LastJump = true
+		isJumping = true
+		isFalling = false
+		firstJumpTime = tick()
+		bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
+		bodyVelocity.Velocity = Vector3.new(
+			bodyVelocity.Velocity.X,
+			jumpPower,
+			bodyVelocity.Velocity.Z
+		)
+	end
+end
+
 -- move direction will be a unit vector that will be reference of goal direction
 function CalculateMoveDirection()
 	local controls = GetControls()
@@ -1108,7 +1140,7 @@ function CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
 	NewController.SpeedVar = Lerp(NewController.SpeedVar, NewController.CurrentSpeed, acceleration * deltaTimeRender)
 end
 
-function ApplyVelocity(deltaTimeRender)
+function ApplyVelocity(jumpPower, deltaTimeRender)
 
 	local Origin = Board.Position
 	local Direction = Vector3.new(0, -1, 0)
@@ -1120,8 +1152,8 @@ function ApplyVelocity(deltaTimeRender)
 	local MaxSwayHeight = 0.1
 	local HeightSway = math.sin(tick() * SwaySpeed) * MaxSwayHeight
 
-	-- HandleJump(JumpPower)
-	-- CheckGravityCoil()
+	HandleJump(jumpPower)
+	--CheckGravityCoil()
 
 	local yVelocityComponent = 0
 
@@ -1130,7 +1162,7 @@ function ApplyVelocity(deltaTimeRender)
 		WaitForLanding = true
 
 		if not LastJump then
-			bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
+			bodyVelocity.MaxForce = Vector3.new(MAX_FORCE, MAX_FORCE, MAX_FORCE)
 			local HoverPosition = RaycastResult.Position + Vector3.new(0, HoverHeight + HeightSway, 0)
 			local VelocityY = ((HoverPosition - rootPart.Position).Y + HoverHeight) * HoverStiffness
 			Normal = RaycastResult.Normal
@@ -1149,7 +1181,7 @@ function ApplyVelocity(deltaTimeRender)
 	else
 		CanJump = false
 		if not LastJump then
-			bodyVelocity.MaxForce = Vector3.new(2e9, 0, 2e9)
+			bodyVelocity.MaxForce = Vector3.new(MAX_FORCE, 0, MAX_FORCE)
 			yVelocityComponent = -HoverHeight
 			bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, -HoverHeight, bodyVelocity.Velocity.Z)
 		end
@@ -1160,7 +1192,7 @@ function ApplyVelocity(deltaTimeRender)
 
 	local direction, tiltAngle = ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1), bodyVelocity.Velocity * Vector3.new(1, 0, 1))
 	HorizontalTiltAngle = - direction * tiltAngle
-	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * VELOCITY_FACTOR)
+	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender)-- * VELOCITY_FACTOR)
 
 	-- print(`Velocity: {ReturnFormattedFloat(bodyVelocity.Velocity.X)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Y)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Z)}`)
 end
@@ -1218,8 +1250,6 @@ end
 
 function UpdateFOV(topSpeed, deltaTimeRender)
 	local diff = MAX_FOV - MIN_FOV
-	local lerpIndex = deltaTimeRender * FOV_FACTOR
-	warn(lerpIndex)
 	Camera.FieldOfView = Lerp(Camera.FieldOfView, math.clamp(MIN_FOV + diff * (bodyVelocity.Velocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV), deltaTimeRender * FOV_FACTOR)
 end
 
@@ -1249,7 +1279,7 @@ function NewController:StartHoverboard(config)
 	runningConnection = RunService.PreRender:Connect(function(deltaTimeRender)
 		CalculateMoveDirection()
 		CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
-		ApplyVelocity(deltaTimeRender)
+		ApplyVelocity(jumpPower, deltaTimeRender)
 		ApplyOrientation(deltaTimeRender)
 		UpdateFOV(topSpeed, deltaTimeRender)
 
