@@ -65,6 +65,7 @@ local HorizontalTiltAngle = 0
 local VELOCITY_FACTOR = 3 
 local ORIENTATION_FACTOR = 20
 local MAX_HORIZONTAL_ROTATION = 15
+local FOV_FACTOR = 5
 
 local HORIZONTAL_LEAN_AMOUNT = 15
 local FORWARD_LEAN_AMOUNT = 0
@@ -1256,12 +1257,8 @@ local function SetSpeed(dt, acceleration, topSpeed)
 	bodyVelocity.Velocity = BoardCF.LookVector * NewController.SpeedVar * Vector3.new(1, 0, 1) + Vector3.new(0, bodyVelocity.Velocity.Y, 0)
 end
 
-local function UpdateFOV(dt)
-	local diff = MAX_FOV - MIN_FOV
-	Camera.FieldOfView =  math.clamp(math.lerp(Camera.FieldOfView,  MIN_FOV + (diff * (NewController.CurrentSpeed / MAX_SPEED)), dt), MIN_FOV, MAX_FOV)
-end
------------------------------------------------------------
 
+-----------------------------------------------------------
 
 -- PLAYER LIFECYCLE
 
@@ -1512,6 +1509,13 @@ function ApplyOrientation(deltaTimeRender)
 	end
 end
 
+function UpdateFOV(topSpeed, deltaTimeRender)
+	local diff = MAX_FOV - MIN_FOV
+	local lerpIndex = deltaTimeRender * FOV_FACTOR
+	warn(lerpIndex)
+	Camera.FieldOfView = Lerp(Camera.FieldOfView, math.clamp(MIN_FOV + diff * (bodyVelocity.Velocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV), deltaTimeRender * FOV_FACTOR)
+end
+
 function ApplyJump()
 	
 end
@@ -1540,6 +1544,7 @@ function NewController:StartHoverboard(config)
 		CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
 		ApplyVelocity(deltaTimeRender)
 		ApplyOrientation(deltaTimeRender)
+		UpdateFOV(topSpeed, deltaTimeRender)
 
 		if speedGUI and speedLabel and bars then
 			UpdateSpeedGUI(topSpeed)
