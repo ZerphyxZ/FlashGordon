@@ -267,20 +267,23 @@ local function AnimateFrame(frame, scale, visible)
 end
 
 function UpdateSpeedGUI(MaxSpeed)
-	local Speed
+	--local Speed
 	
-	if NewController.SpeedVar then
-		if tonumber(NewController.SpeedVar) >= 0 then
-			Speed = NewController.SpeedVar
-		else
-			Speed = NewController.SpeedVar * -1
-		end
-		if Speed and Speed / MaxSpeed < 1 then
-			speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0) 
-		else
-			speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0)
-		end
-	end
+	print(`Speed: {NewController.SpeedVar} -> {NewController.CurrentSpeed}`)
+	speedLabel.Text = string.format("Speed: %.0f", math.round(NewController.SpeedVar) or 0) 
+
+	-- if NewController.SpeedVar then
+	-- 	if tonumber(NewController.SpeedVar) >= 0 then
+	-- 		Speed = NewController.SpeedVar
+	-- 	else
+	-- 		Speed = NewController.SpeedVar * -1
+	-- 	end
+	-- 	if Speed and Speed / MaxSpeed < 1 then
+	-- 		speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0) 
+	-- 	else
+	-- 		speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0)
+	-- 	end
+	-- end
 end
 -----------------------------------------------------------
 
@@ -1371,28 +1374,19 @@ function CalculateMoveDirection()
 	end
 end
 
+function Lerp(Start, Target, Alpha) :number
+	return Start + (Target - Start) * Alpha
+end
+
 function CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
+	local newTargetSpeed = NewController.MoveVector.Magnitude == 0 and 0 or topSpeed
 
+	if NewController.CurrentSpeed ~= newTargetSpeed and newTargetSpeed == 0 then
+		NewController.SpeedVar = topSpeed * .2
+	end
 
-	NewController.CurrentSpeed = NewController.MoveVector.Magnitude == 0 and 0 or topSpeed
-
-	local SpeedDifference = NewController.CurrentSpeed - NewController.SpeedVar
-	NewController.SpeedVar = math.clamp(math.round(NewController.SpeedVar + (SpeedDifference) * acceleration * deltaTimeRender * 2), 0, topSpeed)
-
-	-- if IsDecelerating then
-	-- 	if tonumber(NewController.SpeedVar) > 0 then
-	-- 		NewController.SpeedVar = math.max(NewController.SpeedVar - DECELERATION * deltaTimeRender, 0)
-	-- 	elseif NewController.SpeedVar == 0 then
-	-- 		IsDecelerating = false
-	-- 	end
-	-- else
-	-- 	local SpeedDifference = NewController.CurrentSpeed - NewController.SpeedVar
-	-- 	if math.abs(SpeedDifference) > Diff then
-	-- 		NewController.SpeedVar = NewController.SpeedVar + (SpeedDifference) * acceleration * deltaTimeRender
-	-- 	else
-	-- 		NewController.SpeedVar = NewController.CurrentSpeed
-	-- 	end
-	-- end
+	NewController.CurrentSpeed = newTargetSpeed
+	NewController.SpeedVar = Lerp(NewController.SpeedVar, NewController.CurrentSpeed, acceleration * deltaTimeRender)
 end
 
 function ApplyVelocity(deltaTimeRender)
@@ -1446,7 +1440,7 @@ function ApplyVelocity(deltaTimeRender)
 	local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.SpeedVar, yVelocityComponent, NewController.MoveVector.Z * NewController.SpeedVar)
 	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender)
 
-	print(`Velocity: {ReturnFormattedFloat(bodyVelocity.Velocity.X)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Y)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Z)}`)
+	-- print(`Velocity: {ReturnFormattedFloat(bodyVelocity.Velocity.X)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Y)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Z)}`)
 end
 
 function ApplyOrientation(deltaTimeRender)
@@ -1518,7 +1512,7 @@ function NewController:StartHoverboard(config)
 	CloneVFX()
 	InputListeners(HoverboardService)
 	
-	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
+	-- print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
 	-- runningConnection = RunService.Heartbeat:Connect(function(dt)
 	-- 	Hover(dt, jumpPower)
 	-- 	ManageMoveDirection(dt, topSpeed)
@@ -1537,7 +1531,11 @@ function NewController:StartHoverboard(config)
 		ApplyVelocity(deltaTimeRender)
 		ApplyOrientation(deltaTimeRender)
 
-		print("Speed: ", NewController.SpeedVar)
+		if speedGUI and speedLabel and bars then
+			UpdateSpeedGUI(topSpeed)
+		end
+		
+		-- print("Speed: ", NewController.SpeedVar)
 	end)
 
 end
