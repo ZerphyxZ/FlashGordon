@@ -58,6 +58,7 @@ local HorizontalSmoothingSpeed = 100
 -- Global variables for controller
 local MoveVector
 local Normal
+local PreviousMoveVector = Vector3.zero
 
 -- CONSTANT VALUES
 local HORIZONTAL_LEAN_AMOUNT = 15
@@ -269,7 +270,7 @@ end
 function UpdateSpeedGUI(MaxSpeed)
 	--local Speed
 	
-	print(`Speed: {NewController.SpeedVar} -> {NewController.CurrentSpeed}`)
+	--print(`Speed: {NewController.SpeedVar} -> {NewController.CurrentSpeed}`)
 	speedLabel.Text = string.format("Speed: %.0f", math.round(NewController.SpeedVar) or 0) 
 
 	-- if NewController.SpeedVar then
@@ -1368,6 +1369,9 @@ function CalculateMoveDirection()
 		local goalCFrame = Camera.CFrame * CFrame.new(inputVector.X * factor, 0, inputVector.Z * factor)
 		local goalMoveVector = (goalCFrame.Position - Camera.CFrame.Position)
 
+		if NewController.MoveVector ~= Vector3.zero then
+			PreviousMoveVector = NewController.MoveVector
+		end
 		NewController.MoveVector = (goalMoveVector * Vector3.new(1, 0, 1)).Unit
 	else
 		NewController.MoveVector = Vector3.zero
@@ -1472,19 +1476,30 @@ function ApplyOrientation(deltaTimeRender)
 		end
 
 		if newNormal then
+			local LookVector = rootPart.CFrame.LookVector
 
-			local Goal = Vector3.new(NewController.MoveVector.X, Origin.Y, NewController.MoveVector.Z)
-			local LookVector = CFrame.new(Origin, Goal).LookVector
-			local RightVector = newNormal:Cross(LookVector).Unit
+			if NewController.MoveVector ~= Vector3.zero then
+				LookVector = NewController.MoveVector
+			elseif PreviousMoveVector ~= Vector3.zero then
+				LookVector = PreviousMoveVector
+			end
+
+			-- local LookVector = NewController.MoveVector -- CFrame.new(Origin, Goal).LookVector
+			local RightVector = LookVector:Cross(newNormal).Unit
 			local UpVector = newNormal
 			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector) 
 
-			-- bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(0, 0, 0), 1) 
-			-- bodyGyro.CFrame = AlignedCFrame
+			local direction, angle = ReturnDirectionAndTiltAngle(AlignedCFrame.LookVector, rootPart.CFrame.LookVector, UpVector)
 
-			rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame, deltaTimeRender * 5) 
+			-- bodyGyro.CFrame = AlignedCFrame * CFrame.Angles(0, angle, 0)
+			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame, deltaTimeRender * 10)
+
+			-- rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame, deltaTimeRender) 
+			-- rootPart.CFrame = rootPart.CFrame:Lerp(AlignedCFrame, 1) 
 		else
-			-- bodyGyro.CFrame = CFrame.new(Origin, Vector3.new(NewController.MoveVector.X, Origin.Y, NewController.MoveVector.Z)) * CFrame.Angles(math.rad(TiltAngle), math.rad(SmoothBoardRotation), math.rad(SmoothHorizontalLean))
+			warn("Else")
+			--rootPart.CFrame = CFrame.new(Origin, Vector3.new(NewController.MoveVector.X, Origin.Y, NewController.MoveVector.Z)) 
+			-- bodyGyro.CFrame = CFrame.new(Origin, Vector3.new(NewController.MoveVector.X, Origin.Y, NewController.MoveVector.Z)) 
 		end
 
 	end
