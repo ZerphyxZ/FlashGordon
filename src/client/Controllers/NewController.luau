@@ -1476,10 +1476,11 @@ function ApplyOrientation(deltaTimeRender)
 		end
 
 		if newNormal then
+			local velocity = bodyVelocity.Velocity * Vector3.new(1, 0, 1)
 			local LookVector = rootPart.CFrame.LookVector
 
-			if NewController.MoveVector ~= Vector3.zero then
-				LookVector = NewController.MoveVector
+			if velocity ~= Vector3.zero then
+				LookVector = velocity.Unit
 			elseif PreviousMoveVector ~= Vector3.zero then
 				LookVector = PreviousMoveVector
 			end
@@ -1488,6 +1489,8 @@ function ApplyOrientation(deltaTimeRender)
 			local RightVector = LookVector:Cross(newNormal).Unit
 			local UpVector = newNormal
 			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector) 
+
+			warn("LookVector: ", LookVector, "RightVector: ", RightVector)
 
 			local direction, angle = ReturnDirectionAndTiltAngle(AlignedCFrame.LookVector, rootPart.CFrame.LookVector, UpVector)
 
