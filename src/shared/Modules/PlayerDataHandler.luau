@@ -345,6 +345,16 @@ function PlayerDataHandler:ResetProfileToTemplate(player: Player)
 	return true
 end
 
+-- === Gravity Coil ================================================
+
+function PlayerDataHandler:PlayerHasGravityCoil(player)
+	local data = self:GetData(player)
+	if not data then return false end
+	
+	-- Adjust this based on how you track purchased items
+	return data.GravityCoilOwned == true or false
+end
+
 -- === Hoverboard storage ================================================
 
 function PlayerDataHandler:GetEquippedHoverboard(player: Player): string
