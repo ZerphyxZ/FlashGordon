@@ -555,25 +555,6 @@ function ApplyDash(currentSpeed, hoverboard)
 
 	moveDir = moveDir.Unit
 
-	-- -- derive move direction from existing movement system
-	-- local controls = GetControls()
-	-- local moveVector = controls:GetMoveVector()
-	-- if moveVector.Magnitude == 0 then
-	-- 	return
-	-- end
-
-	-- local goalPos = NewController:GetGoal(moveVector)
-	-- if not goalPos then
-	-- 	return
-	-- end
-	-- -- world-space dash direction (XZ only)
-	-- local moveDir = (goalPos - hoverboard.Position)
-	-- moveDir = Vector3.new(moveDir.X, 0, moveDir.Z)
-	
-	-- if moveDir.Magnitude == 0 then
-	-- 	return
-	-- end
-
 	print("Dash applied.")
 	dashReady = false
 	isDashing = true
