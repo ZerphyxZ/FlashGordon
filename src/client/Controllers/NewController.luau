@@ -26,7 +26,7 @@ local HoverboardService
 
 -- MOVEMENT / HOVERING
 local HoverStiffness = 5
-local HoverHeight = 2
+local HoverHeight = 3
 
 -- MOVEMENT / ORIENTATION
 local OgBoardRotation
