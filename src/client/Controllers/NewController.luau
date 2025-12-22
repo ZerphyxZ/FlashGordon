@@ -25,8 +25,8 @@ local DashTrailModule = ReplicatedStorage:WaitForChild("VFX"):WaitForChild("Hove
 local HoverboardService
 
 -- MOVEMENT / HOVERING
-local HoverStiffness = 10
-local HoverHeight = 3.5
+local HoverStiffness = 5
+local HoverHeight = 2
 
 -- MOVEMENT / ORIENTATION
 local OgBoardRotation
@@ -732,15 +732,13 @@ local function ExecuteAirJump(jumpPower)
 	flyEnergy = math.max(0, flyEnergy - FLY_ENERGY_DEPLETION_RATE)
 	lastAirJumpTime = tick()
 	LastJump = true
-	isJumping = true
-	isFalling = false
 	
 	--print("Executing air jump. Remaining jumps: ", AirJumps, " Remaining energy: ", flyEnergy)
 	--energyLabel.Text = "Energy: " .. flyEnergy
 	bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
 	bodyVelocity.Velocity = Vector3.new(
 		bodyVelocity.Velocity.X,
-		jumpPower + 20,
+		jumpPower * .75,
 		bodyVelocity.Velocity.Z
 	)
 end
@@ -1046,8 +1044,6 @@ local function ResetStates()
 	bodyGyro = nil
 	bodyPosition = nil
 	controls = nil
-	Config = nil
-	LastMovedirection = nil
 	OgBoardRotation = 0
 	BoardRotation = 0
 	SmoothBoardRotation = 0
@@ -1055,30 +1051,23 @@ local function ResetStates()
 	topSpeed = 0
 	jumpPower = 0
 	ForwardLean = 0
-	HorizontalLean = 0
-	SmoothForwardLean = 0
-	SmoothHorizontalLean = 0
 	NewController.SpeedVar = 0
 	NewController.CurrentSpeed = 0
 	AirJumps = 1
 	flyEnergy = MAX_FLY_ENERGY
-	IsDecelerating = false
 	Jump = false
 	LastJump = false
 	CanJump = false
 	isHoverboardInitialized = false
 	isOnHoverboard = false
 	CameraHeld = false
-	InstantTurn = false
 	boostReady = true
-	isBoosting = false
 	dashReady = true
 	isDashing = false
-	isJumping = false
-	isFalling = false
 	spaceHeld = false
 	hasGravityCoil = false
 	hasDoubleJump = false
+	hasFly = false
 	JumpRequestTime = 0
 	JUMP_INTERVAL = 0.8
 	NewController:SetGravityCoil(false)
