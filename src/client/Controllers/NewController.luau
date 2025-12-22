@@ -71,8 +71,9 @@ RayParams.FilterType = Enum.RaycastFilterType.Exclude
 local VELOCITY_FACTOR = 3 
 local ORIENTATION_FACTOR = 20
 local MAX_HORIZONTAL_ROTATION = 15
-local FOV_FACTOR = 5
+local FOV_FACTOR = 1
 local MAX_FORCE = 10000
+local FLOATING_ERROR_MARGIN = 0.001
 
 local HORIZONTAL_LEAN_AMOUNT = 15
 local FORWARD_LEAN_AMOUNT = 0
@@ -136,7 +137,7 @@ local TWEEN_EASING = Enum.EasingStyle.Quad
 local TWEEN_DIR = Enum.EasingDirection.Out
 
 local MIN_FOV = 70
-local MAX_FOV = 100
+local MAX_FOV = 85
 
 local speedBars = {}
 
@@ -1192,6 +1193,7 @@ function ApplyVelocity(jumpPower, deltaTimeRender)
 
 	local direction, tiltAngle = ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1), bodyVelocity.Velocity * Vector3.new(1, 0, 1))
 	HorizontalTiltAngle = - direction * tiltAngle
+	-- print(deltaTimeRender * VELOCITY_FACTOR)
 	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * VELOCITY_FACTOR)
 
 	-- print(`Velocity: {ReturnFormattedFloat(bodyVelocity.Velocity.X)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Y)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Z)}`)
@@ -1222,17 +1224,15 @@ function ApplyOrientation(deltaTimeRender)
 		if RaycastResult then
 			newNormal = RaycastResult.Normal
 		else
-			newNormal = Normal
+			newNormal = Vector3.yAxis
 		end
 
 		if newNormal then
 			local velocity = bodyVelocity.Velocity * Vector3.new(1, 0, 1)
 			local LookVector = rootPart.CFrame.LookVector
 
-			if velocity ~= Vector3.zero then
+			if velocity.Magnitude >= FLOATING_ERROR_MARGIN then
 				LookVector = velocity.Unit
-			elseif PreviousMoveVector ~= Vector3.zero then
-				LookVector = PreviousMoveVector
 			end
 
 			local RightVector = LookVector:Cross(newNormal).Unit
@@ -1241,8 +1241,8 @@ function ApplyOrientation(deltaTimeRender)
 			
 			local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION)
 
-
 			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt)), deltaTimeRender * ORIENTATION_FACTOR)
+			-- bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame, deltaTimeRender * ORIENTATION_FACTOR)
 		end
 
 	end
@@ -1250,7 +1250,8 @@ end
 
 function UpdateFOV(topSpeed, deltaTimeRender)
 	local diff = MAX_FOV - MIN_FOV
-	Camera.FieldOfView = Lerp(Camera.FieldOfView, math.clamp(MIN_FOV + diff * (bodyVelocity.Velocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV), deltaTimeRender * FOV_FACTOR)
+	Camera.FieldOfView = Lerp(Camera.FieldOfView, math.clamp(MIN_FOV + diff * (bodyVelocity.Velocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV), .5)
+	-- Camera.FieldOfView = Lerp(Camera.FieldOfView, math.clamp(MIN_FOV + diff * (bodyVelocity.Velocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV), deltaTimeRender * FOV_FACTOR)
 end
 
 function ApplyJump()
