@@ -49,7 +49,7 @@ local FLOATING_ERROR_MARGIN = 0.01
 local JUMP_POWER = 70
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
-
+local DOWNHILL_SLOPE_ANGLE = 45
 
 -- MOVEMENT / SPEED
 local IsDecelerating = false
@@ -745,6 +745,18 @@ end
 
 ---------------- CONTROLLER METHODS -----------------------
 
+local function ReturnAngleBetweenVectors(VectorA: Vector3, VectorB: Vector3): number
+
+	if VectorA.Magnitude <= FLOATING_ERROR_MARGIN or VectorB.Magnitude <= FLOATING_ERROR_MARGIN then
+		return 0
+	end
+
+	local dotProduct = VectorA:Dot(VectorB)
+	local normalizedDotProduct = math.clamp( dotProduct / (VectorA.Magnitude * VectorB.Magnitude), -1, 1)
+
+	return math.deg(math.acos(normalizedDotProduct))
+end
+
 local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector: Vector3, NormalVector: Vector3 ?)
 	NormalVector = NormalVector or Vector3.yAxis
 
@@ -918,12 +930,39 @@ function CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
 	-- end
 end
 
+function ReturnDownhillVector(SurfaceNormal: Vector3?): Vector3
+	if SurfaceNormal then
+		local horizontalVector = SurfaceNormal:Cross(Vector3.yAxis)
+		local downhillVector = SurfaceNormal:Cross(horizontalVector)
+
+		if downhillVector.Magnitude >= FLOATING_ERROR_MARGIN then
+			return downhillVector.Unit
+		end
+	end
+
+	return Vector3.zero
+end
+
 function ApplyVelocity(jumpPower, deltaTimeRender)
 	local Origin = Board.Position
 	local Direction = Vector3.new(0, -1, 0)
 	local CheckingDistance = HoverHeight + 4
+	local Size = Board.Size.Z / 2
+	
+	local frontRaycast: RaycastResult = workspace:Raycast(Origin + Board.CFrame.LookVector * 3.5, Direction * CheckingDistance, RayParams)
+	local middleRaycast: RaycastResult  = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
+	local backRaycast: RaycastResult = workspace:Raycast(Origin - Board.CFrame.LookVector * 3.5, Direction * CheckingDistance, RayParams)
+	
+	local RaycastResult = middleRaycast
 
-	local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
+	if frontRaycast and (not RaycastResult or frontRaycast.Distance < RaycastResult.Distance) then
+		RaycastResult = frontRaycast
+	end
+
+	if backRaycast and (not RaycastResult or backRaycast.Distance < RaycastResult.Distance) then
+		RaycastResult = backRaycast
+	end
+
 
 	local SwaySpeed = 2.5
 	local MaxSwayHeight = 0.1
@@ -982,7 +1021,17 @@ function ApplyVelocity(jumpPower, deltaTimeRender)
 		velocityFactor = CanJump and ACCELERATION_FACTOR * 2 or DECELERATION_FACTOR
 	end
 	
-	local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.CurrentSpeed, yVelocityComponent, NewController.MoveVector.Z * NewController.CurrentSpeed)
+	local downhillVector = Vector3.zero
+	local downhillAngle = 0
+
+	if RaycastResult then
+		downhillVector = ReturnDownhillVector(RaycastResult.Normal)
+		downhillAngle = ReturnAngleBetweenVectors(RaycastResult.Normal, Vector3.yAxis)
+	end
+
+	downhillAngle = math.clamp(math.abs(downhillAngle), 0, 45)
+
+	local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.CurrentSpeed, yVelocityComponent, NewController.MoveVector.Z * NewController.CurrentSpeed) + downhillVector * (workspace.Gravity / 10) * (downhillAngle / DOWNHILL_SLOPE_ANGLE)
 	local direction, tiltAngle = ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1), bodyVelocity.Velocity * Vector3.new(1, 0, 1))
 	HorizontalTiltAngle = - direction * tiltAngle
 	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * velocityFactor)
