@@ -39,7 +39,8 @@ local PreviousMoveVector = Vector3.zero
 local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
-local VELOCITY_FACTOR = 5 
+local ACCELERATION_FACTOR = 2 
+local DECELERATION_FACTOR = .5
 local ORIENTATION_FACTOR = 30
 local MAX_HORIZONTAL_ROTATION = 15
 local FOV_FACTOR = 1
@@ -48,6 +49,7 @@ local FLOATING_ERROR_MARGIN = 0.01
 local JUMP_POWER = 70
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
+
 
 -- MOVEMENT / SPEED
 local IsDecelerating = false
@@ -134,7 +136,7 @@ local mainGUI = playerGUI:WaitForChild("MainGui")
 local speedGUI = gameHUD:WaitForChild("SpeedGUI")
 local speedLabel = speedGUI:WaitForChild("SpeedVal")
 --local energyLabel = speedGUI:WaitForChild("Energy")
-local bars = speedGUI:WaitForChild("Bars")
+local speedFrame = speedGUI:WaitForChild("Frame")
 
 -- BOOST UI
 local boostFrame = gameHUD:WaitForChild("BoostFrame")
@@ -229,20 +231,16 @@ local function AnimateFrame(frame, scale, visible)
 end
 
 function UpdateSpeedGUI(MaxSpeed)
-	local Speed
-	
-	if NewController.SpeedVar then
-		if tonumber(NewController.SpeedVar) >= 0 then
-			Speed = NewController.SpeedVar
-		else
-			Speed = NewController.SpeedVar * -1
-		end
-		if Speed and Speed / MaxSpeed < 1 then
-			speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0) 
-		else
-			speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0)
-		end
+	local value = bodyVelocity.Velocity.Magnitude or 0
+	speedLabel.Text = string.format("Speed: %.0f", math.round(value))
+
+	local xScale = 1
+	if topSpeed then
+		xScale = 1 - (value / topSpeed)
 	end
+
+	xScale = math.clamp(xScale, 0, 1)
+	speedFrame.Size = UDim2.fromScale(xScale, speedFrame.Size.Y.Scale)
 end
 -----------------------------------------------------------
 
@@ -901,12 +899,23 @@ end
 function CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
 	local newTargetSpeed = NewController.MoveVector.Magnitude == 0 and 0 or topSpeed
 
-	if NewController.CurrentSpeed ~= newTargetSpeed and newTargetSpeed == 0 then
-		NewController.SpeedVar = topSpeed * .2
+	if NewController.CurrentSpeed ~= newTargetSpeed then
+		IsDecelerating = newTargetSpeed == 0
 	end
 
+
+	-- acceleration = IsDecelerating and .000001 or acceleration
+	-- local factor = IsDecelerating and .000001 or 2
+	-- warn(acceleration)
 	NewController.CurrentSpeed = newTargetSpeed
-	NewController.SpeedVar = Lerp(NewController.SpeedVar, NewController.CurrentSpeed, acceleration * deltaTimeRender * 2)
+
+	-- if IsDecelerating then
+	-- 	NewController.SpeedVar = math.max(0, NewController.SpeedVar - (0 * deltaTimeRender))
+	-- 	-- warn("V", NewController.SpeedVar)
+	-- else
+	-- 	-- warn("^")
+	-- 	NewController.SpeedVar = Lerp(NewController.SpeedVar, NewController.CurrentSpeed, acceleration * deltaTimeRender * 2)
+	-- end
 end
 
 function ApplyVelocity(jumpPower, deltaTimeRender)
@@ -968,14 +977,15 @@ function ApplyVelocity(jumpPower, deltaTimeRender)
 		LastJump = false
 	end
 
-	local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.SpeedVar, yVelocityComponent, NewController.MoveVector.Z * NewController.SpeedVar)
-
+	local velocityFactor = ACCELERATION_FACTOR
+	if IsDecelerating then
+		velocityFactor = CanJump and ACCELERATION_FACTOR * 2 or DECELERATION_FACTOR
+	end
+	
+	local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.CurrentSpeed, yVelocityComponent, NewController.MoveVector.Z * NewController.CurrentSpeed)
 	local direction, tiltAngle = ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1), bodyVelocity.Velocity * Vector3.new(1, 0, 1))
 	HorizontalTiltAngle = - direction * tiltAngle
-	-- print(deltaTimeRender * VELOCITY_FACTOR)
-	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * VELOCITY_FACTOR)
-
-	-- print(`Velocity: {ReturnFormattedFloat(bodyVelocity.Velocity.X)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Y)}, {ReturnFormattedFloat(bodyVelocity.Velocity.Z)}`)
+	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * velocityFactor)
 end
 
 function ApplyOrientation(deltaTimeRender)
@@ -1221,7 +1231,7 @@ function NewController:StartHoverboard(config, HoverboardService)
 	topSpeed = config.TopSpeed or MAX_SPEED
 	jumpPower = config.JumpPower or JUMP_POWER
 	
-	LoadSpeedGUI()
+	-- LoadSpeedGUI()
 	RefreshBoostGUI()
 	RefreshFlashGUI()
 	CloneVFX()
@@ -1241,7 +1251,7 @@ function NewController:StartHoverboard(config, HoverboardService)
 		-- ManageMoveDirection(dt, topSpeed)
 		-- cameraFOV.Update(dt, humanoid, isBoosting, isDashing, isJumping, isFalling, jumpPower)
 		
-		if speedGUI and speedLabel and bars then
+		if speedGUI and speedLabel and speedFrame then
 			UpdateSpeedGUI(topSpeed)
 		end
 	end)
