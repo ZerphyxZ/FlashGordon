@@ -229,20 +229,7 @@ local function AnimateFrame(frame, scale, visible)
 end
 
 function UpdateSpeedGUI(MaxSpeed)
-	local Speed
-	
-	if NewController.SpeedVar then
-		if tonumber(NewController.SpeedVar) >= 0 then
-			Speed = NewController.SpeedVar
-		else
-			Speed = NewController.SpeedVar * -1
-		end
-		if Speed and Speed / MaxSpeed < 1 then
-			speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0) 
-		else
-			speedLabel.Text = string.format("Speed: %.0f", math.round(Speed) or 0)
-		end
-	end
+		speedLabel.Text = string.format("Speed: %.0f", math.round(bodyVelocity.Velocity.Magnitude) or 0)
 end
 -----------------------------------------------------------
 
@@ -901,10 +888,16 @@ end
 function CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
 	local newTargetSpeed = NewController.MoveVector.Magnitude == 0 and 0 or topSpeed
 
-	if NewController.CurrentSpeed ~= newTargetSpeed and newTargetSpeed == 0 then
-		NewController.SpeedVar = topSpeed * .2
+	if NewController.CurrentSpeed ~= newTargetSpeed then
+		IsDecelerating = newTargetSpeed == 0
+		if newTargetSpeed == 0 then
+			NewController.SpeedVar = topSpeed * .2
+		end
 	end
 
+
+	acceleration = IsDecelerating and .01 or acceleration
+	
 	NewController.CurrentSpeed = newTargetSpeed
 	NewController.SpeedVar = Lerp(NewController.SpeedVar, NewController.CurrentSpeed, acceleration * deltaTimeRender * 2)
 end
