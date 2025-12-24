@@ -50,6 +50,7 @@ local JUMP_POWER = 70
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
 local DOWNHILL_SLOPE_ANGLE = 45
+local RAY_PREFERENCE_DISTANCE = 2
 
 -- MOVEMENT / SPEED
 local IsDecelerating = false
@@ -776,7 +777,6 @@ local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector
 
 
 	local angle = math.deg(math.acos(normalizedDotProduct))
-	-- warn(dotProduct, "|", normalizedDotProduct, "|", angle)
 
 	return direction, angle
 end
@@ -915,19 +915,7 @@ function CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
 		IsDecelerating = newTargetSpeed == 0
 	end
 
-
-	-- acceleration = IsDecelerating and .000001 or acceleration
-	-- local factor = IsDecelerating and .000001 or 2
-	-- warn(acceleration)
 	NewController.CurrentSpeed = newTargetSpeed
-
-	-- if IsDecelerating then
-	-- 	NewController.SpeedVar = math.max(0, NewController.SpeedVar - (0 * deltaTimeRender))
-	-- 	-- warn("V", NewController.SpeedVar)
-	-- else
-	-- 	-- warn("^")
-	-- 	NewController.SpeedVar = Lerp(NewController.SpeedVar, NewController.CurrentSpeed, acceleration * deltaTimeRender * 2)
-	-- end
 end
 
 function ReturnDownhillVector(SurfaceNormal: Vector3?): Vector3
@@ -955,13 +943,14 @@ function ApplyVelocity(jumpPower, deltaTimeRender)
 	
 	local RaycastResult = middleRaycast
 
-	if frontRaycast and (not RaycastResult or frontRaycast.Distance < RaycastResult.Distance) then
-		RaycastResult = frontRaycast
-	end
-
-	if backRaycast and (not RaycastResult or backRaycast.Distance < RaycastResult.Distance) then
+	if RaycastResult == nil or (backRaycast and backRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE) then
 		RaycastResult = backRaycast
 	end
+
+	if RaycastResult == nil or (frontRaycast and frontRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE) then
+		RaycastResult = frontRaycast
+	end
+	
 
 
 	local SwaySpeed = 2.5
@@ -1069,6 +1058,8 @@ function ApplyOrientation(deltaTimeRender)
 
 			if velocity.Magnitude >= FLOATING_ERROR_MARGIN then
 				LookVector = velocity.Unit
+			else
+				warn("...............")
 			end
 
 			local RightVector = LookVector:Cross(newNormal).Unit
