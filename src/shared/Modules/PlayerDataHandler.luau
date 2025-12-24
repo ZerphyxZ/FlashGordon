@@ -5,10 +5,10 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerStorage: ServerStorage = game:GetService("ServerStorage")
-local ServerScriptService: ServerScriptService = game:GetService("ServerScriptService")
+local ServerStorage = game:GetService("ServerStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
-local ServerPackages = ServerScriptService:WaitForChild("ServerPackages")
+local ServerPackages = ServerScriptService:WaitForChild("ServerPackages", 10)
 
 local PlayerDataTemplate = require(script.Parent:WaitForChild("PlayerDataTemplate"))
 local ProfileStoreModule = require(ServerPackages:WaitForChild("Profilestore"))
@@ -359,9 +359,20 @@ end
 
 function PlayerDataHandler:GetEquippedHoverboard(player: Player): string
 	local profile = Profiles[player]
-	if profile and profile:IsActive() then
+	if not profile then
+		profile = Profiles[player]
+		if not profile then
+			warn("[PlayerDataHandler] Profile not loaded yet for", player.Name)
+			return "Hoverboard1"
+		end
+	end
+	print("Profile: ", profile)
+	if profile:IsActive() then
+		print("Profile is active")
+		print("Getting equipped hoverboard: ", profile.Data.EquippedHoverboard)
 		return profile.Data.EquippedHoverboard or "Hoverboard1"
 	end
+	print("Returning default hoverboard")
 	return "Hoverboard1"
 end
 
@@ -371,9 +382,10 @@ function PlayerDataHandler:SetEquippedHoverboard(player: Player, boardName: stri
 		-- Verify player owns this hoverboard before equipping
 		if self:PlayerOwnsHoverboard(player, boardName) then
 			profile.Data.EquippedHoverboard = boardName
-			pcall(function()
-				profile:Save()
-			end)
+			profile:Save()
+			-- pcall(function()
+				
+			-- end)
 			print("[PlayerDataHandler] Hoverboard equipped for", player.Name, "→", boardName)
 			return true
 		else
@@ -382,15 +394,6 @@ function PlayerDataHandler:SetEquippedHoverboard(player: Player, boardName: stri
 		end
 	end
 	return false
-
-	-- local profile = Profiles[player]
-	-- if profile and profile:IsActive() then
-	-- 	profile.Data.HoverboardName = boardName
-	-- 	pcall(function()
-	-- 		profile:Save()
-	-- 	end)
-	-- 	print("[PlayerDataHandler] Hoverboard saved for", player.Name, "→", boardName)
-	-- end
 end
 
 function PlayerDataHandler:PlayerOwnsHoverboard(player: Player, boardName: string): boolean
@@ -428,7 +431,6 @@ function PlayerDataHandler:AddHoverboardToInventory(player: Player, boardName: s
 
 		-- Add to owned hoverboards
 		table.insert(profile.Data.OwnedHoverboards, boardName)
-
 		pcall(function()
 			profile:Save()
 		end)
@@ -478,6 +480,7 @@ end
 function PlayerDataHandler:GetTotalHoverboards(): number
 	return PlayerDataTemplate.TotalHoverboards or 20
 end
+--------------------------------------------------------------------------------- 
 
 --[Daily Reward Helpers]
 function PlayerDataHandler:SetLastDailyClaim(player: Player)
