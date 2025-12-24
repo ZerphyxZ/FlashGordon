@@ -1165,24 +1165,6 @@ local function InputListeners(HoverboardService, JumpPower)
 				ExecuteDoubleJump(jumpPower)
 			end
 		end
-
-		-- if CanJump then
-		-- 	Jump = true
-		-- elseif hasFly and flyEnergy > 0 then
-			
-		-- end
-
-		-- if CheckForDoubleJump() and not hasFly then
-		-- 	ExecuteDoubleJump(JumpPower)
-		-- elseif hasFly and flyEnergy > 0 and AirJumps > 1 then
-		-- 	print("Here")
-		-- 	ExecuteAirJump(JumpPower)
-		-- else
-		-- 	Jump = true
-		-- end
-		-- if not LastJump then
-		-- 	AirJumps -= 1
-		-- end
 	end)
 	UserInputService.InputEnded:Connect(function(Input : InputObject, GameProcessed : boolean)
 		if GameProcessed then return end
@@ -1190,7 +1172,6 @@ local function InputListeners(HoverboardService, JumpPower)
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
 			if Input.KeyCode == Enum.KeyCode.Space then
 				spaceHeld = false
-				isFlying = false
 				spaceReleasedAfterJump = true
 			end
 		end
@@ -1223,20 +1204,6 @@ local function InputListeners(HoverboardService, JumpPower)
 	end)
 end
 
-function NewController:DisableAnimations(char)
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not hum then
-		return
-	end
-	for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-		track:Stop()
-	end
-	local animate = char:FindFirstChild("Animate")
-	if animate then
-		animate.Disabled = true
-	end
-end
-
 function NewController:HumanoidSetup()
 	humanoid.MaxSlopeAngle = 0
 	humanoid.AutoRotate = true
@@ -1256,6 +1223,10 @@ function NewController:SetActiveConfig(boardName)
 	end
 	self.ActiveConfig = config
 	print("Hoverboard: Active config: ", self.ActiveConfig)
+	Board = character:WaitForChild("Hoverboard"):WaitForChild("PrimaryPart")
+	OgBoardRotation = Board.CFrame.Rotation.Y
+	BoardRotation = OgBoardRotation
+	SmoothBoardRotation = OgBoardRotation
 	isOnHoverboard = true
 	isHoverboardInitialized = true
 	self:StartHoverboard(config, HoverboardService)
@@ -1263,33 +1234,27 @@ end
 
 function NewController:StartHoverboard(config, HoverboardService)
 	print("StartHoverboard called")
-	if runningConnection then
-		runningConnection:Disconnect()
-	end
-	
+	InitBodyMovers()
+
 	acceleration = config.Acceleration or ACCELERATION
 	topSpeed = config.TopSpeed or MAX_SPEED
 	jumpPower = config.JumpPower or JUMP_POWER
-	
-	-- LoadSpeedGUI()
+
 	RefreshBoostGUI()
 	RefreshFlashGUI()
 	CloneVFX()
 	InputListeners(HoverboardService, jumpPower)
 
 	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
+	if runningConnection then
+		runningConnection:Disconnect()
+	end
 	runningConnection = RunService.PreRender:Connect(function(dt)
 		CalculateMoveDirection()
 		CalculateSpeed(acceleration, topSpeed, dt)
 		ApplyVelocity(jumpPower, dt)
 		ApplyOrientation(dt)
 		UpdateFOV(topSpeed, dt)
-
-
-		-- Hover(dt, jumpPower)
-		-- SetSpeed(dt, acceleration, topSpeed)
-		-- ManageMoveDirection(dt, topSpeed)
-		-- cameraFOV.Update(dt, humanoid, isBoosting, isDashing, isJumping, isFalling, jumpPower)
 		
 		if speedGUI and speedLabel and speedFrame then
 			UpdateSpeedGUI(topSpeed)
@@ -1305,15 +1270,6 @@ function OnCharacterAdded(char)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 	rootPart = char:WaitForChild("HumanoidRootPart")
-	
-	-- Wait for board
-	local hb = char:WaitForChild("Hoverboard")
-	Board = hb:WaitForChild("PrimaryPart")
-	InitBodyMovers()
-	
-	OgBoardRotation = Board.CFrame.Rotation.Y
-	BoardRotation = OgBoardRotation
-	SmoothBoardRotation = OgBoardRotation
 end
 
 local function OnCharacterRemoving()
@@ -1352,7 +1308,8 @@ function NewController:KnitStart()
 		NewController:SetActiveConfig(boardName)
 	end)
 	HoverboardService.HoverboardRemoved:Connect(function()
-		ResetStates()
+		isHoverboardInitialized = false
+		isOnHoverboard = false
 	end)
 	HoverboardService.ControlSignal:Connect(function(action)
 		local ctrl = GetControls()
