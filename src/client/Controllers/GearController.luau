@@ -9,7 +9,7 @@ local hoverboardsData = require(ReplicatedStorage:WaitForChild("Configuration"):
 local HoverboardService
 
 -- --UI References
-local gearGui
+local Gear
 local mainFrame
 local closeBtn
 local BG
@@ -63,7 +63,7 @@ local function SetButtonState(state)
 end
 
 local function CloseGearGui()
-	gearGui.Enabled = false
+	Gear.Enabled = false
 end
 
 local function SetSelectedTab(selected)
@@ -247,7 +247,7 @@ local function CleanStates()
 	cratesTab.BackgroundColor3 = NORMAL_COLOR
 	trailsTab.BackgroundColor3 = NORMAL_COLOR
 
-	gearGui = nil
+	Gear = nil
 	mainFrame = nil
 	closeBtn = nil
 	BG = nil
@@ -261,8 +261,8 @@ end
 local function UIReferences()
 	local playerGui = player:WaitForChild("PlayerGui")
 
-	gearGui = playerGui:WaitForChild("Gear")
-	mainFrame = gearGui:WaitForChild("MainFrame")
+	Gear = playerGui:WaitForChild("Gear")
+	mainFrame = Gear:WaitForChild("MainFrame")
 	closeBtn = mainFrame:WaitForChild("Close"):WaitForChild("Button")
 
 	BG = mainFrame:WaitForChild("BG")
@@ -347,6 +347,10 @@ local function OnPlayerAdded(plr)
 	if plr.Character then
 		OnCharacterAdded(plr.Character)
 	end
+end
+
+function GearController:Enable(Enabled)
+	Gear.Enabled = Enabled
 end
 
 function GearController:KnitStart()
