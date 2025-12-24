@@ -238,7 +238,7 @@ function DailyRewardController:UpdateRewards()
 	end)
 end
 
-function DailyRewardController:SetEnabled(enabled: boolean)
+function DailyRewardController:Enable(enabled: boolean)
 	RewardsGUI.Enabled = enabled
 
 	if enabled then

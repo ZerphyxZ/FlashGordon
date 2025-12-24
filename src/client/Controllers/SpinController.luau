@@ -225,6 +225,11 @@ end
 
 SpinButton.MouseButton1Click:Connect(SpinWheel)
 
+function SpinController:Enable(Enabled: boolean)
+	DailySpin.Enabled = Enabled
+	HandleSpinFrame()
+end
+
 function SpinController:KnitStart()
 	SpinService = Knit.GetService("SpinService")
 	CoinsController = Knit.GetController("CoinsController")

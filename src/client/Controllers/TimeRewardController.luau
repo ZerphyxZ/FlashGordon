@@ -191,7 +191,7 @@ function StartAllRewardsTimer()
 	end)
 end
 
-function TimeRewardController:SetEnabled(enabled: boolean)
+function TimeRewardController:Enable(enabled: boolean)
 	RewardsGUI.Enabled = enabled
 
 	if enabled then

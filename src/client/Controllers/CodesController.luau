@@ -2,7 +2,6 @@
 local PlayerService: Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Knit = require(ReplicatedStorage.Packages.Knit)
-local trove = require(ReplicatedStorage.Packages.trove)
 -- local ReplicatedStorage: ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- [Modules]			----
@@ -89,6 +88,17 @@ local function EnableCodes()
 	Time.Visible = false
 	Codes.Visible = true
 	HandleTextBoxFrame()
+end
+
+function CodesController:Enable(Enabled: boolean)
+	RewardsGUI.Enabled = Enabled
+
+	if Enabled then
+		Daily.Visible = false
+		Time.Visible = false
+		Codes.Visible = true
+		HandleTextBoxFrame()
+	end
 end
 
 function CodesController:KnitStart()
