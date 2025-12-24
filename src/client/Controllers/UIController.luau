@@ -107,7 +107,7 @@ function UIController:KnitStart()
     UIController.Module.Codes = Knit.GetController("CodesController")
     UIController.Module.DailyReward = Knit.GetController("DailyRewardController")
     UIController.Module.TimeReward = Knit.GetController("TimeRewardController")
-
+    UIController.Module.Boards = Knit.GetController("TimeRewardController")
 
 	for name, button in pairs(self.Buttons) do
 		if button:IsA("TextButton") or button:IsA("ImageButton") then
