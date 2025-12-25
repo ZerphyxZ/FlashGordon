@@ -98,21 +98,17 @@ function CreateSlowObject(SlowObject: Part)
     end
 end
 
-function BindTagWithFunction(Tag: string, Function: () -> ())
-    for _, boostInstance: Part in CollectionService:GetTagged(Tag) do
-        Function(boostInstance)
-    end
+function CreatePushObject(PushObject: Part)
+    local force = PushObject:GetAttribute("Force") or 25
+    PushObject.AssemblyLinearVelocity = PushObject.CFrame.LookVector * force
 end
+
+
 
 function Controller:KnitStart()
     HoverboardController = Knit.GetController("NewController")
 
     -- have a character reference
-    
-    -- Character = LocalPlayer.Character
-    -- LocalPlayer.CharacterAdded:Connect(function(character)
-    --     Character = character
-    -- end)
     Observers.observeLocalCharacter(function(character)
         Character = character
 
@@ -125,6 +121,7 @@ function Controller:KnitStart()
     Observers.observeTag("Boost", CreateBoostObject)
     Observers.observeTag("JumpPad", CreateJumpPadObject)
     Observers.observeTag("Slow", CreateSlowObject)
+    Observers.observeTag("Push", CreatePushObject)
 end
 
 return Controller
