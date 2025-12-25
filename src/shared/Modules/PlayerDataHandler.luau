@@ -482,6 +482,65 @@ function PlayerDataHandler:GetTotalHoverboards(): number
 end
 --------------------------------------------------------------------------------- 
 
+-- === Trail storage ================================================
+function PlayerDataHandler:GetEquippedTrail(player: Player): string?
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		return profile.Data.EquippedTrail
+	end
+	return nil
+end
+
+function PlayerDataHandler:SetEquippedTrail(player: Player, trailName: string?)
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		if trailName == nil or self:PlayerOwnsTrail(player, trailName) then
+			profile.Data.EquippedTrail = trailName
+			pcall(function()
+				profile:Save()
+			end)
+			print("[PlayerDataHandler] Trail equipped for", player.Name, "→", trailName)
+			return true
+		end
+	end
+	return false
+end
+
+function PlayerDataHandler:PlayerOwnsTrail(player: Player, trailName: string): boolean
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		local owned = profile.Data.OwnedTrails or {}
+		for _, name in ipairs(owned) do
+			if name == trailName then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function PlayerDataHandler:AddTrailToInventory(player: Player, trailName: string): boolean
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		profile.Data.OwnedTrails = profile.Data.OwnedTrails or {}
+
+		if self:PlayerOwnsTrail(player, trailName) then
+			return false
+		end
+
+		table.insert(profile.Data.OwnedTrails, trailName)
+		pcall(function()
+			profile:Save()
+		end)
+
+		print("[PlayerDataHandler] Added trail to inventory:", player.Name, trailName)
+		return true
+	end
+	return false
+end
+--------------------------------------------------------------------------
+
+
 --[Daily Reward Helpers]
 function PlayerDataHandler:SetLastDailyClaim(player: Player)
 	local now = os.time()

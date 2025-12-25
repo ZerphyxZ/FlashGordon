@@ -11,6 +11,7 @@ local player = Players.LocalPlayer
 local character
 local humanoid
 local Board
+local Trail
 local rootPart
 local bodyVelocity
 local bodyGyro
@@ -21,6 +22,7 @@ local Config
 -- MODULES
 local Configuration = ReplicatedStorage:WaitForChild("Configuration")
 local HoverboardData = require(Configuration:WaitForChild("HoverboardData"))
+local TrailsConfig = require(Configuration:WaitForChild("TrailsConfig"))
 local DashTrailModule = ReplicatedStorage:WaitForChild("VFX"):WaitForChild("HoverboardVFX"):WaitForChild("ElectricDash")
 local HoverboardService
 
@@ -1084,6 +1086,36 @@ end
 
 -- PLAYER LIFECYCLE
 
+local function SetTrail(trailColor)
+	if Trail then
+		Trail.Color = ColorSequence.new(trailColor)
+	end
+end
+
+local function ApplyEquippedTrail()
+	HoverboardService:GetEquippedTrail():andThen(function(trailName)
+		if not Trail then
+			return
+		end
+
+		if not trailName then
+			print("No trail equipped.")
+			Trail.Enabled = false
+			return
+		end
+
+		local config = TrailsConfig.GetConfig(trailName)
+		if not config then
+			warn("Invalid trail config:", trailName)
+			Trail.Enabled = false
+			return
+		end
+		Trail.Enabled = true
+		Trail.Color = ColorSequence.new(config.Color)
+		print("Trail applied:", trailName)
+	end)
+end
+
 local function ResetStates()
 	print("Reset states called")
 	character = nil
@@ -1224,6 +1256,8 @@ function NewController:SetActiveConfig(boardName)
 	self.ActiveConfig = config
 	print("Hoverboard: Active config: ", self.ActiveConfig)
 	Board = character:WaitForChild("Hoverboard"):WaitForChild("PrimaryPart")
+	Trail = Board:WaitForChild("Trail")
+	ApplyEquippedTrail()
 	OgBoardRotation = Board.CFrame.Rotation.Y
 	BoardRotation = OgBoardRotation
 	SmoothBoardRotation = OgBoardRotation
@@ -1310,6 +1344,20 @@ function NewController:KnitStart()
 	HoverboardService.HoverboardRemoved:Connect(function()
 		isHoverboardInitialized = false
 		isOnHoverboard = false
+	end)
+	HoverboardService.TrailEquipped:Connect(function(owner, trailName)
+		print("EquipTrail event received")
+		if owner ~= player then
+			return
+		end
+		local trailConfig = TrailsConfig.GetConfig(trailName)
+		if trailConfig then
+			Trail.Enabled = true
+			SetTrail(trailConfig.Color)
+		end
+	end)
+	HoverboardService.TrailUnequipped:Connect(function()
+		Trail.Enabled = false
 	end)
 	HoverboardService.ControlSignal:Connect(function(action)
 		local ctrl = GetControls()

@@ -6,23 +6,28 @@ local Players = Global.Players
 local player = Players.LocalPlayer
 local ReplicatedStorage = Global.ReplicatedStorage
 local hoverboardsData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("HoverboardData"))
+local trailData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("TrailsConfig"))
 local HoverboardService
 
--- --UI References
+--UI References
+
+--COMMON REFERENCES
 local Gear
 local mainFrame
 local closeBtn
 local BG
-local boardsFrame
-local hoverboadsList
 local cardTemplate
-local selectionFrameHoverboard
-local purchaseBtn
-local equipButton
-local currentButton
+
+--BOARDS SECTION
+local boardsFrame
+local boardsList
+local boardSelectionFrame
+local boardPurchaseBtn
+local boardEquipButton
+local boardCurrentButton
 local revolvingContainer
-local hoverboardItemDetails
-local itemDetailsBGImage
+local boardItemDetails
+local boardDetailsFrame
 local topSpeed
 local topSpeedFillerBG
 local topSpeedFiller
@@ -38,9 +43,24 @@ local jumpPowerFillerBG
 local jumpPowerFiller
 local jumpPowerTitle
 local jumpPowerValue
-local titleLabel
+local boardItemDetailsTitleLabel
+
+--CRATES SECTION
 local cratesFrame
+
+--TRAILS SECTION
 local trailsFrame
+local trailsList
+local trailSelectionFrame
+local trailItemDetails
+local trailsItemDetailsBGImage
+local trailItemDetailsTitleLabel
+local trailItemDetailsDescriptionLabel
+local trailPurchaseButton
+local trailEquipButton
+local trailUnequipButton
+
+--TABS SECTION
 local tabs
 local boardsTab
 local trailsTab
@@ -54,37 +74,20 @@ local GearController = Knit.CreateController({ Name = "GearController" })
 local currentBoardConfig = nil
 local equippedBoard = nil
 
+local currentTrailConfig = nil
+local equippedTrail = nil
+
 local TAB_CONFIG = {}
 
-local function SetButtonState(state)
-	purchaseBtn.Visible = state == "Purchase"
-	equipButton.Visible = state == "Equip"
-	currentButton.Visible = state == "Current"
-end
-
-local function CloseGearGui()
-	Gear.Enabled = false
-end
-
-local function SetSelectedTab(selected)
-	boardsTab.BackgroundColor3 = (selected == boardsTab) and SELECTED_COLOR or NORMAL_COLOR
-	cratesTab.BackgroundColor3 = (selected == cratesTab) and SELECTED_COLOR or NORMAL_COLOR
-	trailsTab.BackgroundColor3 = (selected == trailsTab) and SELECTED_COLOR or NORMAL_COLOR
-end
-
-local function OpenTab(selectedTab)
-	for tabButton, frame in pairs(TAB_CONFIG) do
-		if tabButton == selectedTab then
-			frame.Visible = true
-			SetSelectedTab(tabButton)
-		else
-			frame.Visible = false
-		end
-	end
+----------------- BOARDS FUNCTIONS ---------------------
+local function SetBoardButtonState(state)
+	boardPurchaseBtn.Visible = state == "Purchase"
+	boardEquipButton.Visible = state == "Equip"
+	boardCurrentButton.Visible = state == "Current"
 end
 
 local function UpdateSelectionStats(boardName, data)
-	titleLabel.Text = boardName
+	boardItemDetailsTitleLabel.Text = boardName
 
 	-- Values
 	accelerationValue.Text = tostring(data.Acceleration)
@@ -107,7 +110,7 @@ local function SelectHoverboard(boardName)
 	UpdateSelectionStats(boardName, data)
 
 	if equippedBoard == boardName then
-		SetButtonState("Current")
+		SetBoardButtonState("Current")
 		return
 	end
 
@@ -118,27 +121,24 @@ local function SelectHoverboard(boardName)
 			if owns then
 				print("Owns true")
 				if equippedBoard == boardName then
-					SetButtonState("Current")
+					SetBoardButtonState("Current")
 				else
-					SetButtonState("Equip")
+					SetBoardButtonState("Equip")
 				end
 			else
 				print("Owns false")
-				SetButtonState("Purchase")
+				SetBoardButtonState("Purchase")
 			end
 		end)
 		:catch(function(err)
 			warn("PlayerOwnsHoverboard failed:", err)
-			SetButtonState("Purchase")
+			SetBoardButtonState("Purchase")
 		end)
 end
 
--------------------------
--- POPULATE UI CARDS
--------------------------
 local function PopulateHoverboards()
 	-- cleanup previous items except template
-	for _, child in ipairs(hoverboadsList:GetChildren()) do
+	for _, child in ipairs(boardsList:GetChildren()) do
 		if child:GetAttribute("HoverboardCard") then
 			child:Destroy()
 		end
@@ -152,7 +152,7 @@ local function PopulateHoverboards()
 			local card = cardTemplate:Clone()
 			card.Name = boardName
 			card.Visible = true
-			card.Parent = hoverboadsList
+			card.Parent = boardsList
 			card:SetAttribute("HoverboardCard", true)
 
 			-- Fill card UI
@@ -172,7 +172,7 @@ local function EquipHoverboard(boardName)
 	end
 	HoverboardService:RequestEquipHoverboard(currentBoardConfig)
 	equippedBoard = currentBoardConfig
-	SetButtonState("Current")
+	SetBoardButtonState("Current")
 end
 
 local function PurchaseHoverboard()
@@ -189,7 +189,131 @@ local function PurchaseHoverboard()
 	local success, message =
 		HoverboardService:PurchaseHoverboard(currentBoardConfig, boardData.Price, boardData.Currency)
 	if success then
-		SetButtonState("Equip")
+		SetBoardButtonState("Equip")
+	end
+end
+--------------------------------------------------------
+
+----------------- TRAILS FUNCTIONS ---------------------
+local function SetTrailButtonState(state)
+	trailPurchaseButton.Visible = state == "Purchase"
+	trailEquipButton.Visible = state == "Equip"
+	trailUnequipButton.Visible = state == "Unequip"
+end
+
+local function SelectTrail(trailName)
+	local data = trailData[trailName]
+	if not data then
+		return
+	end
+
+	currentTrailConfig = trailName
+
+	trailItemDetailsTitleLabel.Text = data.Name
+	trailItemDetailsDescriptionLabel.Text = data.Description
+
+	if equippedTrail == trailName then
+		SetTrailButtonState("Unequip")
+		return
+	end
+
+	HoverboardService:PlayerOwnsTrail(trailName)
+		:andThen(function(owns)
+			if owns then
+				SetTrailButtonState("Equip")
+			else
+				SetTrailButtonState("Purchase")
+			end
+		end)
+		:catch(function()
+			SetTrailButtonState("Purchase")
+		end)
+end
+
+local function PopulateTrails()
+	for _, child in ipairs(trailsList:GetChildren()) do
+		if child:GetAttribute("TrailCard") then
+			child:Destroy()
+		end
+	end
+
+	for trailName, data in pairs(trailData) do
+		if typeof(data) == "table" then
+			local card = cardTemplate:Clone()
+			card.Name = trailName
+			card.Visible = true
+			card.Parent = trailsList
+			card:SetAttribute("TrailCard", true)
+
+			card:WaitForChild("Title").Text = data.Name
+			card:WaitForChild("Price").Text = tostring(data.Price)
+
+			card.MouseButton1Click:Connect(function()
+				SelectTrail(trailName)
+			end)
+		end
+	end
+end
+
+local function PurchaseTrail()
+	if not currentTrailConfig then
+		return
+	end
+
+	local data = trailData[currentTrailConfig]
+	if not data then
+		return
+	end
+
+	local success = HoverboardService:PurchaseTrail(currentTrailConfig, data.Price, data.Currency)
+
+	if success then
+		SetTrailButtonState("Equip")
+	end
+end
+
+local function EquipTrail()
+	if not currentTrailConfig then
+		return
+	end
+
+	HoverboardService:EquipTrail(currentTrailConfig)
+	equippedTrail = currentTrailConfig
+	print("equippedTrail", equippedTrail)
+	SetTrailButtonState("Unequip")
+end
+
+local function UnequipTrail()
+	HoverboardService:UnequipTrail()
+	equippedTrail = nil
+	SetTrailButtonState("Equip")
+end
+
+--------------------------------------------------------
+
+-----------------  GLOBAL FUNCTIONS --------------------
+local function CloseGearGui()
+	Gear.Enabled = false
+end
+
+local function SetSelectedTab(selected)
+	boardsTab.BackgroundColor3 = (selected == boardsTab) and SELECTED_COLOR or NORMAL_COLOR
+	cratesTab.BackgroundColor3 = (selected == cratesTab) and SELECTED_COLOR or NORMAL_COLOR
+	trailsTab.BackgroundColor3 = (selected == trailsTab) and SELECTED_COLOR or NORMAL_COLOR
+end
+
+local function OpenTab(selectedTab)
+	for tabButton, frame in pairs(TAB_CONFIG) do
+		if tabButton == selectedTab then
+			frame.Visible = true
+			SetSelectedTab(tabButton)
+
+			if tabButton == trailsTab and equippedTrail then
+				SelectTrail(equippedTrail)
+			end
+		else
+			frame.Visible = false
+		end
 	end
 end
 
@@ -205,16 +329,26 @@ local function BindInput()
 	closeBtn.MouseButton1Click:Connect(function()
 		CloseGearGui()
 	end)
-	equipButton.MouseButton1Click:Connect(function()
+	boardEquipButton.MouseButton1Click:Connect(function()
 		if currentBoardConfig then
 			print("Current config:", currentBoardConfig)
 			EquipHoverboard(currentBoardConfig)
 			--CloseGearGui()
 		end
 	end)
-	purchaseBtn.MouseButton1Click:Connect(function()
+	boardPurchaseBtn.MouseButton1Click:Connect(function()
 		PurchaseHoverboard()
 	end)
+	trailPurchaseButton.MouseButton1Click:Connect(function()
+		PurchaseTrail()
+	end)
+	trailEquipButton.MouseButton1Click:Connect(function()
+		EquipTrail()
+	end)
+	trailUnequipButton.MouseButton1Click:Connect(function()
+		UnequipTrail()
+	end)
+
 	BindTabs()
 end
 
@@ -224,10 +358,10 @@ local function CleanStates()
 	equippedBoard = nil
 
 	-- Reset buttons
-	SetButtonState("Purchase")
+	SetBoardButtonState("Purchase")
 
 	-- Clear item details
-	titleLabel.Text = ""
+	boardItemDetailsTitleLabel.Text = ""
 
 	accelerationValue.Text = "0"
 	topSpeedValue.Text = "0"
@@ -252,9 +386,16 @@ local function CleanStates()
 	closeBtn = nil
 	BG = nil
 	boardsFrame = nil
-	hoverboadsList = nil
+	boardsList = nil
 	cardTemplate = nil
-	selectionFrameHoverboard = nil
+	boardSelectionFrame = nil
+
+	currentTrailConfig = nil
+	equippedTrail = nil
+	SetTrailButtonState("Purchase")
+
+	trailItemDetailsTitleLabel.Text = ""
+	trailItemDetailsDescriptionLabel.Text = ""
 	TAB_CONFIG = {}
 end
 
@@ -264,56 +405,55 @@ local function UIReferences()
 	Gear = playerGui:WaitForChild("Gear")
 	mainFrame = Gear:WaitForChild("MainFrame")
 	closeBtn = mainFrame:WaitForChild("Close"):WaitForChild("Button")
-
 	BG = mainFrame:WaitForChild("BG")
-
-	-- Boards
-	boardsFrame = BG:WaitForChild("HoverboardsFrame")
-	hoverboadsList = boardsFrame:WaitForChild("Hoverboards")
 	cardTemplate = BG:WaitForChild("CardTemplate")
 
-	selectionFrameHoverboard = boardsFrame:WaitForChild("SelectionFrame")
-
-	-- Purchase buttons
-	local purchaseFrame = selectionFrameHoverboard:WaitForChild("PurchaseFrame")
-
-	purchaseBtn = purchaseFrame:WaitForChild("PurchaseButton")
-	equipButton = purchaseFrame:WaitForChild("EquipButton")
-	currentButton = purchaseFrame:WaitForChild("CurrentButton")
-
-	-- Item details
-	revolvingContainer = selectionFrameHoverboard:WaitForChild("RevolvingContainer")
-	hoverboardItemDetails = selectionFrameHoverboard:WaitForChild("ItemDetails")
-	itemDetailsBGImage = hoverboardItemDetails:WaitForChild("BGImage")
-
-	-- Top Speed
-	topSpeed = itemDetailsBGImage:WaitForChild("TopSpeed")
+	--BOARDS SECTION
+	boardsFrame = BG:WaitForChild("HoverboardsFrame")
+	boardsList = boardsFrame:WaitForChild("Hoverboards")
+	boardSelectionFrame = boardsFrame:WaitForChild("SelectionFrame")
+	local purchaseFrame = boardSelectionFrame:WaitForChild("PurchaseFrame")
+	boardPurchaseBtn = purchaseFrame:WaitForChild("PurchaseButton")
+	boardEquipButton = purchaseFrame:WaitForChild("EquipButton")
+	boardCurrentButton = purchaseFrame:WaitForChild("CurrentButton")
+	revolvingContainer = boardSelectionFrame:WaitForChild("RevolvingContainer")
+	boardItemDetails = boardSelectionFrame:WaitForChild("ItemDetails")
+	boardDetailsFrame = boardItemDetails:WaitForChild("DetailsFrame")
+	topSpeed = boardDetailsFrame:WaitForChild("TopSpeed")
 	topSpeedFillerBG = topSpeed:WaitForChild("FillerBG")
 	topSpeedFiller = topSpeedFillerBG:WaitForChild("Filler")
 	topSpeedTitle = topSpeed:WaitForChild("Title")
 	topSpeedValue = topSpeed:WaitForChild("Value")
-
-	-- Acceleration
-	acceleration = itemDetailsBGImage:WaitForChild("Acceleration")
+	acceleration = boardDetailsFrame:WaitForChild("Acceleration")
 	accelerationFillerBG = acceleration:WaitForChild("FillerBG")
 	accelerationFiller = accelerationFillerBG:WaitForChild("Filler")
 	accelerationTitle = acceleration:WaitForChild("Title")
 	accelerationValue = acceleration:WaitForChild("Value")
-
-	-- Jump Power
-	jumpPower = itemDetailsBGImage:WaitForChild("JumpPower")
+	jumpPower = boardDetailsFrame:WaitForChild("JumpPower")
 	jumpPowerFillerBG = jumpPower:WaitForChild("FillerBG")
 	jumpPowerFiller = jumpPowerFillerBG:WaitForChild("Filler")
 	jumpPowerTitle = jumpPower:WaitForChild("Title")
 	jumpPowerValue = jumpPower:WaitForChild("Value")
+	boardItemDetailsTitleLabel = boardItemDetails:WaitForChild("TitleLable")
 
-	-- Title
-	titleLabel = itemDetailsBGImage:WaitForChild("TitleLable")
-
-	-- Other tabs
+	--CRATES SECTION
 	cratesFrame = BG:WaitForChild("CratesFrame")
-	trailsFrame = BG:WaitForChild("TrailsFrame")
 
+	--TRAILS SECTION
+	trailsFrame = BG:WaitForChild("TrailsFrame")
+	trailsList = trailsFrame:WaitForChild("TrailsList")
+	trailSelectionFrame = trailsFrame:WaitForChild("SelectionFrame")
+	trailItemDetails = trailSelectionFrame:WaitForChild("ItemDetails")
+	trailItemDetailsTitleLabel = trailItemDetails:WaitForChild("Name")
+	local frame = trailItemDetails:WaitForChild("Frame")
+	trailItemDetailsDescriptionLabel = frame:WaitForChild("Description")
+
+	local trailPurchaseFrame = trailSelectionFrame:WaitForChild("PurchaseFrame")
+	trailPurchaseButton = trailPurchaseFrame:WaitForChild("PurchaseButton")
+	trailEquipButton = trailPurchaseFrame:WaitForChild("EquipButton")
+	trailUnequipButton = trailPurchaseFrame:WaitForChild("UnequipButton")
+
+	--TABS SECTION
 	tabs = BG:WaitForChild("Tabs")
 	boardsTab = tabs:WaitForChild("BoardsButton")
 	trailsTab = tabs:WaitForChild("TrailsButton")
@@ -326,7 +466,9 @@ local function UIReferences()
 	}
 	print("UI references rebuilt on character spawn")
 end
+--------------------------------------------------------
 
+----------------- CHARACTER LIFECYCLE ------------------
 local function OnCharacterAdded(char)
 	UIReferences()
 	BindInput()
@@ -360,8 +502,12 @@ function GearController:KnitStart()
 			return
 		end
 		equippedBoard = boardName
+		HoverboardService:GetEquippedTrail():andThen(function(trailName)
+			equippedTrail = trailName
+		end)
 		if equippedBoard then
 			PopulateHoverboards()
+			PopulateTrails()
 			OpenTab(boardsTab)
 			SelectHoverboard(equippedBoard)
 		end
