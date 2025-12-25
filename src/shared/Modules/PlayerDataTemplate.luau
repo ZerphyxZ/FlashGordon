@@ -27,6 +27,11 @@ local PlayerDataTemplate = {
 	TotalHoverboards = 20, -- Total available hoverboards in game
 	OwnedHoverboards = {"Hoverboard1"}, -- Start with default hoverboard
 	EquippedHoverboard = "Hoverboard1", -- Currently equipped hoverboard
+
+	--Trails Inventory
+	TotalTrails = 4, -- Total available trails in game
+	OwnedTrails = {"RedTrail"}, -- Start with default trail
+	EquippedTrail = "RedTrail", -- Currently equipped trail
 }
 
 return PlayerDataTemplate
