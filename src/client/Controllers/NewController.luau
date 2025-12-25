@@ -41,7 +41,7 @@ local PreviousMoveVector = Vector3.zero
 local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
-local ACCELERATION_FACTOR = 2 
+local ACCELERATION_FACTOR = 1 
 local DECELERATION_FACTOR = .5
 local ORIENTATION_FACTOR = 30
 local MAX_HORIZONTAL_ROTATION = 15
@@ -812,6 +812,9 @@ local function HandleJump(jumpPower, dt)
 		isJumping = true
 		isFalling = false
 		firstJumpTime = tick()
+
+
+
 		bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
 		bodyVelocity.Velocity = Vector3.new(
 			bodyVelocity.Velocity.X,
@@ -1326,6 +1329,29 @@ local function OnPlayerAdded(plr)
 		OnCharacterAdded(plr.Character)
 	end
 end
+
+
+-- [External Modifier Functions]		------
+function NewController:ApplyAssist(ForceVector: Vector3)
+	bodyVelocity.Velocity += ForceVector
+end
+
+function NewController:ApplyJump(JumpPower: number)
+	local v = Board.AssemblyLinearVelocity
+	Board.AssemblyLinearVelocity = Vector3.new(v.X, JumpPower, v.Z)
+end
+
+function NewController:Slow()
+	bodyVelocity.Velocity = Vector3.zero
+	local originalAcceleration = acceleration
+
+	acceleration *= .1
+	task.delay(.2, function()
+		acceleration = originalAcceleration
+	end)
+end
+
+------------------------------------------------
 
 function NewController:KnitStart()
 	print("NewController started")
