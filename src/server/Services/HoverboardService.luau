@@ -330,84 +330,114 @@ end
 -- Character Setup
 ----------------------------------------------------------
 function HoverboardService:OnCharacterAdded(player)
+	print("OnCharacterAdded called for:", player.Name)
+	
+	-- Immediately disable controls while we set up
+	self.Client.ControlSignal:Fire(player, "Disable")
+	
+	-- Give default board immediately for immediate visual feedback
+	print("Giving immediate default hoverboard for:", player.Name)
+	playerHoverboards[player.UserId] = {
+		Name = DEFAULT_BOARD,
+		Config = Hoverboards.GetConfig(DEFAULT_BOARD),
+	}
+	self:SpawnHoverboard(player, DEFAULT_BOARD)
+	
+	-- Enable controls temporarily with default board
+	self.Client.ControlSignal:Fire(player, "Enable")
+	
+	-- Now wait for profile to load in the background
+	task.spawn(function()
+		local maxWaitTime = 10
+		local startTime = os.time()
+		local profileLoaded = false
+		
+		-- Wait for profile to load
+		while not PlayerDataHandler:GetProfile(player) and (os.time() - startTime) < maxWaitTime do
+			task.wait(0.1)
+		end
+		
+		-- Check if profile was successfully loaded
+		local profile = PlayerDataHandler:GetProfile(player)
+		if not profile then
+			warn("[HoverboardService] Could not load profile for", player.Name, "within timeout period")
+			-- Keep using default board
+			return
+		end
+		
+		profileLoaded = true
+		
+		-- Get equipped hoverboard from loaded profile
+		local saved = PlayerDataHandler:GetEquippedHoverboard(player)
+		print("Profile loaded, equipped hoverboard:", player.Name, "→", saved)
+		
+		-- If player has a saved board and it's different from default, switch to it
+		if saved and saved ~= "" and saved ~= DEFAULT_BOARD then
+			-- Check if player owns this hoverboard
+			if PlayerDataHandler:PlayerOwnsHoverboard(player, saved) then
+				print("Switching to saved hoverboard:", saved)
+				
+				-- Update memory cache
+				playerHoverboards[player.UserId] = {
+					Name = saved,
+					Config = Hoverboards.GetConfig(saved),
+				}
+				
+				-- Remove current board and spawn saved one
+				self:RemoveHoverboard(player)
+				self:SpawnHoverboard(player, saved)
+
+				self.Client.HoverboardSpawned:Fire(player, saved)
+				
+				print("Successfully switched to saved hoverboard for", player.Name)
+			else
+				warn("Player doesn't own saved hoverboard:", saved, "keeping default")
+			end
+		elseif not saved or saved == "" then
+			-- Player has no saved board, give default and save it
+			print("Player has no hoverboard, saving default.")
+			PlayerDataHandler:SetEquippedHoverboard(player, DEFAULT_BOARD)
+			
+			-- Update memory cache
+			playerHoverboards[player.UserId] = {
+				Name = DEFAULT_BOARD,
+				Config = Hoverboards.GetConfig(DEFAULT_BOARD),
+			}
+		end
+	end)
+
+
+
+
+
+
+
+
+
+
+
 	-- self.Client.ControlSignal:Fire(player, "Disable")
-	
-	-- -- Wait for player profile to load before attempting to get hoverboard data
-	-- local maxWaitTime = 10 -- seconds
-	-- local startTime = os.time()
-	
-	-- while not PlayerDataHandler:GetProfile(player) and (os.time() - startTime) < maxWaitTime do
-	-- 	task.wait(0.1)
-	-- end
-	
-	-- -- Check if profile was successfully loaded
-	-- local profile = PlayerDataHandler:GetProfile(player)
-	-- if not profile then
-	-- 	warn("[HoverboardService] Could not load profile for", player.Name, "within timeout period")
-	-- 	-- Use default hoverboard as fallback
-	-- 	playerHoverboards[player.UserId] = {
-	-- 		Name = DEFAULT_BOARD,
-	-- 		Config = Hoverboards.GetConfig(DEFAULT_BOARD),
-	-- 	}
-	-- 	self:SpawnHoverboard(player, DEFAULT_BOARD)
-	-- 	self.Client.ControlSignal:Fire(player, "Enable")
-	-- 	return
-	-- end
-	
-	-- -- Now we can safely get the equipped hoverboard from the loaded profile
+
 	-- local saved = PlayerDataHandler:GetEquippedHoverboard(player)
 	-- print("Player joined:", player.Name, "Equipped hoverboard:", saved)
-	
 	-- playerHoverboards[player.UserId] = {
 	-- 	Name = saved,
 	-- 	Config = Hoverboards.GetConfig(saved),
 	-- }
 
 	-- -- If player has no stored hoverboard, give default. Otherwise spawn stored board.
-	-- if not saved or saved == "" then
+	-- if not playerHoverboards[player.UserId] or not playerHoverboards[player.UserId].Name then
 	-- 	print("Player has no hoverboard, giving default.")
 	-- 	self:GiveDefaultHoverboard(player)
 	-- else
 	-- 	-- spawn the stored board (will also create constraints)
 	-- 	print("Spawning stored hoverboard for player.")
-	-- 	self:SpawnHoverboard(player, saved)
+	-- 	local storedName = playerHoverboards[player.UserId].Name
+	-- 	self:SpawnHoverboard(player, storedName)
 	-- end
 
 	-- task.wait(0.3)
 	-- self.Client.ControlSignal:Fire(player, "Enable")
-
-
-
-
-
-
-
-
-
-
-
-	self.Client.ControlSignal:Fire(player, "Disable")
-
-	local saved = PlayerDataHandler:GetEquippedHoverboard(player)
-	print("Player joined:", player.Name, "Equipped hoverboard:", saved)
-	playerHoverboards[player.UserId] = {
-		Name = saved,
-		Config = Hoverboards.GetConfig(saved),
-	}
-
-	-- If player has no stored hoverboard, give default. Otherwise spawn stored board.
-	if not playerHoverboards[player.UserId] or not playerHoverboards[player.UserId].Name then
-		print("Player has no hoverboard, giving default.")
-		self:GiveDefaultHoverboard(player)
-	else
-		-- spawn the stored board (will also create constraints)
-		print("Spawning stored hoverboard for player.")
-		local storedName = playerHoverboards[player.UserId].Name
-		self:SpawnHoverboard(player, storedName)
-	end
-
-	task.wait(0.3)
-	self.Client.ControlSignal:Fire(player, "Enable")
 end
 
 ----------------------------------------------------------
