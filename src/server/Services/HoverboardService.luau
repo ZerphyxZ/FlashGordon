@@ -246,13 +246,15 @@ function HoverboardService.Client:PurchaseTrail(player, trailName, price, curren
 end
 
 function HoverboardService.Client:EquipTrail(player, trailName)
-	self.TrailEquipped:FireAll(player, trailName)
-	return PlayerDataHandler:SetEquippedTrail(player, trailName)
+	PlayerDataHandler:SetEquippedTrail(player, trailName)
+	self.TrailEquipped:Fire(player, trailName)
+	return true
 end
 
 function HoverboardService.Client:UnequipTrail(player)
-	self.TrailUnequipped:FireAll(player)
-	return PlayerDataHandler:SetEquippedTrail(player, nil)
+	PlayerDataHandler:SetEquippedTrail(player, nil)
+	self.TrailUnequipped:Fire(player)
+	return true
 end
 
 function HoverboardService.Client:GetEquippedTrail(player)

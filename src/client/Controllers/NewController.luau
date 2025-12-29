@@ -1292,6 +1292,7 @@ function NewController:SetActiveConfig(boardName)
 	print("Hoverboard: Active config: ", self.ActiveConfig)
 	Board = character:WaitForChild("Hoverboard"):WaitForChild("PrimaryPart")
 	Trail = Board:WaitForChild("Trail")
+	Trail.Enabled = false
 	ApplyEquippedTrail()
 	OgBoardRotation = Board.CFrame.Rotation.Y
 	BoardRotation = OgBoardRotation
