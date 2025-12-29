@@ -30,7 +30,7 @@ local boardEquipButton
 local boardCurrentButton
 local revolvingContainer
 local boardItemDetails
-local boardDetailsFrame
+local boardItemDetailsBGImage
 local topSpeed
 local topSpeedFillerBG
 local topSpeedFiller
@@ -160,7 +160,8 @@ local function PopulateHoverboards()
 
 			-- Fill card UI
 			card:WaitForChild("Title").Text = tostring(boardName)
-			card:WaitForChild("Price").Text = tostring(data.Price)
+			card:WaitForChild("ItemImage").Image = data.Image
+			card:WaitForChild("Frame"):WaitForChild("Price").Text = tostring(data.Price)
 
 			card.MouseButton1Click:Connect(function()
 				SelectHoverboard(boardName)
@@ -249,7 +250,8 @@ local function PopulateTrails()
 			card:SetAttribute("TrailCard", true)
 
 			card:WaitForChild("Title").Text = data.Name
-			card:WaitForChild("Price").Text = tostring(data.Price)
+			--card:WaitForChild("ItemImage").Image = data.Image
+			card:WaitForChild("Frame"):WaitForChild("Price").Text = tostring(data.Price)
 
 			card.MouseButton1Click:Connect(function()
 				SelectTrail(trailName)
@@ -421,23 +423,23 @@ local function UIReferences()
 	boardCurrentButton = purchaseFrame:WaitForChild("CurrentButton")
 	revolvingContainer = boardSelectionFrame:WaitForChild("RevolvingContainer")
 	boardItemDetails = boardSelectionFrame:WaitForChild("ItemDetails")
-	boardDetailsFrame = boardItemDetails:WaitForChild("DetailsFrame")
-	topSpeed = boardDetailsFrame:WaitForChild("TopSpeed")
+	boardItemDetailsBGImage = boardItemDetails:WaitForChild("BGImage")
+	topSpeed = boardItemDetailsBGImage:WaitForChild("TopSpeed")
 	topSpeedFillerBG = topSpeed:WaitForChild("FillerBG")
 	topSpeedFiller = topSpeedFillerBG:WaitForChild("Filler")
 	topSpeedTitle = topSpeed:WaitForChild("Title")
 	topSpeedValue = topSpeed:WaitForChild("Value")
-	acceleration = boardDetailsFrame:WaitForChild("Acceleration")
+	acceleration = boardItemDetailsBGImage:WaitForChild("Acceleration")
 	accelerationFillerBG = acceleration:WaitForChild("FillerBG")
 	accelerationFiller = accelerationFillerBG:WaitForChild("Filler")
 	accelerationTitle = acceleration:WaitForChild("Title")
 	accelerationValue = acceleration:WaitForChild("Value")
-	jumpPower = boardDetailsFrame:WaitForChild("JumpPower")
+	jumpPower = boardItemDetailsBGImage:WaitForChild("JumpPower")
 	jumpPowerFillerBG = jumpPower:WaitForChild("FillerBG")
 	jumpPowerFiller = jumpPowerFillerBG:WaitForChild("Filler")
 	jumpPowerTitle = jumpPower:WaitForChild("Title")
 	jumpPowerValue = jumpPower:WaitForChild("Value")
-	boardItemDetailsTitleLabel = boardItemDetails:WaitForChild("TitleLable")
+	boardItemDetailsTitleLabel = boardItemDetailsBGImage:WaitForChild("TitleLable")
 
 	--CRATES SECTION
 	cratesFrame = BG:WaitForChild("CratesFrame")
@@ -447,9 +449,9 @@ local function UIReferences()
 	trailsList = trailsFrame:WaitForChild("TrailsList")
 	trailSelectionFrame = trailsFrame:WaitForChild("SelectionFrame")
 	trailItemDetails = trailSelectionFrame:WaitForChild("ItemDetails")
-	trailItemDetailsTitleLabel = trailItemDetails:WaitForChild("Name")
-	local frame = trailItemDetails:WaitForChild("Frame")
-	trailItemDetailsDescriptionLabel = frame:WaitForChild("Description")
+	trailsItemDetailsBGImage = trailItemDetails:WaitForChild("BGImage")
+	trailItemDetailsTitleLabel = trailsItemDetailsBGImage:WaitForChild("Name")
+	trailItemDetailsDescriptionLabel = trailsItemDetailsBGImage:WaitForChild("Description")
 
 	local trailPurchaseFrame = trailSelectionFrame:WaitForChild("PurchaseFrame")
 	trailPurchaseButton = trailPurchaseFrame:WaitForChild("PurchaseButton")
