@@ -492,6 +492,7 @@ local function PopulateItems()
 	HoverboardService:GetEquippedTrail():andThen(function(trailName)
 			equippedTrail = trailName
 			PopulateTrails()
+			SelectTrail(equippedTrail)
 		end)
 		:catch(function(err)
 			warn("Failed to get trail data:", err)
@@ -503,6 +504,10 @@ local function OnCharacterAdded(char)
 	UIReferences()
 	BindInput()
 	PopulateItems()
+
+	HoverboardService.HoverboardSpawned:Connect(function(owner, boardName)
+		PopulateItems()
+	end)
 end
 
 local function OnCharacterRemoving()

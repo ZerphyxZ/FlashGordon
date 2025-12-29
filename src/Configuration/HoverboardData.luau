@@ -3,14 +3,14 @@ local Hoverboards = {
 		TopSpeed = 65,
 		Acceleration = 1,
 		JumpPower = 80,
-		Price = 300,
+		Price = 1,
 		Currency = "Coins",
 	},
 	Hoverboard2 = {
 		TopSpeed = 80,
 		Acceleration = 1.1,
 		JumpPower = 41,
-		Price = 400,
+		Price = 1,
 		Currency = "Coins",
 	}
 }
