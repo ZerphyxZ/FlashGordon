@@ -9,6 +9,9 @@ local hoverboardsData = require(ReplicatedStorage:WaitForChild("Configuration"):
 local trailData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("TrailsConfig"))
 local HoverboardService
 
+local character
+local hoverboard
+
 --UI References
 
 --COMMON REFERENCES
@@ -469,9 +472,37 @@ end
 --------------------------------------------------------
 
 ----------------- CHARACTER LIFECYCLE ------------------
+
+local function PopulateItems()
+	HoverboardService:GetHoverboardData()
+			:andThen(function(data)
+				if data then
+					equippedBoard = data.Name
+					if equippedBoard then
+						PopulateHoverboards()
+						OpenTab(boardsTab)
+						SelectHoverboard(equippedBoard)
+					end
+				end
+			end)
+			:catch(function(err)
+				warn("Failed to get hoverboard data:", err)
+			end)
+
+	HoverboardService:GetEquippedTrail():andThen(function(trailName)
+			equippedTrail = trailName
+			PopulateTrails()
+		end)
+		:catch(function(err)
+			warn("Failed to get trail data:", err)
+		end)
+end
+
 local function OnCharacterAdded(char)
+	HoverboardService = Knit.GetService("HoverboardService")
 	UIReferences()
 	BindInput()
+	PopulateItems()
 end
 
 local function OnCharacterRemoving()
@@ -496,22 +527,6 @@ function GearController:Enable(Enabled)
 end
 
 function GearController:KnitStart()
-	HoverboardService = Knit.GetService("HoverboardService")
-	HoverboardService.HoverboardSpawned:Connect(function(_, owner, boardName)
-		if owner ~= player then
-			return
-		end
-		equippedBoard = boardName
-		HoverboardService:GetEquippedTrail():andThen(function(trailName)
-			equippedTrail = trailName
-		end)
-		if equippedBoard then
-			PopulateHoverboards()
-			PopulateTrails()
-			OpenTab(boardsTab)
-			SelectHoverboard(equippedBoard)
-		end
-	end)
 	OnPlayerAdded(player)
 end
 
