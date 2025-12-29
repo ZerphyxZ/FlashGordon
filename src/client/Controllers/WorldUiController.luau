@@ -6,7 +6,7 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
-local Controller = Knit.CreateController { Name = "WorldUiController" }
+local Controller = Knit.CreateController { Name = "WorldUiControllerPrevious" }
 
 local LOCAL_PLAYER = Players.LocalPlayer
 
