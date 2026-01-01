@@ -233,7 +233,7 @@ local function AnimateFrame(frame, scale, visible)
 end
 
 function UpdateSpeedGUI(MaxSpeed)
-	local value = bodyVelocity.Velocity.Magnitude or 0
+	local value = (bodyVelocity.Velocity * Vector3.new(1, 0, 1)).Magnitude or 0
 	speedLabel.Text = string.format("Speed: %.0f", math.round(value))
 
 	local xScale = 1
