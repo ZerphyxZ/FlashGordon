@@ -32,6 +32,11 @@ local PlayerDataTemplate = {
 	TotalTrails = 4, -- Total available trails in game
 	OwnedTrails = {"RedTrail"}, -- Start with default trail
 	EquippedTrail = "RedTrail", -- Currently equipped trail
+
+	--Crates Inventory
+	TotalCrates = 5, -- Total available crates in game
+	OwnedCrates = {"BasicBoard"}, -- Start with default crate
+	EquippedCrate = "BasicBoard", -- Currently equipped crate
 }
 
 return PlayerDataTemplate

@@ -28,7 +28,7 @@ local DashTrailModule = ReplicatedStorage:WaitForChild("VFX"):WaitForChild("Hove
 local HoverboardService
 
 -- MOVEMENT / HOVERING
-local HoverStiffness = 5
+local HoverStiffness = 20
 local HoverHeight = 3
 
 -- MOVEMENT / ORIENTATION

@@ -124,8 +124,7 @@ end
 ----------------------------------------------------------
 
 ----------------------------------------------------------
--- Client request to change equipped hoverboard
--- Client calls :RequestEquipHoverboard(player, boardName)
+-- Hoverboards (Client APIs)
 ----------------------------------------------------------
 function HoverboardService.Client:RequestEquipHoverboard(player, boardName)
 	if not player or not boardName then
@@ -215,57 +214,8 @@ function HoverboardService.Client:GetEquippedHoverboard(player)
 	return PlayerDataHandler:GetEquippedHoverboard(player)
 end
 
-
-----------------------------------------------------------
--- Trails (Client APIs)
-----------------------------------------------------------
-
-function HoverboardService.Client:PlayerOwnsTrail(player, trailName)
-	return PlayerDataHandler:PlayerOwnsTrail(player, trailName)
-end
-
-function HoverboardService.Client:PurchaseTrail(player, trailName, price, currencyType)
-	local data = PlayerDataHandler:GetData(player)
-	if not data then return false end
-
-	if PlayerDataHandler:PlayerOwnsTrail(player, trailName) then
-		print("Player already owns this trail")
-		return false
-	end
-
-	if currencyType == "Coins" then
-		if data.Coins < price then
-			print("Insufficient coins to purchase trail")
-			return false
-		end
-		PlayerDataHandler:DeductCoins(player, price)
-		print("Deducted", price, "coins from", player.Name)
-	end
-
-	return PlayerDataHandler:AddTrailToInventory(player, trailName)
-end
-
-function HoverboardService.Client:EquipTrail(player, trailName)
-	PlayerDataHandler:SetEquippedTrail(player, trailName)
-	self.TrailEquipped:Fire(player, trailName)
-	return true
-end
-
-function HoverboardService.Client:UnequipTrail(player)
-	PlayerDataHandler:SetEquippedTrail(player, nil)
-	self.TrailUnequipped:Fire(player)
-	return true
-end
-
-function HoverboardService.Client:GetEquippedTrail(player)
-	return PlayerDataHandler:GetEquippedTrail(player)
-end
-
-
-----------------------------------------------------------
--- Hoverboard Store/Purchase Methods
-----------------------------------------------------------
 function HoverboardService.Client:PurchaseHoverboard(player, boardName, price, currencyType)
+	print("PurchaseHoverboard called:", player.Name, boardName, price, currencyType)
 	-- currencyType: "Coins" or "Robux"
 	local playerData = PlayerDataHandler:GetData(player)
 
@@ -312,9 +262,6 @@ function HoverboardService.Client:PurchaseHoverboard(player, boardName, price, c
 	end
 end
 
-----------------------------------------------------------
--- Get player's hoverboard inventory
-----------------------------------------------------------
 function HoverboardService.Client:GetHoverboardInventory(player)
 	local owned = PlayerDataHandler:GetOwnedHoverboards(player)
 	local equipped = PlayerDataHandler:GetEquippedHoverboard(player)
@@ -327,6 +274,99 @@ function HoverboardService.Client:GetHoverboardInventory(player)
 		AvailableHoverboards = total - #owned,
 	}
 end
+
+
+----------------------------------------------------------
+-- Trails (Client APIs)
+----------------------------------------------------------
+function HoverboardService.Client:PlayerOwnsTrail(player, trailName)
+	return PlayerDataHandler:PlayerOwnsTrail(player, trailName)
+end
+
+function HoverboardService.Client:PurchaseTrail(player, trailName, price, currencyType)
+	local data = PlayerDataHandler:GetData(player)
+	if not data then return false end
+
+	if PlayerDataHandler:PlayerOwnsTrail(player, trailName) then
+		print("Player already owns this trail")
+		return false
+	end
+
+	if currencyType == "Coins" then
+		if data.Coins < price then
+			print("Insufficient coins to purchase trail")
+			return false
+		end
+		PlayerDataHandler:DeductCoins(player, price)
+		print("Deducted", price, "coins from", player.Name)
+	end
+
+	return PlayerDataHandler:AddTrailToInventory(player, trailName)
+end
+
+function HoverboardService.Client:EquipTrail(player, trailName)
+	PlayerDataHandler:SetEquippedTrail(player, trailName)
+	self.TrailEquipped:Fire(player, trailName)
+	return true
+end
+
+function HoverboardService.Client:UnequipTrail(player)
+	PlayerDataHandler:SetEquippedTrail(player, nil)
+	self.TrailUnequipped:Fire(player)
+	return true
+end
+
+function HoverboardService.Client:GetEquippedTrail(player)
+	return PlayerDataHandler:GetEquippedTrail(player)
+end
+
+
+----------------------------------------------------------
+-- Crates (Client APIs)
+----------------------------------------------------------
+function HoverboardService.Client:PlayerOwnsCrate(player, crateName)
+	return PlayerDataHandler:PlayerOwnsCrate(player, crateName)
+end
+
+function HoverboardService.Client:PurchaseCrate(player, crateName, price, currencyType)
+	local data = PlayerDataHandler:GetData(player)
+	if not data then print("HoverboardService:PurchaseCrate failed") return false end
+
+	if currencyType == "Coins" then
+		if data.Coins < price then
+			print("Insufficient coins to purchase crate")
+			return false
+		end
+		PlayerDataHandler:DeductCoins(player, price)
+		print("Deducted", price, "coins from", player.Name)
+	end
+
+	return PlayerDataHandler:AddCrateToInventory(player, crateName)
+end
+
+function HoverboardService.Client:EquipCrate(player, crateName)
+	PlayerDataHandler:SetEquippedCrate(player, crateName)
+	return true
+end
+
+function HoverboardService.Client:UnequipCrate(player)
+	PlayerDataHandler:SetEquippedCrate(player, nil)
+	return true
+end
+
+function HoverboardService.Client:GetEquippedCrate(player)
+	return PlayerDataHandler:GetEquippedCrate(player)
+end
+
+function HoverboardService.Client:GetOwnedCrates(player)
+	return PlayerDataHandler:GetOwnedCrates(player)
+end
+
+
+----------------------------------------------------------
+-- Hoverboard Store/Purchase Methods
+----------------------------------------------------------
+
 
 ----------------------------------------------------------
 -- Character Setup
@@ -453,8 +493,6 @@ function HoverboardService:KnitStart()
 	end)
 
 	Players.PlayerRemoving:Connect(function(player)
-		--PlayerDataHandler:SetEquippedHoverboard(player, playerHoverboards[player.UserId].Name)
-		--playerHoverboards[player.UserId] = nil
 	end)
 end
 

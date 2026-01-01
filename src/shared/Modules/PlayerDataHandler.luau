@@ -541,6 +541,101 @@ end
 --------------------------------------------------------------------------
 
 
+-- === Crate storage ================================================
+function PlayerDataHandler:GetEquippedCrate(player: Player): string?
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		return profile.Data.EquippedCrate
+	end
+	return nil
+end
+
+function PlayerDataHandler:SetEquippedCrate(player: Player, crateName: string?)
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		if crateName == nil or self:PlayerOwnsCrate(player, crateName) then
+			profile.Data.EquippedCrate = crateName
+			pcall(function()
+				profile:Save()
+			end)
+			print("[PlayerDataHandler] Crate equipped for", player.Name, "→", crateName)
+			return true
+		end
+	end
+	return false
+end
+
+function PlayerDataHandler:PlayerOwnsCrate(player: Player, crateName: string): boolean
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		local owned = profile.Data.OwnedCrates or {}
+		for _, name in ipairs(owned) do
+			if name == crateName then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function PlayerDataHandler:AddCrateToInventory(player: Player, crateName: string): boolean
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		profile.Data.OwnedCrates = profile.Data.OwnedCrates or {}
+
+		if self:PlayerOwnsCrate(player, crateName) then
+			return false
+		end
+
+		table.insert(profile.Data.OwnedCrates, crateName)
+		pcall(function()
+			profile:Save()
+		end)
+
+		print("[PlayerDataHandler] Added crate to inventory:", player.Name, crateName)
+		return true
+	end
+	return false
+end
+
+function PlayerDataHandler:GetOwnedCrates(player: Player): { string }
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		return profile.Data.OwnedCrates or {}
+	end
+	return {}
+end
+
+function PlayerDataHandler:RemoveCrateFromInventory(player: Player, crateName: string): boolean
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		local owned = profile.Data.OwnedCrates or {}
+
+		-- Find and remove the crate
+		for i, ownedCrate in ipairs(owned) do
+			if ownedCrate == crateName then
+				table.remove(owned, i)
+
+				-- If player had this crate equipped, unequip it
+				if profile.Data.EquippedCrate == crateName then
+					profile.Data.EquippedCrate = nil
+				end
+
+				pcall(function()
+					profile:Save()
+				end)
+
+				print("[PlayerDataHandler] Removed crate from inventory for", player.Name, "→", crateName)
+				return true
+			end
+		end
+
+		warn("[PlayerDataHandler] Crate not found in inventory:", crateName)
+	end
+	return false
+end
+--------------------------------------------------------------------------
+
 --[Daily Reward Helpers]
 function PlayerDataHandler:SetLastDailyClaim(player: Player)
 	local now = os.time()
