@@ -37,13 +37,37 @@ local WorldUIController = Knit.CreateController({
 
 WorldUIController.NormalCards = {}
 
+
+function WorldUIController:KnitStart()
+    self.Index = 1
+    
+    if WorldsConfig.Normal[PlaceId] then
+        self.CurrentWorldConfig = WorldsConfig.Normal[PlaceId]    
+    end
+    
+    for _, typeOfWorld: string in Types do
+        
+        local configTable = WorldsConfig[typeOfWorld]
+        
+        if Seperators[typeOfWorld] then
+            Seperators[typeOfWorld].Visible = next(configTable) ~= nil
+            Seperators[typeOfWorld].LayoutOrder = self.Index
+            self.Index += 1
+        end
+        
+        LoadWorldsFromTable(typeOfWorld, configTable)
+    end 
+end
+
 function WorldUIController:Enable(Enabled: boolean)
     MainGui.Enabled = Enabled
-	WorldsUI.Visible = Enabled
+    WorldsUI.Visible = Enabled
 end
 
 function RequestTeleport(placeId)
-    
+    if placeId ~= PlaceId then
+        
+    end
 end
 
 function WorldUIController:SetWorldCardStates(CurrentMaxWorld: number)
@@ -54,19 +78,6 @@ function WorldUIController:SetWorldCardStates(CurrentMaxWorld: number)
         card.Overlay.Visible = not isLocked
         card.Content.Teleport.Visible = not isLocked and (index ~= CurrentMaxWorld)
         card.Content.Current.Visible = index == CurrentMaxWorld
-
-        self.NormalCards[self.Index] = card
-    end
-
-    for index = 1, CurrentMaxWorld do
-        local card = self.NormalCards[index]
-        if card then
-            local isUnlocked = self.Index <= self.CurrentWorldConfig.Index
-
-            card.Overlay.Visible = true
-            card.Content.Teleport.Visible = isUnlocked
-            card.Content.Current.Visible = self.Index == self.CurrentWorldConfig.Index
-        end
     end
 end
 
@@ -80,36 +91,24 @@ function LoadWorldsFromTable(Type: string, ModeTable: {})
         card.LayoutOrder = WorldUIController.Index
         card.Overlay.Visible = Type == "Normal"
 
+        local content = card.Content.Content
+
         if Type == "Normal" then
             card.Overlay.Title.Text = `Finish World {worldTable.Index - 1} to unlock`
-            card.Content.Content.Title.Text = `World {worldTable.Index}`    
+            content.Title.Text = `World {worldTable.Index}`    
+
+            WorldUIController.Normal[worldTable.Index] = card
         else
-             card.Content.Content.Title.Text = worldTable.Name   
+            card.Content.Content.Title.Text = worldTable.Name   
         end
+
+        -- click connection
+        content.Teleport.Button.Activated:Connect(function()
+            RequestTeleport(placeId)
+        end)
 
         WorldUIController.Index += 1
     end
-end
-
-function WorldUIController:KnitStart()
-    self.Index = 1
-
-    if WorldsConfig.Normal[PlaceId] then
-        self.CurrentWorldConfig = WorldsConfig.Normal[PlaceId]    
-    end
-
-    for _, typeOfWorld: string in Types do
-        
-        local configTable = WorldsConfig[typeOfWorld]
-
-        if Seperators[typeOfWorld] then
-            Seperators[typeOfWorld].Visible = next(configTable) ~= nil
-            Seperators[typeOfWorld].LayoutOrder = self.Index
-            self.Index += 1
-        end
-
-        LoadWorldsFromTable(typeOfWorld, configTable)
-    end 
 end
 
 return WorldUIController
