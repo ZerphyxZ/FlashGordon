@@ -1,12 +1,15 @@
 print("Loading GearController")
 local Global =
 	require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Global"))
+	
+local TweenService = game:GetService("TweenService")
 local Knit = Global.Knit
 local Players = Global.Players
 local player = Players.LocalPlayer
 local ReplicatedStorage = Global.ReplicatedStorage
 local hoverboardsData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("HoverboardData"))
 local trailData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("TrailsConfig"))
+local cratesData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("CratesConfig"))
 local HoverboardService
 
 local character
@@ -50,6 +53,27 @@ local boardItemDetailsTitleLabel
 
 --CRATES SECTION
 local cratesFrame
+local cratesList
+local crateScrollingItemTemplate
+local crateScrollingItemImage
+local crateScrollingItemPercentageLabel
+
+-- Selection
+local crateSelectionFrame
+local crateSelectionInnerFrame
+local crateSelectionItemImage
+local crateSelectionItemNameLabel
+
+-- Items inside crate
+local crateItemsScrollingFrame
+
+local cratesBoardListScrollingFrame
+local cratesBoardListScrollingFrameParent
+local scrollingBoardItemTemplate
+
+-- Purchase buttons
+local cratePurchaseFrame
+local cratePurchaseButton
 
 --TRAILS SECTION
 local trailsFrame
@@ -80,7 +104,110 @@ local equippedBoard = nil
 local currentTrailConfig = nil
 local equippedTrail = nil
 
+local currentCrateConfig = nil
+local equippedCrate = nil
+
 local TAB_CONFIG = {}
+
+local FILL_TWEEN_INFO = TweenInfo.new(
+	0.2, -- duration
+	Enum.EasingStyle.Quad,
+	Enum.EasingDirection.Out
+)
+
+local function TweenFiller(filler, targetScale)
+	if not filler then return end
+
+	local tween = TweenService:Create(
+		filler,
+		FILL_TWEEN_INFO,
+		{
+			Size = UDim2.new(targetScale, 0, 1, 0)
+		}
+	)
+
+	tween:Play()
+end
+
+local function UIReferences()
+	local playerGui = player:WaitForChild("PlayerGui")
+
+	Gear = playerGui:WaitForChild("Gear")
+	mainFrame = Gear:WaitForChild("MainFrame")
+	closeBtn = mainFrame:WaitForChild("Close"):WaitForChild("Button")
+	BG = mainFrame:WaitForChild("BG")
+	cardTemplate = BG:WaitForChild("CardTemplate")
+
+	--BOARDS SECTION
+	boardsFrame = BG:WaitForChild("HoverboardsFrame")
+	boardsList = boardsFrame:WaitForChild("Hoverboards")
+	boardSelectionFrame = boardsFrame:WaitForChild("SelectionFrame")
+	local purchaseFrame = boardSelectionFrame:WaitForChild("PurchaseFrame")
+	boardPurchaseBtn = purchaseFrame:WaitForChild("PurchaseButton")
+	boardEquipButton = purchaseFrame:WaitForChild("EquipButton")
+	boardCurrentButton = purchaseFrame:WaitForChild("CurrentButton")
+	revolvingContainer = boardSelectionFrame:WaitForChild("RevolvingContainer")
+	boardItemDetails = boardSelectionFrame:WaitForChild("ItemDetails")
+	boardItemDetailsBGImage = boardItemDetails:WaitForChild("BGImage")
+	topSpeed = boardItemDetailsBGImage:WaitForChild("TopSpeed")
+	topSpeedFillerBG = topSpeed:WaitForChild("FillerBG")
+	topSpeedFiller = topSpeedFillerBG:WaitForChild("Filler")
+	topSpeedTitle = topSpeed:WaitForChild("Title")
+	topSpeedValue = topSpeed:WaitForChild("Value")
+	acceleration = boardItemDetailsBGImage:WaitForChild("Acceleration")
+	accelerationFillerBG = acceleration:WaitForChild("FillerBG")
+	accelerationFiller = accelerationFillerBG:WaitForChild("Filler")
+	accelerationTitle = acceleration:WaitForChild("Title")
+	accelerationValue = acceleration:WaitForChild("Value")
+	jumpPower = boardItemDetailsBGImage:WaitForChild("JumpPower")
+	jumpPowerFillerBG = jumpPower:WaitForChild("FillerBG")
+	jumpPowerFiller = jumpPowerFillerBG:WaitForChild("Filler")
+	jumpPowerTitle = jumpPower:WaitForChild("Title")
+	jumpPowerValue = jumpPower:WaitForChild("Value")
+	boardItemDetailsTitleLabel = boardItemDetailsBGImage:WaitForChild("TitleLable")
+
+	--CRATES SECTION
+	cratesFrame = BG:WaitForChild("CratesFrame")
+	crateScrollingItemTemplate = cratesFrame:WaitForChild("CrateScrollingItem")
+	cratesList = cratesFrame:WaitForChild("Crates")
+	crateSelectionFrame = cratesFrame:WaitForChild("SelectionFrame")
+	cratePurchaseFrame = crateSelectionFrame:WaitForChild("PurchaseFrame")
+	crateSelectionInnerFrame = crateSelectionFrame:WaitForChild("Frame")
+	crateItemsScrollingFrame = crateSelectionFrame:WaitForChild("ItemsScrollingFrame")
+	crateSelectionItemImage = crateSelectionInnerFrame:WaitForChild("ItemImage")
+	crateSelectionItemNameLabel = crateSelectionInnerFrame:WaitForChild("ItemNameLabel")
+	cratePurchaseButton = cratePurchaseFrame:WaitForChild("PurchaseButton")
+	cratesBoardListScrollingFrameParent = cratesFrame:WaitForChild("Frame")
+	cratesBoardListScrollingFrame = cratesBoardListScrollingFrameParent:WaitForChild("BoardListScrollingFrame")
+	scrollingBoardItemTemplate = cratesFrame:WaitForChild("ScrollingBoardCardTemplate")
+
+	--TRAILS SECTION
+	trailsFrame = BG:WaitForChild("TrailsFrame")
+	trailsList = trailsFrame:WaitForChild("TrailsList")
+	trailSelectionFrame = trailsFrame:WaitForChild("SelectionFrame")
+	trailItemDetails = trailSelectionFrame:WaitForChild("ItemDetails")
+	trailsItemDetailsBGImage = trailItemDetails:WaitForChild("BGImage")
+	trailItemDetailsTitleLabel = trailsItemDetailsBGImage:WaitForChild("Name")
+	trailItemDetailsDescriptionLabel = trailsItemDetailsBGImage:WaitForChild("Description")
+
+	local trailPurchaseFrame = trailSelectionFrame:WaitForChild("PurchaseFrame")
+	trailPurchaseButton = trailPurchaseFrame:WaitForChild("PurchaseButton")
+	trailEquipButton = trailPurchaseFrame:WaitForChild("EquipButton")
+	trailUnequipButton = trailPurchaseFrame:WaitForChild("UnequipButton")
+
+	--TABS SECTION
+	tabs = BG:WaitForChild("Tabs")
+	boardsTab = tabs:WaitForChild("BoardsButton")
+	trailsTab = tabs:WaitForChild("TrailsButton")
+	cratesTab = tabs:WaitForChild("CratesButton")
+
+	TAB_CONFIG = {
+		[boardsTab] = boardsFrame,
+		[cratesTab] = cratesFrame,
+		[trailsTab] = trailsFrame,
+	}
+	print("UI references rebuilt on character spawn")
+end
 
 ----------------- BOARDS FUNCTIONS ---------------------
 local function SetBoardButtonState(state)
@@ -97,10 +224,13 @@ local function UpdateSelectionStats(boardName, data)
 	topSpeedValue.Text = tostring(data.TopSpeed)
 	jumpPowerValue.Text = tostring(data.JumpPower)
 
-	-- -- Fillers
-	topSpeedFiller.Size = UDim2.new(data.TopSpeed / 100, 0, 1, 0)
-	accelerationFiller.Size = UDim2.new(data.Acceleration / 2, 0, 1, 0)
-	jumpPowerFiller.Size = UDim2.new(data.JumpPower / 100, 0, 1, 0)
+	-- Tween Fillers
+	TweenFiller(topSpeedFiller, data.TopSpeed / 100)
+	TweenFiller(accelerationFiller, data.Acceleration / 2)
+	TweenFiller(jumpPowerFiller, data.JumpPower / 100)
+	-- topSpeedFiller.Size = UDim2.new(data.TopSpeed / 100, 0, 1, 0)
+	-- accelerationFiller.Size = UDim2.new(data.Acceleration / 2, 0, 1, 0)
+	-- jumpPowerFiller.Size = UDim2.new(data.JumpPower / 100, 0, 1, 0)
 end
 
 local function SelectHoverboard(boardName)
@@ -130,6 +260,7 @@ local function SelectHoverboard(boardName)
 				end
 			else
 				print("Owns false")
+				boardPurchaseBtn:WaitForChild("TextLabel").Text = tostring(data.Price)
 				SetBoardButtonState("Purchase")
 			end
 		end)
@@ -293,7 +424,262 @@ local function UnequipTrail()
 	equippedTrail = nil
 	SetTrailButtonState("Equip")
 end
+--------------------------------------------------------
 
+----------------- CRATES FUNCTIONS ---------------------
+local function PopulateCrateItemBoardsList(crateData)
+	for _, child in ipairs(crateItemsScrollingFrame:GetChildren()) do
+		if child:GetAttribute("CrateBoardItem") then
+			child:Destroy()
+		end
+	end
+
+	if not crateData.BoardsList then
+		return
+	end
+
+	for _, boardData in pairs(crateData.BoardsList) do
+		if typeof(boardData) == "table" then
+			local item = crateScrollingItemTemplate:Clone()
+			item.Visible = true
+			item.Parent = crateItemsScrollingFrame
+			item:SetAttribute("CrateBoardItem", true)
+
+			-- UI fill
+			item:WaitForChild("ItemImage").Image = boardData.Image
+			item:WaitForChild("PercentageLabel").Text = string.format("%.2f%%", boardData.Percentage)
+		end
+	end
+
+	-- Populate scrolling board list for spinning animation
+	for boardName, boardData in pairs(crateData.BoardsList) do
+		if typeof(boardData) == "table" then
+			local card = scrollingBoardItemTemplate:Clone()
+			card.Visible = true
+			card.Parent = cratesBoardListScrollingFrame
+			card:SetAttribute("ScrollingBoardItem", true)
+
+			-- Fill card UI
+			card:WaitForChild("BoardImage").Image = boardData.Image
+			card:WaitForChild("BoardNameLabel").Text = boardData.Name
+		end
+	end
+
+	-- Ensure there are enough items for smooth scrolling
+	local itemCount = #cratesBoardListScrollingFrame:GetChildren()
+	if itemCount < 20 then
+		-- Duplicate items to create an endless loop effect
+		local originalItems = {}
+		for _, child in ipairs(cratesBoardListScrollingFrame:GetChildren()) do
+			if child:GetAttribute("ScrollingBoardItem") then
+				table.insert(originalItems, child:Clone())
+			end
+		end
+
+		for i = 1, math.ceil(20 / itemCount) do
+			for _, item in ipairs(originalItems) do
+				local clone = item:Clone()
+				clone.Parent = cratesBoardListScrollingFrame
+				clone:SetAttribute("ScrollingBoardItem", true)
+			end
+		end
+	end
+end
+
+local function SelectCrate(crateName)
+	local data = cratesData[crateName]
+	if not data then
+		return
+	end
+
+	currentCrateConfig = crateName
+	crateSelectionItemNameLabel.Text = data.Name
+	crateSelectionItemImage.Image = data.Image
+	cratePurchaseButton:WaitForChild("TextLabel").Text = tostring(data.Price)
+
+	PopulateCrateItemBoardsList(data)
+end
+
+local function PopulateCrates()
+	for _, child in ipairs(cratesList:GetChildren()) do
+		if child:GetAttribute("CrateCard") then
+			child:Destroy()
+		end
+	end
+
+	for crateName, data in pairs(cratesData) do
+		if typeof(data) == "table" then
+			local card = cardTemplate:Clone()
+			card.Name = crateName
+			card.Visible = true
+			card.Parent = cratesList
+			card:SetAttribute("CrateCard", true)
+
+			card:WaitForChild("Title").Text = data.Name
+			card:WaitForChild("ItemImage").Image = data.Image
+			card:WaitForChild("Frame"):WaitForChild("Price").Text = tostring(data.Price)
+
+			card.MouseButton1Click:Connect(function()
+				SelectCrate(crateName)
+			end)
+		end
+	end
+end
+
+local function GetRandomBoardFromCrate(crateName)
+	local crateData = cratesData[crateName]
+	if not crateData or not crateData.BoardsList then
+		return nil
+	end
+
+	-- Calculate total percentage
+	local totalPercentage = 0
+	for _, boardData in pairs(crateData.BoardsList) do
+		totalPercentage = totalPercentage + boardData.Percentage
+	end
+
+	-- Generate random number
+	local randomValue = math.random() * totalPercentage
+
+	-- Find winning board based on percentage
+	local currentSum = 0
+	for boardName, boardData in pairs(crateData.BoardsList) do
+		currentSum = currentSum + boardData.Percentage
+		if randomValue <= currentSum then
+			return boardName, boardData
+		end
+	end
+
+	return nil
+end
+
+local function SpinCrateAnimation(winningBoardName, winningBoardData)
+	cratePurchaseButton.Visible = false
+
+	local RunService = game:GetService("RunService")
+
+	local scrollingFrame = cratesBoardListScrollingFrame
+	local items = scrollingFrame:GetChildren()
+
+	-- Filter valid items
+	local boardItems = {}
+	for _, child in ipairs(items) do
+		if child:GetAttribute("ScrollingBoardItem") then
+			table.insert(boardItems, child)
+		end
+	end
+
+	if #boardItems == 0 then
+		return
+	end
+
+	-- Measurements
+	local itemWidth = boardItems[1].AbsoluteSize.X
+	local viewportWidth = scrollingFrame.AbsoluteWindowSize.X
+	local contentWidth = itemWidth * #boardItems
+
+	-- Find winning index
+	local winningIndex = 1
+	for i, item in ipairs(boardItems) do
+		if item.BoardNameLabel.Text == winningBoardData.Name then
+			winningIndex = i
+			break
+		end
+	end
+
+	-- Center winning item
+	local targetX = ((winningIndex - 1) * itemWidth) - (viewportWidth / 2) + (itemWidth / 2)
+	targetX = math.clamp(targetX, 0, math.max(0, contentWidth - viewportWidth))
+
+	-- Spin parameters
+	local spinDuration = 5
+	local elapsed = 0
+	local startSpeed = 4200 -- Start spinning speed
+	local decelerationStartTime = 3.5 -- Start deceleration after 3.5 seconds
+	local decelerationDuration = 1.5 -- Decelerate over 1.5 seconds
+	local totalDistance = 0
+	local currentX = scrollingFrame.CanvasPosition.X
+
+	local connection
+	connection = RunService.Heartbeat:Connect(function(dt)
+		elapsed = elapsed + dt
+		
+		-- Calculate current speed based on deceleration phase
+		local currentSpeed = startSpeed
+		
+		if elapsed >= decelerationStartTime then
+			-- Start decelerating
+			local decelAlpha = math.clamp((elapsed - decelerationStartTime) / decelerationDuration, 0, 1)
+			-- Quadratic ease-out deceleration
+			local decelFactor = (1 - decelAlpha) ^ 2
+			currentSpeed = startSpeed * decelFactor
+			print("Stops here.")
+		end
+		
+		-- Calculate distance traveled in this frame
+		local frameDistance = currentSpeed * dt
+		totalDistance = totalDistance + frameDistance
+		
+		-- Apply seamless looping
+		local wrappedX = totalDistance % contentWidth
+		
+		-- Apply movement
+		currentX = currentX + currentSpeed * dt
+		-- Continuous loop (NO stop/start)
+		--local wrappedX = currentX % contentWidth
+		
+		-- Loop illusion
+		if currentX >= contentWidth then
+			print("Looping back.")
+			currentX = currentX - contentWidth
+		end
+		
+		scrollingFrame.CanvasPosition = Vector2.new(currentX, 0)
+
+		-- Stop only once after the full duration
+		if elapsed >= spinDuration then
+			connection:Disconnect()
+			
+			print("Spin complete")
+			-- Snap to winning position
+			scrollingFrame.CanvasPosition = Vector2.new(targetX, 0)
+
+			task.delay(0.4, function()
+				print("Going to purchase the hoverboard.")
+				local success = HoverboardService:PurchaseHoverboard(winningBoardName, 0, "Coins")
+				if success then
+					print("Purchased winning board from crate:", winningBoardName)
+					cratePurchaseButton.Visible = true
+				end
+			end)
+		end
+	end)
+end
+
+local function PurchaseCrate()
+	if not currentCrateConfig then
+		print("Not current crate selected")
+		return
+	end
+
+	local crateData = cratesData[currentCrateConfig]
+	if not crateData then
+		return
+	end
+
+	local success = HoverboardService:PurchaseCrate(currentCrateConfig, crateData.Price, crateData.Currency)
+	if success then
+		-- Get random winning board
+		print("Success")
+		local winningBoardName, winningBoardData = GetRandomBoardFromCrate(currentCrateConfig)
+		if winningBoardName then
+			-- Start spin animation
+			print("Winning board:", winningBoardName)
+			cratesBoardListScrollingFrameParent.Visible = true
+			SpinCrateAnimation(winningBoardName, winningBoardData)
+		end
+	end
+end
 --------------------------------------------------------
 
 -----------------  GLOBAL FUNCTIONS --------------------
@@ -353,7 +739,9 @@ local function BindInput()
 	trailUnequipButton.MouseButton1Click:Connect(function()
 		UnequipTrail()
 	end)
-
+	cratePurchaseButton.MouseButton1Click:Connect(function()
+		PurchaseCrate()
+	end)
 	BindTabs()
 end
 
@@ -403,95 +791,29 @@ local function CleanStates()
 	trailItemDetailsDescriptionLabel.Text = ""
 	TAB_CONFIG = {}
 end
-
-local function UIReferences()
-	local playerGui = player:WaitForChild("PlayerGui")
-
-	Gear = playerGui:WaitForChild("Gear")
-	mainFrame = Gear:WaitForChild("MainFrame")
-	closeBtn = mainFrame:WaitForChild("Close"):WaitForChild("Button")
-	BG = mainFrame:WaitForChild("BG")
-	cardTemplate = BG:WaitForChild("CardTemplate")
-
-	--BOARDS SECTION
-	boardsFrame = BG:WaitForChild("HoverboardsFrame")
-	boardsList = boardsFrame:WaitForChild("Hoverboards")
-	boardSelectionFrame = boardsFrame:WaitForChild("SelectionFrame")
-	local purchaseFrame = boardSelectionFrame:WaitForChild("PurchaseFrame")
-	boardPurchaseBtn = purchaseFrame:WaitForChild("PurchaseButton")
-	boardEquipButton = purchaseFrame:WaitForChild("EquipButton")
-	boardCurrentButton = purchaseFrame:WaitForChild("CurrentButton")
-	revolvingContainer = boardSelectionFrame:WaitForChild("RevolvingContainer")
-	boardItemDetails = boardSelectionFrame:WaitForChild("ItemDetails")
-	boardItemDetailsBGImage = boardItemDetails:WaitForChild("BGImage")
-	topSpeed = boardItemDetailsBGImage:WaitForChild("TopSpeed")
-	topSpeedFillerBG = topSpeed:WaitForChild("FillerBG")
-	topSpeedFiller = topSpeedFillerBG:WaitForChild("Filler")
-	topSpeedTitle = topSpeed:WaitForChild("Title")
-	topSpeedValue = topSpeed:WaitForChild("Value")
-	acceleration = boardItemDetailsBGImage:WaitForChild("Acceleration")
-	accelerationFillerBG = acceleration:WaitForChild("FillerBG")
-	accelerationFiller = accelerationFillerBG:WaitForChild("Filler")
-	accelerationTitle = acceleration:WaitForChild("Title")
-	accelerationValue = acceleration:WaitForChild("Value")
-	jumpPower = boardItemDetailsBGImage:WaitForChild("JumpPower")
-	jumpPowerFillerBG = jumpPower:WaitForChild("FillerBG")
-	jumpPowerFiller = jumpPowerFillerBG:WaitForChild("Filler")
-	jumpPowerTitle = jumpPower:WaitForChild("Title")
-	jumpPowerValue = jumpPower:WaitForChild("Value")
-	boardItemDetailsTitleLabel = boardItemDetailsBGImage:WaitForChild("TitleLable")
-
-	--CRATES SECTION
-	cratesFrame = BG:WaitForChild("CratesFrame")
-
-	--TRAILS SECTION
-	trailsFrame = BG:WaitForChild("TrailsFrame")
-	trailsList = trailsFrame:WaitForChild("TrailsList")
-	trailSelectionFrame = trailsFrame:WaitForChild("SelectionFrame")
-	trailItemDetails = trailSelectionFrame:WaitForChild("ItemDetails")
-	trailsItemDetailsBGImage = trailItemDetails:WaitForChild("BGImage")
-	trailItemDetailsTitleLabel = trailsItemDetailsBGImage:WaitForChild("Name")
-	trailItemDetailsDescriptionLabel = trailsItemDetailsBGImage:WaitForChild("Description")
-
-	local trailPurchaseFrame = trailSelectionFrame:WaitForChild("PurchaseFrame")
-	trailPurchaseButton = trailPurchaseFrame:WaitForChild("PurchaseButton")
-	trailEquipButton = trailPurchaseFrame:WaitForChild("EquipButton")
-	trailUnequipButton = trailPurchaseFrame:WaitForChild("UnequipButton")
-
-	--TABS SECTION
-	tabs = BG:WaitForChild("Tabs")
-	boardsTab = tabs:WaitForChild("BoardsButton")
-	trailsTab = tabs:WaitForChild("TrailsButton")
-	cratesTab = tabs:WaitForChild("CratesButton")
-
-	TAB_CONFIG = {
-		[boardsTab] = boardsFrame,
-		[cratesTab] = cratesFrame,
-		[trailsTab] = trailsFrame,
-	}
-	print("UI references rebuilt on character spawn")
-end
 --------------------------------------------------------
 
 ----------------- CHARACTER LIFECYCLE ------------------
 
 local function PopulateItems()
 	HoverboardService:GetHoverboardData()
-			:andThen(function(data)
-				if data then
-					equippedBoard = data.Name
-					if equippedBoard then
-						PopulateHoverboards()
-						OpenTab(boardsTab)
-						SelectHoverboard(equippedBoard)
-					end
+		:andThen(function(data)
+			if data then
+				equippedBoard = data.Name
+				if equippedBoard then
+					PopulateHoverboards()
+					OpenTab(boardsTab)
+					SelectHoverboard(equippedBoard)
+					PopulateCrates()
 				end
-			end)
-			:catch(function(err)
-				warn("Failed to get hoverboard data:", err)
-			end)
+			end
+		end)
+		:catch(function(err)
+			warn("Failed to get hoverboard data:", err)
+		end)
 
-	HoverboardService:GetEquippedTrail():andThen(function(trailName)
+	HoverboardService:GetEquippedTrail()
+		:andThen(function(trailName)
 			equippedTrail = trailName
 			PopulateTrails()
 			SelectTrail(equippedTrail)
