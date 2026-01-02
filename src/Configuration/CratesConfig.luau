@@ -10,36 +10,43 @@ local CratesConfig = {
                 Name = "Hoverboard1",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 22.22,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard2 = {
                 Name = "Hoverboard2",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 22.22,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard3 = {
                 Name = "Hoverboard3",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 17.77,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard4 = {
                 Name = "Hoverboard4",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 15.55,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard5 = {
                 Name = "Hoverboard5",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 13.33,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard6 = {
                 Name = "Hoverboard6",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 5.55,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard7 = {
                 Name = "Hoverboard7",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 3.33,
+                Color = Color3.fromRGB(255, 255, 255),
             }
         }
     },
@@ -54,41 +61,43 @@ local CratesConfig = {
                 Name = "Hoverboard1",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 22.22,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard2 = {
                 Name = "Hoverboard2",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 22.22,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard3 = {
                 Name = "Hoverboard3",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 17.77,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard4 = {
                 Name = "Hoverboard4",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 15.55,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard5 = {
                 Name = "Hoverboard5",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 13.33,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard6 = {
                 Name = "Hoverboard6",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 5.55,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard7 = {
                 Name = "Hoverboard7",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 3.33,
-            },
-            Hoverboard8 = {
-                Name = "Hoverboard8",
-                Image = "rbxassetid://137514360049412",
-                Percentage = 3.33,
+                Color = Color3.fromRGB(255, 255, 255),
             }
         }
     },
@@ -103,36 +112,43 @@ local CratesConfig = {
                 Name = "Hoverboard1",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 22.22,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard2 = {
                 Name = "Hoverboard2",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 22.22,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard3 = {
                 Name = "Hoverboard3",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 17.77,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard4 = {
                 Name = "Hoverboard4",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 15.55,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard5 = {
                 Name = "Hoverboard5",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 13.33,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard6 = {
                 Name = "Hoverboard6",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 5.55,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard7 = {
                 Name = "Hoverboard7",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 3.33,
+                Color = Color3.fromRGB(255, 255, 255),
             }
         }
     },
@@ -191,36 +207,43 @@ local CratesConfig = {
                 Name = "Hoverboard1",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 22.22,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard2 = {
                 Name = "Hoverboard2",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 22.22,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard3 = {
                 Name = "Hoverboard3",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 17.77,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard4 = {
                 Name = "Hoverboard4",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 15.55,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard5 = {
                 Name = "Hoverboard5",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 13.33,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard6 = {
                 Name = "Hoverboard6",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 5.55,
+                Color = Color3.fromRGB(255, 255, 255),
             },
             Hoverboard7 = {
                 Name = "Hoverboard7",
                 Image = "rbxassetid://137514360049412",
                 Percentage = 3.33,
+                Color = Color3.fromRGB(255, 255, 255),
             }
         }
     },

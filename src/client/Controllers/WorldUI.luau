@@ -26,7 +26,9 @@ local Seperators: {string: Frame} = {
     Gamemodes = WorldParent:WaitForChild("CampaignSeparator"),
 }
 
-local TemplateWorldCard: Frame = script:WaitForChild("TemplateWorld")
+
+
+local TemplateWorldCard: Frame = WorldParent:WaitForChild("TemplateWorld")
 
 -- [CONSTANTS]          -----
 local PlaceId = game.PlaceId

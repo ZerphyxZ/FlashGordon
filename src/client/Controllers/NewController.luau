@@ -28,13 +28,18 @@ local DashTrailModule = ReplicatedStorage:WaitForChild("VFX"):WaitForChild("Hove
 local HoverboardService
 
 -- MOVEMENT / HOVERING
-local HoverStiffness = 20
+local HoverStiffness = 10
 local HoverHeight = 3
 
 -- MOVEMENT / ORIENTATION
 local OgBoardRotation
 local ForwardLean = 0
 local Rayvelocity = 0.2
+
+-- 180 TURN VARIABLES
+local LastInputVector = Vector3.zero
+local IsQuickTurning = false
+local QuickTurnProgress = 0
 
 -- Global variables for controller
 local Normal
@@ -54,9 +59,11 @@ local MAX_SPEED = 100
 local ACCELERATION = 0.3
 local DOWNHILL_SLOPE_ANGLE = 45
 local RAY_PREFERENCE_DISTANCE = 2
+local QUICK_TURN_DURATION = 0.3 -- seconds for 180° turn
 
 -- MOVEMENT / SPEED
 local IsDecelerating = false
+local IsBraking = true
 local Diff = 0.01
 NewController.SpeedVar = 0
 NewController.CurrentSpeed = 0
@@ -749,7 +756,7 @@ local function ExecuteAirJump(jumpPower)
 	--print("Executing air jump. Remaining jumps: ", AirJumps, " Remaining energy: ", flyEnergy)
 	--energyLabel.Text = "Energy: " .. flyEnergy
 	bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
-	bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower * 0.75, bodyVelocity.Velocity.Z)
+	bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower, bodyVelocity.Velocity.Z)
 end
 -----------------------------------------------------------
 
@@ -916,7 +923,7 @@ function Lerp(Start, Target, Alpha): number
 	return Start + (Target - Start) * Alpha
 end
 
-function CalculateSpeed(acceleration, topSpeed, deltaTimeRender)
+function CalculateSpeed(topSpeed)
 	local newTargetSpeed = NewController.MoveVector.Magnitude == 0 and 0 or topSpeed
 
 	if NewController.CurrentSpeed ~= newTargetSpeed then
@@ -939,7 +946,7 @@ function ReturnDownhillVector(SurfaceNormal: Vector3?): Vector3
 	return Vector3.zero
 end
 
-function ApplyVelocity(jumpPower, deltaTimeRender)
+function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 	local Origin = Board.Position
 	local Direction = Vector3.new(0, -1, 0)
 	local CheckingDistance = HoverHeight + 4
@@ -1023,9 +1030,15 @@ function ApplyVelocity(jumpPower, deltaTimeRender)
 		LastJump = false
 	end
 
-	local velocityFactor = ACCELERATION_FACTOR
+	local velocityFactor = Acceleration
 	if IsDecelerating then
-		velocityFactor = CanJump and ACCELERATION_FACTOR * 2 or DECELERATION_FACTOR
+		-- local brakeFactor = Acceleration * 10
+		-- if IsBraking then
+		-- 	velocityFactor = CanJump and brakeFactor
+		-- else
+		-- 	velocityFactor = CanJump and Acceleration * 2 or DECELERATION_FACTOR
+		-- end
+		velocityFactor = CanJump and Acceleration * 2 or DECELERATION_FACTOR
 	end
 
 	local downhillVector = Vector3.zero
@@ -1076,9 +1089,12 @@ function ApplyOrientation(deltaTimeRender)
 
 		if newNormal then
 			local velocity = bodyVelocity.Velocity * Vector3.new(1, 0, 1)
+			--local LookVector = NewController.MoveVector.Unit
+			
 			local LookVector = rootPart.CFrame.LookVector
 
 			if velocity.Magnitude >= FLOATING_ERROR_MARGIN then
+				print("Printing Look Vector")
 				LookVector = velocity.Unit
 			else
 				--warn("...............")
@@ -1090,11 +1106,12 @@ function ApplyOrientation(deltaTimeRender)
 
 			local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION)
 
+			local alpha = math.clamp(deltaTimeRender * ORIENTATION_FACTOR, 0, 1)
+			--bodyGyro.CFrame = AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt))
+			
 			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(
-				AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt)),
-				deltaTimeRender * ORIENTATION_FACTOR
+				AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt)), alpha
 			)
-			-- bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame, deltaTimeRender * ORIENTATION_FACTOR)
 		end
 	end
 end
@@ -1321,8 +1338,8 @@ function NewController:StartHoverboard(config, HoverboardService)
 	end
 	runningConnection = RunService.PreRender:Connect(function(dt)
 		CalculateMoveDirection()
-		CalculateSpeed(acceleration, topSpeed, dt)
-		ApplyVelocity(jumpPower, dt)
+		CalculateSpeed(topSpeed)
+		ApplyVelocity(acceleration, jumpPower, dt)
 		ApplyOrientation(dt)
 		UpdateFOV(topSpeed, dt)
 
@@ -1340,7 +1357,7 @@ local function InitializeHoverboard()
 		if hoverboardPart then
 			-- Get hoverboard data from server
 			HoverboardService:GetHoverboardData()
-			:andThen(function(data)
+				:andThen(function(data)
 					if data then
 						print("Initializing hoverboard:", data.Name)
 						NewController:SetActiveConfig(data.Name)
