@@ -1,7 +1,7 @@
 print("Loading GearController")
 local Global =
 	require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Global"))
-	
+
 local TweenService = game:GetService("TweenService")
 local Knit = Global.Knit
 local Players = Global.Players
@@ -23,6 +23,7 @@ local mainFrame
 local closeBtn
 local BG
 local cardTemplate
+local overlay
 
 --BOARDS SECTION
 local boardsFrame
@@ -57,19 +58,19 @@ local cratesList
 local crateScrollingItemTemplate
 local crateScrollingItemImage
 local crateScrollingItemPercentageLabel
-
--- Selection
 local crateSelectionFrame
 local crateSelectionInnerFrame
 local crateSelectionItemImage
 local crateSelectionItemNameLabel
-
--- Items inside crate
 local crateItemsScrollingFrame
-
 local cratesBoardListScrollingFrame
 local cratesBoardListScrollingFrameParent
 local scrollingBoardItemTemplate
+local arrow
+local winningBoardFrame
+local winningBoardImage
+local winningBoardNameLabel
+local winningBoardFrameShine
 
 -- Purchase buttons
 local cratePurchaseFrame
@@ -116,15 +117,13 @@ local FILL_TWEEN_INFO = TweenInfo.new(
 )
 
 local function TweenFiller(filler, targetScale)
-	if not filler then return end
+	if not filler then
+		return
+	end
 
-	local tween = TweenService:Create(
-		filler,
-		FILL_TWEEN_INFO,
-		{
-			Size = UDim2.new(targetScale, 0, 1, 0)
-		}
-	)
+	local tween = TweenService:Create(filler, FILL_TWEEN_INFO, {
+		Size = UDim2.new(targetScale, 0, 1, 0),
+	})
 
 	tween:Play()
 end
@@ -137,6 +136,7 @@ local function UIReferences()
 	closeBtn = mainFrame:WaitForChild("Close"):WaitForChild("Button")
 	BG = mainFrame:WaitForChild("BG")
 	cardTemplate = BG:WaitForChild("CardTemplate")
+	overlay = Gear:WaitForChild("Overlay")
 
 	--BOARDS SECTION
 	boardsFrame = BG:WaitForChild("HoverboardsFrame")
@@ -177,9 +177,15 @@ local function UIReferences()
 	crateSelectionItemImage = crateSelectionInnerFrame:WaitForChild("ItemImage")
 	crateSelectionItemNameLabel = crateSelectionInnerFrame:WaitForChild("ItemNameLabel")
 	cratePurchaseButton = cratePurchaseFrame:WaitForChild("PurchaseButton")
-	cratesBoardListScrollingFrameParent = cratesFrame:WaitForChild("Frame")
+	cratesBoardListScrollingFrameParent = overlay:WaitForChild("Frame")
 	cratesBoardListScrollingFrame = cratesBoardListScrollingFrameParent:WaitForChild("BoardListScrollingFrame")
 	scrollingBoardItemTemplate = cratesFrame:WaitForChild("ScrollingBoardCardTemplate")
+	arrow = cratesBoardListScrollingFrameParent:WaitForChild("Arrow")
+
+	winningBoardFrame = overlay:WaitForChild("WinningBoardFrame")
+	winningBoardImage = winningBoardFrame:WaitForChild("WinningBoardImage")
+	winningBoardNameLabel = winningBoardImage:WaitForChild("WinningBoardNameLabel")
+	winningBoardFrameShine = winningBoardFrame:WaitForChild("ShiningRay")
 
 	--TRAILS SECTION
 	trailsFrame = BG:WaitForChild("TrailsFrame")
@@ -207,6 +213,27 @@ local function UIReferences()
 		[trailsTab] = trailsFrame,
 	}
 	print("UI references rebuilt on character spawn")
+end
+
+local function SetButtonsActive(active)
+	boardPurchaseBtn.Interactable = active
+	boardEquipButton.Interactable = active
+	boardCurrentButton.Interactable = active
+	cratePurchaseButton.Interactable = active
+	trailPurchaseButton.Interactable = active
+	trailEquipButton.Interactable = active
+	trailUnequipButton.Interactable = active
+	boardsTab.Interactable = active
+	cratesTab.Interactable = active
+	trailsTab.Interactable = active
+	closeBtn.Interactable = active
+
+	-- Disable all cards in crates list (CrateCard attribute)
+	for _, card in ipairs(cratesList:GetChildren()) do
+		if card:GetAttribute("CrateCard") then
+			card.Interactable = active
+		end
+	end
 end
 
 ----------------- BOARDS FUNCTIONS ---------------------
@@ -427,6 +454,14 @@ end
 --------------------------------------------------------
 
 ----------------- CRATES FUNCTIONS ---------------------
+local function OpenWinningBoardFrame(board, active)
+	winningBoardFrame.Visible = active
+	winningBoardFrameShine.Visible = active
+
+	winningBoardImage.Image = board.Image
+	winningBoardNameLabel.Text = board.Name
+end
+
 local function PopulateCrateItemBoardsList(crateData)
 	for _, child in ipairs(crateItemsScrollingFrame:GetChildren()) do
 		if child:GetAttribute("CrateBoardItem") then
@@ -467,7 +502,7 @@ local function PopulateCrateItemBoardsList(crateData)
 
 	-- Ensure there are enough items for smooth scrolling
 	local itemCount = #cratesBoardListScrollingFrame:GetChildren()
-	if itemCount < 20 then
+	if itemCount < 100 then
 		-- Duplicate items to create an endless loop effect
 		local originalItems = {}
 		for _, child in ipairs(cratesBoardListScrollingFrame:GetChildren()) do
@@ -476,7 +511,7 @@ local function PopulateCrateItemBoardsList(crateData)
 			end
 		end
 
-		for i = 1, math.ceil(20 / itemCount) do
+		for i = 1, math.ceil(100 / itemCount) do
 			for _, item in ipairs(originalItems) do
 				local clone = item:Clone()
 				clone.Parent = cratesBoardListScrollingFrame
@@ -554,7 +589,10 @@ local function GetRandomBoardFromCrate(crateName)
 end
 
 local function SpinCrateAnimation(winningBoardName, winningBoardData)
-	cratePurchaseButton.Visible = false
+	SetButtonsActive(false)
+	overlay.Visible = true
+	cratesBoardListScrollingFrameParent.Visible = true
+
 
 	local RunService = game:GetService("RunService")
 
@@ -594,19 +632,19 @@ local function SpinCrateAnimation(winningBoardName, winningBoardData)
 	-- Spin parameters
 	local spinDuration = 5
 	local elapsed = 0
-	local startSpeed = 4200 -- Start spinning speed
-	local decelerationStartTime = 3.5 -- Start deceleration after 3.5 seconds
-	local decelerationDuration = 1.5 -- Decelerate over 1.5 seconds
+	local startSpeed = 2000 -- Start spinning speed
+	local decelerationStartTime = 2.5 -- Start deceleration after 3.5 seconds
+	local decelerationDuration = 2.5 -- Decelerate over 1.5 seconds
 	local totalDistance = 0
 	local currentX = scrollingFrame.CanvasPosition.X
 
 	local connection
 	connection = RunService.Heartbeat:Connect(function(dt)
 		elapsed = elapsed + dt
-		
+
 		-- Calculate current speed based on deceleration phase
 		local currentSpeed = startSpeed
-		
+
 		if elapsed >= decelerationStartTime then
 			-- Start decelerating
 			local decelAlpha = math.clamp((elapsed - decelerationStartTime) / decelerationDuration, 0, 1)
@@ -615,31 +653,21 @@ local function SpinCrateAnimation(winningBoardName, winningBoardData)
 			currentSpeed = startSpeed * decelFactor
 			print("Stops here.")
 		end
-		
-		-- Calculate distance traveled in this frame
-		local frameDistance = currentSpeed * dt
-		totalDistance = totalDistance + frameDistance
-		
-		-- Apply seamless looping
-		local wrappedX = totalDistance % contentWidth
-		
+
 		-- Apply movement
 		currentX = currentX + currentSpeed * dt
-		-- Continuous loop (NO stop/start)
-		--local wrappedX = currentX % contentWidth
-		
+
 		-- Loop illusion
 		if currentX >= contentWidth then
-			print("Looping back.")
 			currentX = currentX - contentWidth
 		end
-		
+
 		scrollingFrame.CanvasPosition = Vector2.new(currentX, 0)
 
 		-- Stop only once after the full duration
 		if elapsed >= spinDuration then
 			connection:Disconnect()
-			
+
 			print("Spin complete")
 			-- Snap to winning position
 			scrollingFrame.CanvasPosition = Vector2.new(targetX, 0)
@@ -649,7 +677,13 @@ local function SpinCrateAnimation(winningBoardName, winningBoardData)
 				local success = HoverboardService:PurchaseHoverboard(winningBoardName, 0, "Coins")
 				if success then
 					print("Purchased winning board from crate:", winningBoardName)
-					cratePurchaseButton.Visible = true
+					OpenWinningBoardFrame(winningBoardData, true)
+					cratesBoardListScrollingFrameParent.Visible = false
+					task.delay(3, function()
+						OpenWinningBoardFrame(winningBoardData, false)
+						overlay.Visible = false
+						SetButtonsActive(true)
+					end)
 				end
 			end)
 		end
@@ -675,7 +709,6 @@ local function PurchaseCrate()
 		if winningBoardName then
 			-- Start spin animation
 			print("Winning board:", winningBoardName)
-			cratesBoardListScrollingFrameParent.Visible = true
 			SpinCrateAnimation(winningBoardName, winningBoardData)
 		end
 	end
@@ -701,6 +734,8 @@ local function OpenTab(selectedTab)
 
 			if tabButton == trailsTab and equippedTrail then
 				SelectTrail(equippedTrail)
+			elseif tabButton == cratesTab then
+				SelectCrate("BasicBoard")
 			end
 		else
 			frame.Visible = false
