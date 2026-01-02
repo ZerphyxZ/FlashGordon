@@ -21,8 +21,8 @@ local WorldParent: ScrollingFrame = Content:WaitForChild("ScrollingFrame")
 local Types = { "Events", "Normal", "Gamemodes" }
 local Seperators: { string: Frame } = {
 	Events = WorldParent:WaitForChild("EventsSeparator"),
-	Normal = WorldParent:WaitForChild("FeaturedSeparator"),
-	Gamemodes = WorldParent:WaitForChild("CampaignSeparator"),
+	Normal = WorldParent:WaitForChild("CampaignSeparator"),
+	Gamemodes = WorldParent:WaitForChild("FeaturedSeparator"),
 }
 
 local TemplateWorldFolder: Frame = WorldsUI:WaitForChild("Templates")
@@ -49,12 +49,33 @@ function WorldUIController:KnitStart()
 
 		if Seperators[typeOfWorld] then
 			Seperators[typeOfWorld].Visible = next(configTable) ~= nil
+			print(`Setting visibility of separator for {typeOfWorld} to {Seperators[typeOfWorld].Visible}`)
 			Seperators[typeOfWorld].LayoutOrder = self.Index
 			self.Index += 1
 		end
 
 		LoadWorldsFromTable(typeOfWorld, configTable)
 	end
+
+	local player = LocalPlayer
+    -- ensure it exists
+    if player:GetAttribute("WorldIndex") == nil then
+        player:SetAttribute("WorldIndex", 1)
+    end
+
+    local function getCurrentWorldIndex()
+        return player:GetAttribute("WorldIndex") or 1
+    end
+
+    -- initial UI update
+    self:SetWorldCardStates(getCurrentWorldIndex())
+
+    -- listen for changes
+    player:GetAttributeChangedSignal("WorldIndex"):Connect(function()
+        print("WorldIndex changed!") -- debug
+        local newIndex = getCurrentWorldIndex()
+        self:SetWorldCardStates(newIndex)
+    end)
 end
 
 function WorldUIController:Enable(Enabled: boolean)
@@ -63,17 +84,24 @@ function WorldUIController:Enable(Enabled: boolean)
 end
 
 function RequestTeleport(placeId)
+	print(`Requesting teleport to placeId: {placeId}`)
 	if placeId ~= PlaceId then
 	end
+end
+
+function getCurrentWorldIndex()
+	return LocalPlayer:GetAttribute("CurrentMaxWorld") or 1
 end
 
 function WorldUIController:SetWorldCardStates(CurrentMaxWorld: number)
 	for index, card in self.NormalCards do
 		local isLocked = index > CurrentMaxWorld
 
-		card.Overlay.Visible = not isLocked
-		card.Content.Teleport.Visible = not isLocked and (index ~= CurrentMaxWorld)
-		card.Content.Current.Visible = index == CurrentMaxWorld
+		local content = card.Content.Content
+
+		card.Overlay.Visible = isLocked
+		content.Teleport.Visible = not isLocked and (index ~= CurrentMaxWorld)
+		content.Current.Visible = index == CurrentMaxWorld
 	end
 end
 
@@ -83,10 +111,13 @@ function LoadWorldsFromTable(Type: string, ModeTable: {})
 	end
 
 	for placeId: number, worldTable: {} in ModeTable do
+		print(`Processing world card for placeId: {placeId}, Type: {Type}`)
 		local card = TemplateWorldCard:Clone()
+		print(`Loading world card for placeId: {placeId}, Type: {Type}`)
 		card.Parent = WorldParent
 		card.LayoutOrder = WorldUIController.Index
-		card.Overlay.Visible = Type == "Normal"
+		card.Visible = true
+		card.Overlay.Visible = Type == "Normal" -- and worldTable.Index > 1
 
 		local content = card.Content.Content
 
@@ -94,9 +125,11 @@ function LoadWorldsFromTable(Type: string, ModeTable: {})
 			card.Overlay.Title.Text = `Finish World {worldTable.Index - 1} to unlock`
 			content.Title.Text = `World {worldTable.Index}`
 
-			WorldUIController.Normal[worldTable.Index] = card
+			print(`Storing normal world card for index: {worldTable.Index}`)
+			print(`WorldUIController.NormalCards before insert: {#WorldUIController.NormalCards}`)
+			WorldUIController.NormalCards[worldTable.Index] = card
 		else
-			card.Content.Content.Title.Text = worldTable.Name
+			content.Title.Text = worldTable.Name
 		end
 
 		-- click connection
