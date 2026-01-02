@@ -40,9 +40,9 @@ local Hoverboards = {
 		Image = "rbxassetid://18566592803",
 	},
 	Hoverboard6 = {
-		TopSpeed = 80,
+		TopSpeed = 110,
 		Acceleration = 1.2,
-		JumpPower = 42,
+		JumpPower = 55,
 		Price = 1,
 		Currency = "Coins",
 		Image = "rbxassetid://18566592803",
