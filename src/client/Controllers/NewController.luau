@@ -48,9 +48,9 @@ local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
 local ACCELERATION_FACTOR = 1
-local DECELERATION_FACTOR = 0.5
+local DECELERATION_FACTOR = 1
 local ORIENTATION_FACTOR = 30
-local MAX_HORIZONTAL_ROTATION = 15
+local MAX_HORIZONTAL_ROTATION = 10
 local FOV_FACTOR = 1
 local MAX_FORCE = 10000
 local FLOATING_ERROR_MARGIN = 0.01
@@ -115,6 +115,7 @@ local isDashing = false
 local dashReady = true
 local isJumping = false
 local isFalling = false
+local isBraking = false
 
 -- SPEED REFERENCES
 local MAX_BARS = 10
@@ -192,6 +193,7 @@ local function InitBodyMovers()
 	bodyPosition.Position = rootPart.Position
 
 	bodyGyro.MaxTorque = Vector3.new(2e9, 2e9, 2e9)
+	bodyGyro.P = 7000
 	bodyGyro.Parent = Board
 
 	bodyVelocity.MaxForce = Vector3.new(2e9, 0, 2e9)
@@ -451,68 +453,6 @@ local function DashVelocityMethod(hoverboard, moveDir, distance, duration)
 			end
 		end
 	end)
-
-	--if not hoverboard or moveDir.Magnitude == 0 then
-	--	print("Returned from here.")
-	--	return
-	--end
-	--local primary = hoverboard
-	--local startVel = primary.AssemblyLinearVelocity
-
-	--local bodyVelocity = hoverboard:FindFirstChildOfClass("BodyVelocity")
-	--local oldMaxForce
-	--if bodyVelocity then
-	--	oldMaxForce = bodyVelocity.MaxForce
-	--	bodyVelocity.MaxForce = Vector3.zero
-	--end
-
-	---- compute dash velocity required to traverse distance in duration
-	--local dashSpeed = distance / math.max(duration, 0.0001) * DASH_SPEED_MULTIPLIER
-	--print("Dash speed: ", dashSpeed)
-	--local dashVel = moveDir.Unit * dashSpeed
-	--print("dashing vel: ", dashVel)
-
-	---- apply: ramp assembly velocity towards dashVel, hold, then restore
-	--local t = 0
-	--local holdT = duration
-	--local lastTime = tick()
-	---- create a short run-service loop for reliable timing
-	--local conn
-	--conn = RunService.Heartbeat:Connect(function(dt)
-	--	if not primary or not conn then
-	--		if conn then
-	--			conn:Disconnect()
-	--		end
-	--		return
-	--	end
-	--	t = t + dt
-	--	print("dashing : T ", t)
-	--	if t <= holdT then
-	--		-- lerp current assembly velocity towards dashVel (fast)
-	--		local cur = primary.AssemblyLinearVelocity
-	--		local lerpT = 1 - math.exp(-60 * dt)
-	--		local new = cur:Lerp(Vector3.new(dashVel.X, cur.Y, dashVel.Z), lerpT)
-	--		print("dashing : New : ", new)
-	--		primary.AssemblyLinearVelocity = new
-	--	else
-	--		-- restore: lerp back to startVel over 0.2s
-	--		local restoreDur = 0.2
-	--		local restoreT = math.min((t - holdT) / restoreDur, 1)
-	--		local cur = primary.AssemblyLinearVelocity
-	--		local target = Vector3.new(startVel.X, cur.Y, startVel.Z)
-	--		local new = cur:Lerp(target, restoreT)
-	--		print("dashing : New 2 : ", new)
-	--		primary.AssemblyLinearVelocity = new
-
-	--		if restoreT >= 1 then
-	--			print("Disconnecting")
-	--			if bodyVelocity then
-	--				bodyVelocity.MaxForce = oldMaxForce or Vector3.new(2e9, 2e9, 2e9)
-	--			end
-	--			conn:Disconnect()
-	--		end
-	--	end
-	--end)
 end
 
 function ApplyDash(currentSpeed, hoverboard)
@@ -909,7 +849,7 @@ function CalculateMoveDirection()
 	local factor = 1000
 
 	local goal
-	if inputVector.Magnitude > 0 then
+	if inputVector.Magnitude > 0.1 then
 		local goalCFrame = Camera.CFrame * CFrame.new(inputVector.X * factor, 0, inputVector.Z * factor)
 		local goalMoveVector = (goalCFrame.Position - Camera.CFrame.Position)
 
@@ -1094,24 +1034,26 @@ function ApplyOrientation(deltaTimeRender)
 			local LookVector = rootPart.CFrame.LookVector
 
 			if velocity.Magnitude >= FLOATING_ERROR_MARGIN then
-				print("Printing Look Vector")
 				LookVector = velocity.Unit
-			else
-				--warn("...............")
 			end
 
 			local RightVector = LookVector:Cross(newNormal).Unit
 			local UpVector = newNormal
 			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector)
 
-			local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION)
+			local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION) 
 
+			if IsDecelerating then
+				print("Decelerating")
+				normalizedTilt = normalizedTilt * 0.01 -- To change for the braking
+			end
+
+			--local alpha = 1 - math.exp(-ORIENTATION_FACTOR * deltaTimeRender)
 			local alpha = math.clamp(deltaTimeRender * ORIENTATION_FACTOR, 0, 1)
+			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(0, 0, math.rad(0)), alpha)
+			
 			--bodyGyro.CFrame = AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt))
 			
-			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(
-				AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt)), alpha
-			)
 		end
 	end
 end
