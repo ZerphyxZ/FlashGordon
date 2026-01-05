@@ -49,8 +49,8 @@ local HorizontalTiltAngle = 0
 -- CONSTANT VALUES
 local ACCELERATION_FACTOR = 1
 local DECELERATION_FACTOR = 1
-local ORIENTATION_FACTOR = 10
-local MAX_HORIZONTAL_ROTATION = 15
+local ORIENTATION_FACTOR = 30
+local MAX_HORIZONTAL_ROTATION = 10
 local FOV_FACTOR = 1
 local MAX_FORCE = 10000
 local FLOATING_ERROR_MARGIN = 0.01
@@ -115,6 +115,7 @@ local isDashing = false
 local dashReady = true
 local isJumping = false
 local isFalling = false
+local isBraking = false
 
 -- SPEED REFERENCES
 local MAX_BARS = 10
@@ -192,6 +193,7 @@ local function InitBodyMovers()
 	bodyPosition.Position = rootPart.Position
 
 	bodyGyro.MaxTorque = Vector3.new(2e9, 2e9, 2e9)
+	bodyGyro.P = 7000
 	bodyGyro.Parent = Board
 
 	bodyVelocity.MaxForce = Vector3.new(2e9, 0, 2e9)
@@ -847,7 +849,7 @@ function CalculateMoveDirection()
 	local factor = 1000
 
 	local goal
-	if inputVector.Magnitude > 0 then
+	if inputVector.Magnitude > 0.1 then
 		local goalCFrame = Camera.CFrame * CFrame.new(inputVector.X * factor, 0, inputVector.Z * factor)
 		local goalMoveVector = (goalCFrame.Position - Camera.CFrame.Position)
 
@@ -1032,22 +1034,26 @@ function ApplyOrientation(deltaTimeRender)
 			local LookVector = rootPart.CFrame.LookVector
 
 			if velocity.Magnitude >= FLOATING_ERROR_MARGIN then
-				print("Printing Look Vector")
 				LookVector = velocity.Unit
-			else
-				--warn("...............")
 			end
 
 			local RightVector = LookVector:Cross(newNormal).Unit
 			local UpVector = newNormal
 			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector)
 
-			local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION)
+			local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION) 
 
+			if IsDecelerating then
+				print("Decelerating")
+				normalizedTilt = normalizedTilt * 0.01 -- To change for the braking
+			end
+
+			--local alpha = 1 - math.exp(-ORIENTATION_FACTOR * deltaTimeRender)
 			local alpha = math.clamp(deltaTimeRender * ORIENTATION_FACTOR, 0, 1)
+			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(0, 0, math.rad(0)), alpha)
+			
 			--bodyGyro.CFrame = AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt))
 			
-			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt)), alpha)
 		end
 	end
 end
