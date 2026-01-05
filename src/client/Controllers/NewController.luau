@@ -49,11 +49,11 @@ local HorizontalTiltAngle = 0
 -- CONSTANT VALUES
 local ACCELERATION_FACTOR = 1
 local DECELERATION_FACTOR = 1
-local ORIENTATION_FACTOR = 30
+local ORIENTATION_FACTOR = 15
 local MAX_HORIZONTAL_ROTATION = 10
 local FOV_FACTOR = 1
 local MAX_FORCE = 10000
-local FLOATING_ERROR_MARGIN = 0.01
+local FLOATING_ERROR_MARGIN = 0.1
 local JUMP_POWER = 70
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
@@ -189,14 +189,15 @@ local function InitBodyMovers()
 	bodyGyro = Instance.new("BodyGyro")
 	bodyPosition = Instance.new("BodyPosition")
 
-	bodyPosition.MaxForce = Vector3.new(2e9, 2e9, 2e9)
-	bodyPosition.Position = rootPart.Position
+	--bodyPosition.MaxForce = Vector3.new(2e9, 2e9, 2e9)
+	--bodyPosition.Position = rootPart.Position
 
-	bodyGyro.MaxTorque = Vector3.new(2e9, 2e9, 2e9)
+	bodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
 	bodyGyro.P = 7000
+	bodyGyro.D = 500
 	bodyGyro.Parent = Board
 
-	bodyVelocity.MaxForce = Vector3.new(2e9, 0, 2e9)
+	bodyVelocity.MaxForce = Vector3.new(1e5, 0, 1e5)
 	bodyVelocity.Parent = Board
 end
 
@@ -210,6 +211,8 @@ local function IsMovingDownward()
 	if not rootPart or not Board then
 		return false
 	end
+
+	--local verticalVelocity = rootPart.AssemblyLinearVelocity.Y 	--Added
 	local verticalVelocity = Board.AssemblyLinearVelocity.Y
 	-- Negative Y velocity means moving downward (towards negative Y)
 	return verticalVelocity < 20
@@ -243,6 +246,7 @@ end
 
 function UpdateSpeedGUI(MaxSpeed)
 	local value = (bodyVelocity.Velocity * Vector3.new(1, 0, 1)).Magnitude or 0
+	--local value = (rootPart.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude or 0	--Added
 	speedLabel.Text = string.format("Speed: %.0f", math.round(value))
 
 	local xScale = 1
@@ -651,10 +655,10 @@ local function CheckForDoubleJump()
 		print("Air jumps returning")
 		return false
 	end
-	if not spaceReleasedAfterJump then
-		print("Space released returning")
-		return false
-	end
+	-- if not spaceReleasedAfterJump then
+	-- 	print("Space released returning")
+	-- 	return false
+	-- end
 	if (tick() - firstJumpTime) < DOUBLE_JUMP_DELAY then
 		print("Time returning")
 		return false
@@ -666,7 +670,10 @@ end
 local function ExecuteDoubleJump(jumpPower)
 	canDoubleJump = false -- Use up the double jump
 	AirJumps = 0
-	spaceReleasedAfterJump = false -- Reset for next time
+	--spaceReleasedAfterJump = false -- Reset for next time
+
+	-- local currentVelocity = rootPart.AssemblyLinearVelocity
+	-- rootPart.AssemblyLinearVelocity = Vector3.new(currentVelocity.X, jumpPower, currentVelocity.Z)	--Added
 
 	-- Apply double jump force
 	bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
@@ -743,7 +750,7 @@ local function HandleJump(jumpPower, dt)
 
 	if spaceHeld and hasFly and not CanJump and AirJumps > 0 then
 		if (tick() - lastAirJumpTime) >= AIR_JUMP_INTERVAL then
-			ExecuteAirJump(jumpPower)
+			--ExecuteAirJump(jumpPower)
 		end
 	end
 	if spaceHeld then
@@ -758,14 +765,14 @@ local function HandleJump(jumpPower, dt)
 	end
 
 	if Jump then
-		Jump = false
-		LastJump = true
-		isJumping = true
-		isFalling = false
-		firstJumpTime = tick()
+		-- Jump = false
+		-- LastJump = true
+		-- isJumping = true
+		-- isFalling = false
+		-- firstJumpTime = tick()
 
-		bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
-		bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower, bodyVelocity.Velocity.Z)
+		-- bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
+		-- bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower, bodyVelocity.Velocity.Z)
 	end
 end
 
@@ -854,8 +861,11 @@ function CalculateMoveDirection()
 		local goalMoveVector = (goalCFrame.Position - Camera.CFrame.Position)
 
 		NewController.MoveVector = (goalMoveVector * Vector3.new(1, 0, 1)).Unit
+
+		isBraking = isBraking
 	else
 		NewController.MoveVector = Vector3.zero
+		isBraking = false
 	end
 end
 
@@ -868,6 +878,7 @@ function CalculateSpeed(topSpeed)
 
 	if NewController.CurrentSpeed ~= newTargetSpeed then
 		IsDecelerating = newTargetSpeed == 0
+		print("Decelerating: ", IsDecelerating)
 	end
 
 	NewController.CurrentSpeed = newTargetSpeed
@@ -918,7 +929,7 @@ function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 	local MaxSwayHeight = 0.1
 	local HeightSway = math.sin(tick() * SwaySpeed) * MaxSwayHeight
 
-	HandleJump(jumpPower, deltaTimeRender)
+	--HandleJump(jumpPower, deltaTimeRender)
 	CheckGravityCoil()
 
 	local yVelocityComponent = 0
@@ -972,12 +983,6 @@ function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 
 	local velocityFactor = Acceleration
 	if IsDecelerating then
-		-- local brakeFactor = Acceleration * 10
-		-- if IsBraking then
-		-- 	velocityFactor = CanJump and brakeFactor
-		-- else
-		-- 	velocityFactor = CanJump and Acceleration * 2 or DECELERATION_FACTOR
-		-- end
 		velocityFactor = CanJump and Acceleration * 2 or DECELERATION_FACTOR
 	end
 
@@ -996,30 +1001,38 @@ function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 		yVelocityComponent,
 		NewController.MoveVector.Z * NewController.CurrentSpeed
 	) + downhillVector * (workspace.Gravity / 10) * (downhillAngle / DOWNHILL_SLOPE_ANGLE)
+
 	local direction, tiltAngle =
 		ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1), bodyVelocity.Velocity * Vector3.new(1, 0, 1))
 	HorizontalTiltAngle = -direction * tiltAngle
+
+	local isStopping = NewController.MoveVector.Magnitude == 0
+	local isReversing = IsDecelerating and NewController.CurrentSpeed == 0
+
+	if not CanJump or isStopping or isReversing then
+		print("Horizontal angle 0")
+		HorizontalTiltAngle = 0
+	end
+
 	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * velocityFactor)
 end
 
 function ApplyOrientation(deltaTimeRender)
 	local BoardCF = Board.CFrame
-	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
+	local Origin = Board.Position + BoardCF.LookVector
+	-- local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
+
 	local Direction = Vector3.new(0, -1, 0)
 	local CheckingDistance = HoverHeight + 4
-
-	local SwaySpeed = 0 --2
-	local MaxSwayAngle = 0 --1.5
-	local TiltAngle = math.sin(tick() * SwaySpeed) * MaxSwayAngle
 	local newNormal
 	local LerpFactor = 0.8
 
 	if NewController.MoveVector then
 		local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
 
-		if ForwardLean ~= 0 then
-			TiltAngle = ForwardLean
-		end
+		-- if ForwardLean ~= 0 then
+		-- 	TiltAngle = ForwardLean
+		-- end
 
 		if RaycastResult then
 			newNormal = RaycastResult.Normal
@@ -1028,32 +1041,31 @@ function ApplyOrientation(deltaTimeRender)
 		end
 
 		if newNormal then
-			local velocity = bodyVelocity.Velocity * Vector3.new(1, 0, 1)
-			--local LookVector = NewController.MoveVector.Unit
-			
-			local LookVector = rootPart.CFrame.LookVector
+			local velocity = Board.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
+			local LookVector = BoardCF.LookVector
 
 			if velocity.Magnitude >= FLOATING_ERROR_MARGIN then
 				LookVector = velocity.Unit
 			end
 
-			local RightVector = LookVector:Cross(newNormal).Unit
+			local RightVector = LookVector:Cross(newNormal)
+			if RightVector.Magnitude < FLOATING_ERROR_MARGIN then
+				return
+			end
+			RightVector = RightVector.Unit
 			local UpVector = newNormal
-			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector)
+			local AlignedCFrame = CFrame.fromMatrix(Board.Position, RightVector, UpVector)
 
-			local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION) 
-
-			if IsDecelerating then
-				print("Decelerating")
-				normalizedTilt = normalizedTilt * 0.01 -- To change for the braking
+			local normalizedTilt = 0
+			if CanJump and NewController.MoveVector.Magnitude > FLOATING_ERROR_MARGIN and not IsDecelerating then
+				normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION)
 			end
 
 			--local alpha = 1 - math.exp(-ORIENTATION_FACTOR * deltaTimeRender)
 			local alpha = math.clamp(deltaTimeRender * ORIENTATION_FACTOR, 0, 1)
-			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(AlignedCFrame * CFrame.Angles(0, 0, math.rad(0)), alpha)
-			
-			--bodyGyro.CFrame = AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt))
-			
+
+			local targetCFrame = AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt))
+			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(targetCFrame, alpha)
 		end
 	end
 end
@@ -1167,25 +1179,32 @@ local function InputListeners(HoverboardService, JumpPower)
 		end
 	end)
 	UserInputService.JumpRequest:Connect(function()
-		spaceHeld = true
-		JumpRequestTime = tick()
-		WaitForLanding = false
-
-		-- GROUND JUMP
-		if CanJump then
-			Jump = true
-			LastJump = true
-			return
+		-- spaceHeld = true
+		-- WaitForLanding = false
+		
+		if humanoid then
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 		end
 
-		-- AIR JUMPS (ONLY if module exists)
-		if CanUseAirJump() then
-			if hasFly then
-				ExecuteAirJump(jumpPower)
-			else
-				ExecuteDoubleJump(jumpPower)
-			end
-		end
+		-- spaceHeld = true
+		-- JumpRequestTime = tick()
+		-- WaitForLanding = false
+
+		-- -- GROUND JUMP
+		-- if CanJump then
+		-- 	Jump = true
+		-- 	LastJump = true
+		-- 	return
+		-- end
+
+		-- -- AIR JUMPS (ONLY if module exists)
+		-- if CanUseAirJump() then
+		-- 	if hasFly then
+		-- 		ExecuteAirJump(jumpPower)
+		-- 	else
+		-- 		ExecuteDoubleJump(jumpPower)
+		-- 	end
+		-- end
 	end)
 	UserInputService.InputEnded:Connect(function(Input: InputObject, GameProcessed: boolean)
 		if GameProcessed then
@@ -1195,7 +1214,7 @@ local function InputListeners(HoverboardService, JumpPower)
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
 			if Input.KeyCode == Enum.KeyCode.Space then
 				spaceHeld = false
-				spaceReleasedAfterJump = true
+				--spaceReleasedAfterJump = true
 			end
 		end
 
@@ -1322,9 +1341,29 @@ function OnCharacterAdded(char)
 	character = char
 	humanoid = char:WaitForChild("Humanoid")
 	humanoid.PlatformStand = true
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+	--humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+	--humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
+	--humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+	-- 	humanoid.StateChanged:Connect(function(oldState, newState)
+	-- 	if newState == Enum.HumanoidStateType.Freefall then
+	-- 		task.defer(function()
+	-- 			if humanoid then
+	-- 				humanoid.PlatformStand = true
+	-- 			end
+	-- 		end)
+	-- 	end
+	-- end)
+	-- Disable all humanoid animations
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if animator then
+		animator:Destroy()
+	end
+
+	-- Also remove Animate script if present (extra safety)
+	local animateScript = character:FindFirstChild("Animate")
+	if animateScript then
+		animateScript:Destroy()
+	end
 	rootPart = char:WaitForChild("HumanoidRootPart")
 	InitializeHoverboard()
 end
@@ -1353,11 +1392,16 @@ end
 -- [External Modifier Functions]		------
 function NewController:ApplyAssist(ForceVector: Vector3)
 	bodyVelocity.Velocity += ForceVector
+	--rootPart.AssemblyLinearVelocity += ForceVector	--Added
 end
 
 function NewController:ApplyJump(JumpPower: number)
 	local v = Board.AssemblyLinearVelocity
 	Board.AssemblyLinearVelocity = Vector3.new(v.X, JumpPower, v.Z)
+
+	--Added
+	-- local v = rootPart.AssemblyLinearVelocity
+	-- rootPart.AssemblyLinearVelocity = Vector3.new(v.X, JumpPower, v.Z)
 end
 
 function NewController:Slow()
