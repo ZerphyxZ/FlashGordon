@@ -33,6 +33,7 @@ UIController.Buttons = {
 	Codes = ItemHolder:WaitForChild("Codes"),
 	TimeReward = ItemHolder:WaitForChild("TimeReward"),
     Boards = ItemHolder:WaitForChild("Boards"),
+	Worlds = ItemHolder:WaitForChild("Worlds"),
 }
 
 UIController.Module = { MainGui = UIController }
@@ -108,6 +109,7 @@ function UIController:KnitStart()
     UIController.Module.DailyReward = Knit.GetController("DailyRewardController")
     UIController.Module.TimeReward = Knit.GetController("TimeRewardController")
     UIController.Module.Boards = Knit.GetController("GearController")
+	UIController.Module.Worlds = Knit.GetController("WorldUIController")
 
 	for name, button in pairs(self.Buttons) do
 		if button:IsA("TextButton") or button:IsA("ImageButton") then

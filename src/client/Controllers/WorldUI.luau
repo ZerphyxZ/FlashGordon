@@ -12,9 +12,9 @@ local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 -- [UI References]      -----
 local LocalPlayer = PlayerService.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local MainGui = PlayerGui:WaitForChild("MainGui")
+local WorldsGui = PlayerGui:WaitForChild("WorldsGui")
 
-local WorldsUI: Frame = MainGui:WaitForChild("Worlds")
+local WorldsUI: Frame = WorldsGui:WaitForChild("Worlds")
 local Content: Frame = WorldsUI:WaitForChild("Content")
 local WorldParent: ScrollingFrame = Content:WaitForChild("ScrollingFrame")
 
@@ -79,7 +79,7 @@ function WorldUIController:KnitStart()
 end
 
 function WorldUIController:Enable(Enabled: boolean)
-	MainGui.Enabled = Enabled
+	WorldsGui.Enabled = Enabled
 	WorldsUI.Visible = Enabled
 end
 
