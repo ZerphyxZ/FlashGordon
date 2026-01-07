@@ -37,7 +37,7 @@ local HoverHeight = 2.5
 local OgBoardRotation
 local ForwardLean = 0
 local Rayvelocity = 0.2
-local RayDistance = 4
+local RayDistance = 5
 local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
@@ -71,6 +71,7 @@ local LastJump = false
 local CanJump = false
 local spaceHeld = false
 local WaitForLanding = true
+local IsJumping = false
 local canDoubleJump = false
 local hasDoubleJump = false
 local hasFly = false
@@ -78,6 +79,7 @@ local MAX_AIR_JUMPS = 6
 local AIR_JUMP_INTERVAL = 0.3
 local AirJumps = 1
 local JumpRequestTime = 0
+local lastJumpTime = 0
 local firstJumpTime = 0
 local lastAirJumpTime = 0
 local DOUBLE_JUMP_DELAY = 0.1
@@ -237,6 +239,7 @@ function ApplyBoost()
 		return
 	end
 	if not NewController.SpeedVar or NewController.SpeedVar < 20 then
+		print("Not enough speed.")
 		return
 	end
 
@@ -634,13 +637,6 @@ local function ExecuteDoubleJump(jumpPower)
 	canDoubleJump = false -- Use up the double jump
 	AirJumps = 0
 	--spaceReleasedAfterJump = false -- Reset for next time
-
-	-- local currentVelocity = rootPart.AssemblyLinearVelocity
-	-- rootPart.AssemblyLinearVelocity = Vector3.new(currentVelocity.X, jumpPower, currentVelocity.Z)	--Added
-
-	-- Apply double jump force
-	--local currentVelocity = Board.AssemblyLinearVelocity
-	--Board.AssemblyLinearVelocity = Vector3.new(currentVelocity.X, jumpPower, currentVelocity.Z)
 	bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
 	bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower, bodyVelocity.Velocity.Z)
 
@@ -664,12 +660,6 @@ local function ExecuteAirJump(jumpPower)
 	flyEnergy = math.max(0, flyEnergy - FLY_ENERGY_DEPLETION_RATE)
 	lastAirJumpTime = tick()
 	LastJump = true
-
-	-- local currentVelocity = Board.AssemblyLinearVelocity
-	-- Board.AssemblyLinearVelocity = Vector3.new(currentVelocity.X, jumpPower, currentVelocity.Z)
-
-	--print("Executing air jump. Remaining jumps: ", AirJumps, " Remaining energy: ", flyEnergy)
-	--energyLabel.Text = "Energy: " .. flyEnergy
 	bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
 	bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower, bodyVelocity.Velocity.Z)
 end
@@ -740,71 +730,6 @@ local function HandleJump(jumpPower, dt)
 		bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower, bodyVelocity.Velocity.Z)
 	end
 end
-
-local function Hover(DeltaTime, JumpPower)
-	if isDashing then
-		return
-	end
-
-	local Origin = Board.Position
-	local Direction = Vector3.new(0, -1, 0)
-	local CheckingDistance = HoverHeight + 4
-	local PotentialMap = workspace:FindFirstChild("CurrentMap")
-
-	local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
-
-	local SwaySpeed = 2.5
-	local MaxSwayHeight = 0.1
-	local HeightSway = math.sin(tick() * SwaySpeed) * MaxSwayHeight
-	local Normal
-
-	HandleJump(JumpPower, DeltaTime)
-	CheckGravityCoil()
-
-	if RaycastResult then
-		CanJump = true
-		WaitForLanding = false
-		canDoubleJump = true
-
-		if not spaceHeld then
-			flyEnergy = flyEnergy + FLY_ENERGY_RECHARGE_RATE
-			flyEnergy = math.clamp(flyEnergy, 0, MAX_FLY_ENERGY)
-			--energyLabel.Text = "Energy: " .. flyEnergy
-		end
-		if not LastJump then
-			--bodyVelocity.MaxForce = Vector3.new(MAX_FORCE, MAX_FORCE, MAX_FORCE)
-			local HoverPosition = RaycastResult.Position + Vector3.new(0, HoverHeight + HeightSway, 0)
-			local VelocityY = ((HoverPosition - rootPart.Position).Y + HoverHeight) * HoverStiffness
-			Normal = RaycastResult.Normal
-
-			local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
-			local yoffset = (BoardCF.LookVector * NewController.SpeedVar * Vector3.new(0, 1, 0)).Y
-
-			--bodyVelocity.Velocity = Vector3.new(
-			--bodyVelocity.Velocity.X,
-			--ExponentialDecay(Board.AssemblyLinearVelocity.Y, VelocityY + yoffset, 20, DeltaTime),
-			--bodyVelocity.Velocity.Z
-			--)
-		end
-
-		if not Jump then
-			if hasFly then
-				AirJumps = MAX_AIR_JUMPS
-			elseif hasDoubleJump then
-				AirJumps = 1
-			else
-				AirJumps = 0
-			end
-		end
-	else
-		CanJump = false
-		if not LastJump then
-			--bodyVelocity.MaxForce = Vector3.new(MAX_FORCE, 0, MAX_FORCE)
-			--bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, -HoverHeight, bodyVelocity.Velocity.Z)
-		end
-		LastJump = false
-	end
-end
 -----------------------------------------------------------
 
 ----------------- MOVEMENT METHODS ------------------------
@@ -834,9 +759,7 @@ function CalculateSpeed(topSpeed)
 
 	if NewController.CurrentSpeed ~= newTargetSpeed then
 		IsDecelerating = newTargetSpeed == 0
-		print("Decelerating: ", IsDecelerating)
 	end
-
 	NewController.CurrentSpeed = newTargetSpeed
 end
 
@@ -892,7 +815,6 @@ function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 	local yVelocityComponent = 0
 
 	if RaycastResult then
-		print("Raycasting")
 		CanJump = true
 		WaitForLanding = false
 		canDoubleJump = true
@@ -928,7 +850,6 @@ function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 			end
 		end
 	else
-		print("Not Raycasting")
 		CanJump = false
 		if not LastJump then
 			bodyVelocity.MaxForce = Vector3.new(MAX_JUMP_FORCE, 0, MAX_JUMP_FORCE)
@@ -961,7 +882,6 @@ function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 
 	local direction, tiltAngle =
 		ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1), bodyVelocity.Velocity * Vector3.new(1, 0, 1))
-
 	HorizontalTiltAngle = -direction * tiltAngle
 
 	-- local isStopping = NewController.MoveVector.Magnitude == 0
@@ -977,16 +897,38 @@ end
 
 function ApplyOrientation(deltaTimeRender)
 	local BoardCF = Board.CFrame
-	--local Origin = Board.Position + BoardCF.LookVector
-	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
-
+	local Origin = Board.Position
 	local Direction = Vector3.new(0, -1, 0)
 	local CheckingDistance = HoverHeight + RayDistance
+
+	local frontRaycast =
+		workspace:Raycast(Origin + Board.CFrame.LookVector * 3.5, Direction * CheckingDistance, RayParams)
+	local middleRaycast = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
+	local backRaycast =
+		workspace:Raycast(Origin - Board.CFrame.LookVector * 3.5, Direction * CheckingDistance, RayParams)
+
+	local RaycastResult = middleRaycast
+
+	if
+		RaycastResult == nil
+		or (backRaycast and backRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE)
+	then
+		RaycastResult = backRaycast
+	end
+
+	if
+		RaycastResult == nil
+		or (frontRaycast and frontRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE)
+	then
+		RaycastResult = frontRaycast
+	end
+
+	
 	local newNormal
 	local LerpFactor = 0.8
 
 	if NewController.MoveVector then
-		local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
+		--local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
 
 		-- if ForwardLean ~= 0 then
 		-- 	TiltAngle = ForwardLean
@@ -1133,11 +1075,9 @@ local function InputListeners(HoverboardService, JumpPower)
 		end
 
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
-			if Input.KeyCode == Enum.KeyCode.Space then
-			end
 			if Input.KeyCode == Enum.KeyCode.Q then
 				print("Hoverboard: Boost requested.")
-				--ApplyBoost(acceleration, topSpeed)
+				ApplyBoost()
 			end
 			if Input.KeyCode == Enum.KeyCode.F then
 				print("Hoverboard: Flash requested.")
@@ -1159,7 +1099,7 @@ local function InputListeners(HoverboardService, JumpPower)
 		-- GROUND JUMP
 		if CanJump then
 			Jump = true
-			LastJump = true
+			--LastJump = true
 			return
 		end
 
@@ -1261,11 +1201,6 @@ function NewController:StartHoverboard(config, HoverboardService)
 	topSpeed = config.TopSpeed or MAX_SPEED
 	jumpPower = config.JumpPower or JUMP_POWER
 
-	-- Set humanoid walk speed
-	-- if humanoid then
-	-- 	humanoid.WalkSpeed = topSpeed
-	-- end
-
 	RefreshBoostGUI()
 	RefreshFlashGUI()
 	CloneVFX()
@@ -1320,6 +1255,7 @@ function OnCharacterAdded(char)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+
 	-- Disable all humanoid animations
 	local animator = humanoid:FindFirstChildOfClass("Animator")
 	if animator then
@@ -1331,6 +1267,7 @@ function OnCharacterAdded(char)
 		animateScript:Destroy()
 	end
 	rootPart = char:WaitForChild("HumanoidRootPart")
+	rootPart.CastShadow = false
 	InitializeHoverboard()
 end
 
