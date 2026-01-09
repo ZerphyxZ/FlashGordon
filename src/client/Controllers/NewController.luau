@@ -42,7 +42,7 @@ local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
 local DECELERATION_FACTOR = 0.5
-local ORIENTATION_FACTOR = 10
+local ORIENTATION_FACTOR = 7.5
 local MAX_HORIZONTAL_ROTATION = 15
 local FOV_FACTOR = 1
 local MAX_JUMP_FORCE = 10000
@@ -114,15 +114,13 @@ local isFalling = false
 local isBraking = false
 
 -- Boost config
-local BOOST_AMOUNT = 50
-local BOOST_DURATION = 0.5
+BOOST_DURATION = 1
+BOOST_AMOUNT = 2.5
 local BOOST_COOLDOWN = 3
-local BOOSTED_ACCELERATION = 1
 -- Dash config
-local DASH_DISTANCE = 70
-local DASH_DURATION = 0.25
+DASH_DURATION = 0.35
+DASH_AMOUNT = 100
 local DASH_COOLDOWN = 3
-local DASH_SPEED_MULTIPLIER = 3
 
 -- UI References
 local playerGUI = player:WaitForChild("PlayerGui")
@@ -204,7 +202,6 @@ end
 ------------------- UPDATE SPEED GUI -----------------------
 function UpdateSpeedGUI(MaxSpeed)
 	local value = (bodyVelocity.Velocity * Vector3.new(1, 0, 1)).Magnitude or 0
-	--local value = (Board.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude or 0 --Added
 	speedLabel.Text = string.format("Speed: %.0f", math.round(value))
 
 	local xScale = 1
@@ -225,74 +222,83 @@ local function RefreshBoostGUI()
 	end
 end
 
-function ApplyBoost()
-	if not humanoid then
-		print("Humanoid: ", humanoid)
+function ApplyBoost(boostDuration, boostAmount)
+	if not humanoid or not Board or not bodyVelocity then
 		return
 	end
-	if not boostReady then
-		print("boostReady: ", boostReady)
+
+	if not boostReady or isBoosting then
 		return
 	end
+
 	if humanoid.MoveDirection.Magnitude < 0.1 then
-		print("humanoid.MoveDirection.Magnitude ", humanoid.MoveDirection.Magnitude)
 		return
 	end
-	if not NewController.SpeedVar or NewController.SpeedVar < 20 then
+
+	-- Current horizontal speed
+	local currentVel = bodyVelocity.Velocity
+	local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
+
+	if horizontalVel.Magnitude < 20 then
 		print("Not enough speed.")
 		return
 	end
 
-	-- Activate boost
 	boostReady = false
 	isBoosting = true
 
-	print("Boost activated")
+	local boostDir = horizontalVel.Magnitude > 0 and horizontalVel.Unit or humanoid.MoveDirection
+	local boostStartTime = tick()
+	local boostEndTime = boostStartTime + boostDuration
 
-	local originalAcceleration = acceleration
-	local originalTopSpeed = topSpeed
+	local boostConnection
+	boostConnection = RunService.Heartbeat:Connect(function(dt)
+		if not Board or not isBoosting then
+			if boostConnection then
+				boostConnection:Disconnect()
+			end
+			return
+		end
 
-	-- Boosted values
-	local boostedSpeed = NewController.SpeedVar + BOOST_AMOUNT
-	NewController.SpeedVar = boostedSpeed
+		if tick() >= boostEndTime then
+			isBoosting = false
+			boostConnection:Disconnect()
 
-	-- mutate refs
-	acceleration = BOOSTED_ACCELERATION
-	topSpeed = boostedSpeed
+			-- Clamp back to topSpeed after boost ends
+			local v = bodyVelocity.Velocity
+			local flat = Vector3.new(v.X, 0, v.Z)
 
+			if flat.Magnitude > topSpeed then
+				local clamped = flat.Unit * topSpeed
+				bodyVelocity.Velocity = Vector3.new(clamped.X, v.Y, clamped.Z)
+			end
+			return
+		end
+
+		-- Inject boost velocity (preserve Y)
+		bodyVelocity.Velocity = bodyVelocity.Velocity
+			+ Vector3.new(boostDir.X * boostAmount * dt * 60, 0, boostDir.Z * boostAmount * dt * 60)
+	end)
+
+	-- UI
 	if boostCooldownFiller then
 		boostCooldownFiller.Visible = true
-		-- start full progress and will shrink
 		boostCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
 	end
 
-	-- End boost after duration: restore accel/top speed
-	task.delay(BOOST_DURATION, function()
-		isBoosting = false
-		if acceleration then
-			acceleration = originalAcceleration
-		end
-		if topSpeed then
-			topSpeed = originalTopSpeed
-		end
-	end)
-
-	-- Start cooldown UI / timer
+	-- Cooldown
 	task.spawn(function()
 		local step = 0.05
 		local timeLeft = BOOST_COOLDOWN
 
 		while timeLeft > 0 do
-			-- update UI filler: shrink from 1->0 vertically
 			if boostCooldownFiller then
-				local frac = timeLeft / BOOST_COOLDOWN
-				boostCooldownFiller.Size = UDim2.new(1, 0, frac, 0)
+				boostCooldownFiller.Size = UDim2.new(1, 0, timeLeft / BOOST_COOLDOWN, 0)
 			end
 			timeLeft = timeLeft - step
 			task.wait(step)
 		end
 
-		-- cooldown end
 		boostReady = true
 		if boostCooldownFiller then
 			boostCooldownFiller.Visible = false
@@ -370,138 +376,231 @@ local function EnableDashVFX(enable)
 	end
 end
 
-local function DashVelocityMethod(hoverboard, moveDir, distance, duration)
-	if not hoverboard or moveDir.Magnitude == 0 then
-		return
-	end
+function ApplyDash(dashAmount, dashDuration, dashDistance)
+	if not humanoid or not Board or not bodyVelocity then
+        return
+    end
 
-	--local bodyVelocity = hoverboard:FindFirstChildOfClass("BodyVelocity")
-	--if not bodyVelocity then
-	--warn("Dash failed: BodyVelocity not found")
-	--return
-	--end
+    if not dashReady or isDashing then
+        return
+    end
 
-	-- preserve existing velocity state
-	local startVel = Board.AssemblyLinearVelocity --bodyVelocity.Velocity
-	local dashSpeed = distance / math.max(duration, 0.0001) * DASH_SPEED_MULTIPLIER
-	local dashVelXZ = moveDir.Unit * dashSpeed
+    if humanoid.MoveDirection.Magnitude < 0.1 then
+        return
+    end
 
-	local t = 0
-	local holdT = duration
+    -- Store the current direction BEFORE applying dash
+    local currentVel = bodyVelocity.Velocity
+    local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
+	local dashDir = horizontalVel.Magnitude > 0 and horizontalVel.Unit or humanoid.MoveDirection
+	dashDir = Vector3.new(dashDir.X, 0, dashDir.Z).Unit
+    
+    if horizontalVel.Magnitude < 20 then
+        print("Not enough speed.")
+        return
+    end
 
-	local conn
-	conn = RunService.Heartbeat:Connect(function(dt)
-		if not Board or not conn then
-			if conn then
-				conn:Disconnect()
-			end
-			return
-		end
+    print("Dash applied.")
+    dashReady = false
+    isDashing = true
+    
+    -- Store the exact dash direction and initial velocity
+    --local dashStartDirection = horizontalVel.Unit
+    local dashStartTime = tick()
+    local dashEndTime = dashStartTime + dashDuration
+    
+    -- Enable VFX
+    --EnableDashVFX(true)
+    
+    local dashConnection
+    dashConnection = RunService.Heartbeat:Connect(function(dt)
+        if not Board or not isDashing then
+            if dashConnection then
+                dashConnection:Disconnect()
+            end
+            --EnableDashVFX(false)
+            return
+        end
 
-		t = t + dt
+        if tick() >= dashEndTime then
+            isDashing = false
+            if dashConnection then
+                dashConnection:Disconnect()
+            end
+            --EnableDashVFX(false)
+            
+            -- Clamp back to topSpeed after dash ends
+            local v = bodyVelocity.Velocity
+            local flat = Vector3.new(v.X, 0, v.Z)
+            
+            if flat.Magnitude > topSpeed then
+                local clamped = flat.Unit * topSpeed
+                bodyVelocity.Velocity = Vector3.new(clamped.X, v.Y, clamped.Z)
+            end
+            return
+        end
 
-		if t <= holdT then
-			-- Dash controls ONLY XZ, preserves Y (hover/jump safe)
-			--bodyVelocity.Velocity = Vector3.new(dashVelXZ.X, bodyVelocity.Velocity.Y, dashVelXZ.Z)
-			Board.AssemblyLinearVelocity = Vector3.new(dashVelXZ.X, Board.AssemblyLinearVelocity.Y, dashVelXZ.Z)
-		else
-			-- Smooth restore to previous movement velocity
-			local restoreDur = 0.2
-			local alpha = math.min((t - holdT) / restoreDur, 1)
+		-- Apply dash velocity (preserve Y based on raycast)
+		local v = bodyVelocity.Velocity
+		bodyVelocity.Velocity = Vector3.new(
+			bodyVelocity.Velocity.X + (dashDir.X * dashAmount * dt * 10),
+			v.Y,
+			bodyVelocity.Velocity.Z + (dashDir.Z * dashAmount * dt * 10)
+		)
 
-			Board.AssemblyLinearVelocity = Board.AssemblyLinearVelocity:Lerp(
-				Vector3.new(startVel.X, Board.AssemblyLinearVelocity.Y, startVel.Z),
-				alpha
-			)
 
-			-- bodyVelocity.Velocity =
-			-- 	bodyVelocity.Velocity:Lerp(Vector3.new(startVel.X, bodyVelocity.Velocity.Y, startVel.Z), alpha)
 
-			if alpha >= 1 then
-				conn:Disconnect()
-			end
-		end
-	end)
-end
 
-function ApplyDash(currentSpeed, hoverboard)
-	if not humanoid then
-		warn("HoverboardDash: humanoid nil")
-		return
-	end
-	if not dashReady then
-		print("Dash not ready.")
-		return
-	end
-	if humanoid.MoveDirection.Magnitude < 0.1 then
-		print("Humanoid not moving")
-		return
-	end
-	if not hoverboard then
-		warn("HoverboardDash: invalid hoverboard")
-		return
-	end
-	if currentSpeed < 20 then
-		return
-	end
 
-	-- local bodyVelocity = hoverboard:FindFirstChildOfClass("BodyVelocity")
-	-- if not bodyVelocity then
-	-- 	warn("HoverboardDash: BodyVelocity missing")
+
+
+        -- -- Apply dash in the stored direction while preserving vertical velocity
+        -- local timeElapsed = tick() - dashStartTime
+        -- local progress = timeElapsed / dashDuration
+        
+        -- -- Apply dash force in the stored direction
+        -- local dashForce = dashAmount * (1 - progress) * dt * 60  -- Gradually reduce dash force
+        -- local dashVelocityAddition = dashStartDirection * dashForce
+        
+        -- -- Get current velocity and add dash force while maintaining vertical component
+        -- local currentVelNow = bodyVelocity.Velocity
+        -- local newHorizontalVel = Vector3.new(currentVelNow.X, 0, currentVelNow.Z) + dashVelocityAddition
+        
+        -- -- Preserve vertical velocity (don't let dash affect Y)
+        -- bodyVelocity.Velocity = Vector3.new(
+        --     newHorizontalVel.X,
+        --     currentVelNow.Y,  -- Keep the existing vertical velocity
+        --     newHorizontalVel.Z
+        -- )
+    end)
+
+    -- UI
+    if flashCooldownFiller then
+        flashCooldownFiller.Visible = true
+        flashCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
+    end
+
+    -- Cooldown
+    task.spawn(function()
+        local step = 0.05
+        local timeLeft = DASH_COOLDOWN
+
+        while timeLeft > 0 do
+            if flashCooldownFiller then
+                flashCooldownFiller.Size = UDim2.new(1, 0, timeLeft / DASH_COOLDOWN, 0)
+            end
+            timeLeft = timeLeft - step
+            task.wait(step)
+        end
+
+        dashReady = true
+        if flashCooldownFiller then
+            flashCooldownFiller.Visible = false
+            flashCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
+        end
+    end)
+
+
+
+
+
+
+
+
+
+
+
+	-- if not humanoid or not Board or not bodyVelocity then
 	-- 	return
 	-- end
 
-	--local vel = bodyVelocity.Velocity
-	local vel = Board.AssemblyLinearVelocity
-	local moveDir = Vector3.new(vel.X, 0, vel.Z)
+	-- if not dashReady or isDashing then
+	-- 	return
+	-- end
 
-	if moveDir.Magnitude < 1 then
-		-- Prevent dash when barely moving
-		return
-	end
+	-- if humanoid.MoveDirection.Magnitude < 0.1 then
+	-- 	return
+	-- end
 
-	moveDir = moveDir.Unit
+	-- -- Current horizontal speed
+	-- local currentVel = bodyVelocity.Velocity
+	-- local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
 
-	print("Dash applied.")
-	dashReady = false
-	isDashing = true
+	-- if horizontalVel.Magnitude < 20 then
+	-- 	print("Not enough speed.")
+	-- 	return
+	-- end
 
-	-- dash params
-	local distance = math.max(DASH_DISTANCE, math.clamp(currentSpeed * 0.6, 8, 40))
-	local duration = DASH_DURATION
+	-- print("Dash applied.")
 
-	DashVelocityMethod(hoverboard, moveDir, distance, duration)
-	--EnableDashVFX(true)
+	-- dashReady = false
+	-- isDashing = true
 
-	if flashCooldownFiller then
-		flashCooldownFiller.Visible = true
-		flashCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
-	end
+	-- local dashDir = horizontalVel.Magnitude > 0 and horizontalVel.Unit or humanoid.MoveDirection
+	-- dashDir = Vector3.new(dashDir.X, 0, dashDir.Z).Unit
 
-	-- end dash
-	task.delay(duration, function()
-		isDashing = false
-		EnableDashVFX(false)
-	end)
+	-- local dashSpeed = dashDistance / dashDuration
 
-	-- cooldown
-	task.spawn(function()
-		local step = 0.05
-		local timeLeft = DASH_COOLDOWN
+	-- local dashStartTime = tick()
+	-- local dashEndTime = dashStartTime + dashDuration
 
-		while timeLeft > 0 do
-			if flashCooldownFiller then
-				local frac = timeLeft / DASH_COOLDOWN
-				flashCooldownFiller.Size = UDim2.new(1, 0, frac, 0)
-			end
-			timeLeft = timeLeft - step
-			task.wait(step)
-		end
+	-- local dashConnection
+	-- dashConnection = RunService.Heartbeat:Connect(function(dt)
+	-- 	if not Board or not isDashing then
+	-- 		if dashConnection then
+	-- 			dashConnection:Disconnect()
+	-- 		end
+	-- 		return
+	-- 	end
 
-		dashReady = true
-		print("Dash ready")
-	end)
-	return true
+	-- 	if tick() >= dashEndTime then
+	-- 		isDashing = false
+	-- 		dashConnection:Disconnect()
+
+	-- 		-- Clamp back to topSpeed after boost ends
+	-- 		local v = bodyVelocity.Velocity
+	-- 		local flat = Vector3.new(v.X, 0, v.Z)
+
+	-- 		if flat.Magnitude > topSpeed then
+	-- 			local clamped = flat.Unit * topSpeed
+	-- 			bodyVelocity.Velocity = Vector3.new(clamped.X, v.Y, clamped.Z)
+	-- 		end
+	-- 		return
+	-- 	end
+
+	-- 	-- Inject dash velocity (preserve Y)
+	-- 	local v = bodyVelocity.Velocity
+	-- 	bodyVelocity.Velocity = Vector3.new(dashDir.X * dashSpeed, v.Y, dashDir.Z * dashSpeed)
+		
+	-- 	-- bodyVelocity.Velocity = bodyVelocity.Velocity
+	-- 	-- 	+ Vector3.new(dashDir.X * dashAmount * dt * 60, 0, dashDir.Z * dashAmount * dt * 60)
+	-- end)
+
+	-- -- UI
+	-- if flashCooldownFiller then
+	-- 	flashCooldownFiller.Visible = true
+	-- 	flashCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
+	-- end
+
+	-- -- Cooldown
+	-- task.spawn(function()
+	-- 	local step = 0.05
+	-- 	local timeLeft = DASH_COOLDOWN
+
+	-- 	while timeLeft > 0 do
+	-- 		if flashCooldownFiller then
+	-- 			flashCooldownFiller.Size = UDim2.new(1, 0, timeLeft / DASH_COOLDOWN, 0)
+	-- 		end
+	-- 		timeLeft = timeLeft - step
+	-- 		task.wait(step)
+	-- 	end
+
+	-- 	dashReady = true
+	-- 	if flashCooldownFiller then
+	-- 		flashCooldownFiller.Visible = false
+	-- 		flashCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
+	-- 	end
+	-- end)
 end
 -----------------------------------------------------------
 
@@ -736,14 +835,10 @@ end
 function CalculateMoveDirection()
 	local controls = GetControls()
 	local inputVector = controls:GetMoveVector()
-	local factor = 1000
 	if inputVector.Magnitude > 0.1 then
-		local goalCFrame = Camera.CFrame * CFrame.new(inputVector.X * factor, 0, inputVector.Z * factor)
+		local goalCFrame = Camera.CFrame * CFrame.new(inputVector.X, 0, inputVector.Z)
 		local goalMoveVector = (goalCFrame.Position - Camera.CFrame.Position)
-
 		NewController.MoveVector = (goalMoveVector * Vector3.new(1, 0, 1)).Unit
-
-		isBraking = isBraking
 	else
 		NewController.MoveVector = Vector3.zero
 		isBraking = false
@@ -777,6 +872,12 @@ function ReturnDownhillVector(SurfaceNormal: Vector3?): Vector3
 end
 
 function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
+	-- if isDashing then
+	-- 	HandleJump(jumpPower, deltaTimeRender)
+	-- 	CheckGravityCoil()
+	-- 	return 
+	-- end
+
 	local Origin = Board.Position
 	--local Origin = rootPart.Position + rootPart.CFrame.LookVector
 	local Direction = Vector3.new(0, -1, 0)
@@ -896,6 +997,8 @@ function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 end
 
 function ApplyOrientation(deltaTimeRender)
+	--if isDashing then return end
+
 	local BoardCF = Board.CFrame
 	local Origin = Board.Position
 	local Direction = Vector3.new(0, -1, 0)
@@ -923,7 +1026,6 @@ function ApplyOrientation(deltaTimeRender)
 		RaycastResult = frontRaycast
 	end
 
-	
 	local newNormal
 	local LerpFactor = 0.8
 
@@ -972,17 +1074,12 @@ end
 
 function UpdateFOV(topSpeed, deltaTimeRender)
 	local diff = MAX_FOV - MIN_FOV
-	Camera.FieldOfView = Lerp(
-		Camera.FieldOfView,
-		math.clamp(MIN_FOV + diff * (Board.AssemblyLinearVelocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV),
-		deltaTimeRender * FOV_FACTOR
-	)
-
-	-- Camera.FieldOfView = Lerp(
-	-- 	Camera.FieldOfView,
-	-- 	math.clamp(MIN_FOV + diff * (bodyVelocity.Velocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV),
-	-- 	deltaTimeRender * FOV_FACTOR
-	-- )
+	local speedBasedFOV =
+		math.clamp(MIN_FOV + diff * (Board.AssemblyLinearVelocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV)
+	if isBoosting or isDashing then
+		speedBasedFOV = math.min(speedBasedFOV + 10, MAX_FOV + 10)
+	end
+	Camera.FieldOfView = Lerp(Camera.FieldOfView, speedBasedFOV, deltaTimeRender * FOV_FACTOR)
 end
 -----------------------------------------------------------
 
@@ -1068,7 +1165,7 @@ local function ResetStates()
 	workspace.Gravity = DEFAULT_GRAVITY
 end
 
-local function InputListeners(HoverboardService, JumpPower)
+local function InputListeners()
 	UserInputService.InputBegan:Connect(function(Input: InputObject, gameProcessedEvent)
 		if gameProcessedEvent then
 			return
@@ -1077,11 +1174,11 @@ local function InputListeners(HoverboardService, JumpPower)
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
 			if Input.KeyCode == Enum.KeyCode.Q then
 				print("Hoverboard: Boost requested.")
-				ApplyBoost()
+				ApplyBoost(BOOST_DURATION, BOOST_AMOUNT)
 			end
 			if Input.KeyCode == Enum.KeyCode.F then
 				print("Hoverboard: Flash requested.")
-				--ApplyDash(NewController.SpeedVar, Board)
+				ApplyDash(DASH_AMOUNT, DASH_DURATION, 100)
 			end
 		end
 		if
@@ -1099,7 +1196,7 @@ local function InputListeners(HoverboardService, JumpPower)
 		-- GROUND JUMP
 		if CanJump then
 			Jump = true
-			--LastJump = true
+			LastJump = true
 			return
 		end
 
@@ -1133,11 +1230,11 @@ local function InputListeners(HoverboardService, JumpPower)
 	end)
 	boostButton.MouseButton1Click:Connect(function()
 		print("Hoverboard: Boost requested.")
-		ApplyBoost(acceleration, topSpeed)
+		ApplyBoost(BOOST_DURATION, BOOST_AMOUNT)
 	end)
 	flashButton.MouseButton1Click:Connect(function()
 		print("Hoverboard: Flash requested.")
-		ApplyDash(NewController.SpeedVar, Board)
+		ApplyDash(DASH_AMOUNT, DASH_DURATION)
 	end)
 	gravityButton.MouseButton1Click:Connect(function()
 		print("Hovrboard: Gravity Coil requested.")
@@ -1204,7 +1301,6 @@ function NewController:StartHoverboard(config, HoverboardService)
 	RefreshBoostGUI()
 	RefreshFlashGUI()
 	CloneVFX()
-	InputListeners(HoverboardService, jumpPower)
 
 	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
 	if runningConnection then
@@ -1268,6 +1364,7 @@ function OnCharacterAdded(char)
 	end
 	rootPart = char:WaitForChild("HumanoidRootPart")
 	rootPart.CastShadow = false
+	InputListeners()
 	InitializeHoverboard()
 end
 
