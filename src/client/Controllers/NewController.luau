@@ -14,9 +14,8 @@ local humanoid
 local Board
 local Trail
 local rootPart
---local bodyVelocity
+local bodyVelocity
 local bodyGyro
-local bodyPosition
 local Camera = workspace.Camera
 local Config
 
@@ -114,12 +113,14 @@ local isFalling = false
 local isBraking = false
 
 -- Boost config
-BOOST_DURATION = 1
-BOOST_AMOUNT = 2.5
+local BOOST_DURATION = 1
+local BOOST_AMOUNT = 2.5
 local BOOST_COOLDOWN = 3
+
 -- Dash config
-DASH_DURATION = 0.35
-DASH_AMOUNT = 100
+local DASH_DURATION = 0.25
+local DASH_DISTANCE = 50
+local DASH_AMOUNT = 500
 local DASH_COOLDOWN = 3
 
 -- UI References
@@ -155,6 +156,7 @@ local flyButton = flyFrame:WaitForChild("FlyButton")
 
 local controls
 local RayParams
+local wallDetected
 
 local function GetControls()
 	if controls then
@@ -166,20 +168,19 @@ local function GetControls()
 end
 
 local function InitBodyMovers()
-	bodyVelocity = Instance.new("BodyVelocity")
-	bodyGyro = Instance.new("BodyGyro")
-	--bodyPosition = Instance.new("BodyPosition")
+	bodyVelocity = Board:WaitForChild("BodyVelocity")
+	bodyGyro = Board:WaitForChild("BodyGyro")
 
-	--bodyPosition.MaxForce = Vector3.new(2e9, 2e9, 2e9)
-	--bodyPosition.Position = rootPart.Position
+	-- bodyVelocity = Instance.new("BodyVelocity")
+	-- bodyGyro = Instance.new("BodyGyro")
 
-	bodyGyro.MaxTorque = Vector3.new(20000, 20000, 20000)
-	bodyGyro.P = 10000
-	bodyGyro.D = 500
-	bodyGyro.Parent = Board
+	-- bodyGyro.MaxTorque = Vector3.new(20000, 20000, 20000)
+	-- bodyGyro.P = 10000
+	-- bodyGyro.D = 500
+	-- bodyGyro.Parent = Board
 
-	bodyVelocity.MaxForce = Vector3.new(1e4, 0, 1e4)
-	bodyVelocity.Parent = Board
+	-- bodyVelocity.MaxForce = Vector3.new(1e4, 0, 1e4)
+	-- bodyVelocity.Parent = Board
 end
 
 local function CalculateJumpInterval(jumpPower)
@@ -197,6 +198,65 @@ local function IsMovingDownward()
 	local verticalVelocity = Board.AssemblyLinearVelocity.Y
 	-- Negative Y velocity means moving downward (towards negative Y)
 	return verticalVelocity < 20
+end
+
+function WallDetection(deltaTimeRender)
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.IgnoreWater = true
+	rayParams.FilterDescendantsInstances = { character, Board }
+
+	local lookDir = rootPart.CFrame.LookVector
+	local speed = Board.AssemblyLinearVelocity.Magnitude
+
+	-- Dynamic ray length (prevents tunneling)
+	local rayLength = math.max(7, speed * deltaTimeRender)
+
+	local origin = rootPart.Position
+	local direction = lookDir * rayLength
+
+	local hit = workspace:Raycast(origin, direction, rayParams)
+
+	if hit then
+		print("Wall detected. Stopping movement.")
+		wallDetected = true
+		local normal = hit.Normal
+		local currentVel = bodyVelocity.Velocity
+
+		-- Remove velocity going into the wall
+		local intoWall = currentVel:Dot(normal)
+		local slideVelocity = currentVel - normal * intoWall
+		if intoWall < 0 then
+			MAX_HORIZONTAL_ROTATION = 5
+			bodyVelocity.Velocity = Vector3.new(slideVelocity.X * 0.95, Board.AssemblyLinearVelocity.Y, slideVelocity.Z  * 0.95)
+			--bodyVelocity.Velocity = slideVelocity * 0.95
+		else
+			MAX_HORIZONTAL_ROTATION = 15
+		end
+		return
+
+		-- -- Distance from player to wall
+		-- local hitDistance = (hit.Position - origin).Magnitude
+
+		-- if hitDistance <= rayLength then
+		-- 	print("Wall detected. Stopping movement.")
+		-- 	local normal = hit.Normal
+		-- 	local currentVel = bodyVelocity.Velocity
+
+		-- 	-- Remove velocity going into the wall
+		-- 	local intoWall = currentVel:Dot(normal)
+
+		-- 	if intoWall < 0.001 then
+		-- 		local slideVelocity = currentVel - normal * intoWall
+		-- 		Board.AssemblyLinearVelocity = Vector3.new(slideVelocity.X * 1.005, Board.AssemblyLinearVelocity.Y, slideVelocity.Z  * 1.005)
+		-- 		--bodyVelocity.Velocity = slideVelocity * 1.005
+		-- 	end
+
+		-- 	return
+		-- end
+	else
+		wallDetected = false
+	end
 end
 
 ------------------- UPDATE SPEED GUI -----------------------
@@ -378,229 +438,130 @@ end
 
 function ApplyDash(dashAmount, dashDuration, dashDistance)
 	if not humanoid or not Board or not bodyVelocity then
-        return
-    end
+		return
+	end
 
-    if not dashReady or isDashing then
-        return
-    end
+	if not dashReady or isDashing then
+		return
+	end
 
-    if humanoid.MoveDirection.Magnitude < 0.1 then
-        return
-    end
+	if humanoid.MoveDirection.Magnitude < 0.1 then
+		return
+	end
 
-    -- Store the current direction BEFORE applying dash
-    local currentVel = bodyVelocity.Velocity
-    local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
-	local dashDir = horizontalVel.Magnitude > 0 and horizontalVel.Unit or humanoid.MoveDirection
-	dashDir = Vector3.new(dashDir.X, 0, dashDir.Z).Unit
-    
-    if horizontalVel.Magnitude < 20 then
-        print("Not enough speed.")
-        return
-    end
+	-- Store the current direction BEFORE applying dash
+	local currentVel = Board.AssemblyLinearVelocity
+	local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
 
-    print("Dash applied.")
-    dashReady = false
-    isDashing = true
-    
-    -- Store the exact dash direction and initial velocity
-    --local dashStartDirection = horizontalVel.Unit
-    local dashStartTime = tick()
-    local dashEndTime = dashStartTime + dashDuration
-    
-    -- Enable VFX
-    --EnableDashVFX(true)
-    
-    local dashConnection
-    dashConnection = RunService.Heartbeat:Connect(function(dt)
-        if not Board or not isDashing then
-            if dashConnection then
-                dashConnection:Disconnect()
-            end
-            --EnableDashVFX(false)
-            return
-        end
+	-- CRITICAL: Store dash direction ONCE at the start
+	local initialDashDir = humanoid.MoveDirection --or horizontalVel.Magnitude > 0 and horizontalVel.Unit
+	initialDashDir = Vector3.new(initialDashDir.X, 0, initialDashDir.Z).Unit
 
-        if tick() >= dashEndTime then
-            isDashing = false
-            if dashConnection then
-                dashConnection:Disconnect()
-            end
-            --EnableDashVFX(false)
-            
-            -- Clamp back to topSpeed after dash ends
-            local v = bodyVelocity.Velocity
-            local flat = Vector3.new(v.X, 0, v.Z)
-            
-            if flat.Magnitude > topSpeed then
-                local clamped = flat.Unit * topSpeed
-                bodyVelocity.Velocity = Vector3.new(clamped.X, v.Y, clamped.Z)
-            end
-            return
-        end
+	if horizontalVel.Magnitude < 20 then
+		print("Not enough speed.")
+		return
+	end
 
-		-- Apply dash velocity (preserve Y based on raycast)
-		local v = bodyVelocity.Velocity
-		bodyVelocity.Velocity = Vector3.new(
-			bodyVelocity.Velocity.X + (dashDir.X * dashAmount * dt * 10),
-			v.Y,
-			bodyVelocity.Velocity.Z + (dashDir.Z * dashAmount * dt * 10)
+	print("Dash applied.")
+	dashReady = false
+	isDashing = true
+
+	-- Calculate required speed for distance-based dash
+	local requiredSpeed = dashDistance / dashDuration
+	local dashStartTime = tick()
+	local dashEndTime = dashStartTime + dashDuration
+
+	local originalTopSpeed = topSpeed
+	local lockedDashDir = initialDashDir
+
+	-- Disable humanoid control during dash (optional but recommended)
+	local wasAutoRotate = humanoid.AutoRotate
+	humanoid.AutoRotate = false
+
+	local dashConnection
+	dashConnection = RunService.Heartbeat:Connect(function(dt)
+		if not Board or not isDashing then
+			if dashConnection then
+				dashConnection:Disconnect()
+			end
+			-- Restore humanoid control
+			humanoid.AutoRotate = wasAutoRotate
+			return
+		end
+
+		local currentTime = tick()
+		local elapsed = currentTime - dashStartTime
+
+		--Stop dash after duration
+		if currentTime >= dashEndTime then
+			isDashing = false
+			if dashConnection then
+				dashConnection:Disconnect()
+			end
+
+			-- Restore original settings
+			topSpeed = originalTopSpeed
+			humanoid.AutoRotate = wasAutoRotate
+
+			-- Apply post-dash velocity (keep momentum but prevent excessive speed)
+			local v = Board.AssemblyLinearVelocity
+			local flat = Vector3.new(v.X, 0, v.Z)
+
+			-- Calculate velocity decay
+			local currentSpeed = flat.Magnitude
+
+			if currentSpeed > originalTopSpeed then
+				-- Smooth deceleration to normal speed
+				local deceleration = (currentSpeed - originalTopSpeed) * 0.8
+				local newSpeed = math.max(currentSpeed - deceleration * dt, originalTopSpeed)
+				local newVel = flat.Unit * newSpeed
+				Board.AssemblyLinearVelocity = Vector3.new(newVel.X, v.Y, newVel.Z)
+			end
+
+			return
+		end
+
+		local progress = elapsed / dashDuration
+
+		-- Apply easing for better feel (ease-out quad)
+		local easeFactor = 1 - (1 - progress) * (1 - progress)
+		local currentDashSpeed = requiredSpeed * (0.9 + 0.2 * easeFactor)
+
+		local vel = Board.AssemblyLinearVelocity
+		Board.AssemblyLinearVelocity = Vector3.new(
+			lockedDashDir.X * currentDashSpeed, -- Always use locked direction
+			vel.Y, -- Preserve vertical velocity
+			lockedDashDir.Z * currentDashSpeed -- Always use locked direction
 		)
+	end)
 
+	-- Cooldown UI (same as before)
+	if flashCooldownFiller then
+		flashCooldownFiller.Visible = true
+		flashCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
+	end
 
+	-- Cooldown management
+	task.spawn(function()
+		local step = 0.05
+		local timeLeft = DASH_COOLDOWN
 
+		while timeLeft > 0 do
+			if flashCooldownFiller then
+				local progress = 1 - (timeLeft / DASH_COOLDOWN)
+				local sizeProgress = progress * progress
+				flashCooldownFiller.Size = UDim2.new(1, 0, 1 - sizeProgress, 0)
+			end
+			timeLeft = timeLeft - step
+			task.wait(step)
+		end
 
-
-
-
-        -- -- Apply dash in the stored direction while preserving vertical velocity
-        -- local timeElapsed = tick() - dashStartTime
-        -- local progress = timeElapsed / dashDuration
-        
-        -- -- Apply dash force in the stored direction
-        -- local dashForce = dashAmount * (1 - progress) * dt * 60  -- Gradually reduce dash force
-        -- local dashVelocityAddition = dashStartDirection * dashForce
-        
-        -- -- Get current velocity and add dash force while maintaining vertical component
-        -- local currentVelNow = bodyVelocity.Velocity
-        -- local newHorizontalVel = Vector3.new(currentVelNow.X, 0, currentVelNow.Z) + dashVelocityAddition
-        
-        -- -- Preserve vertical velocity (don't let dash affect Y)
-        -- bodyVelocity.Velocity = Vector3.new(
-        --     newHorizontalVel.X,
-        --     currentVelNow.Y,  -- Keep the existing vertical velocity
-        --     newHorizontalVel.Z
-        -- )
-    end)
-
-    -- UI
-    if flashCooldownFiller then
-        flashCooldownFiller.Visible = true
-        flashCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
-    end
-
-    -- Cooldown
-    task.spawn(function()
-        local step = 0.05
-        local timeLeft = DASH_COOLDOWN
-
-        while timeLeft > 0 do
-            if flashCooldownFiller then
-                flashCooldownFiller.Size = UDim2.new(1, 0, timeLeft / DASH_COOLDOWN, 0)
-            end
-            timeLeft = timeLeft - step
-            task.wait(step)
-        end
-
-        dashReady = true
-        if flashCooldownFiller then
-            flashCooldownFiller.Visible = false
-            flashCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
-        end
-    end)
-
-
-
-
-
-
-
-
-
-
-
-	-- if not humanoid or not Board or not bodyVelocity then
-	-- 	return
-	-- end
-
-	-- if not dashReady or isDashing then
-	-- 	return
-	-- end
-
-	-- if humanoid.MoveDirection.Magnitude < 0.1 then
-	-- 	return
-	-- end
-
-	-- -- Current horizontal speed
-	-- local currentVel = bodyVelocity.Velocity
-	-- local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
-
-	-- if horizontalVel.Magnitude < 20 then
-	-- 	print("Not enough speed.")
-	-- 	return
-	-- end
-
-	-- print("Dash applied.")
-
-	-- dashReady = false
-	-- isDashing = true
-
-	-- local dashDir = horizontalVel.Magnitude > 0 and horizontalVel.Unit or humanoid.MoveDirection
-	-- dashDir = Vector3.new(dashDir.X, 0, dashDir.Z).Unit
-
-	-- local dashSpeed = dashDistance / dashDuration
-
-	-- local dashStartTime = tick()
-	-- local dashEndTime = dashStartTime + dashDuration
-
-	-- local dashConnection
-	-- dashConnection = RunService.Heartbeat:Connect(function(dt)
-	-- 	if not Board or not isDashing then
-	-- 		if dashConnection then
-	-- 			dashConnection:Disconnect()
-	-- 		end
-	-- 		return
-	-- 	end
-
-	-- 	if tick() >= dashEndTime then
-	-- 		isDashing = false
-	-- 		dashConnection:Disconnect()
-
-	-- 		-- Clamp back to topSpeed after boost ends
-	-- 		local v = bodyVelocity.Velocity
-	-- 		local flat = Vector3.new(v.X, 0, v.Z)
-
-	-- 		if flat.Magnitude > topSpeed then
-	-- 			local clamped = flat.Unit * topSpeed
-	-- 			bodyVelocity.Velocity = Vector3.new(clamped.X, v.Y, clamped.Z)
-	-- 		end
-	-- 		return
-	-- 	end
-
-	-- 	-- Inject dash velocity (preserve Y)
-	-- 	local v = bodyVelocity.Velocity
-	-- 	bodyVelocity.Velocity = Vector3.new(dashDir.X * dashSpeed, v.Y, dashDir.Z * dashSpeed)
-		
-	-- 	-- bodyVelocity.Velocity = bodyVelocity.Velocity
-	-- 	-- 	+ Vector3.new(dashDir.X * dashAmount * dt * 60, 0, dashDir.Z * dashAmount * dt * 60)
-	-- end)
-
-	-- -- UI
-	-- if flashCooldownFiller then
-	-- 	flashCooldownFiller.Visible = true
-	-- 	flashCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
-	-- end
-
-	-- -- Cooldown
-	-- task.spawn(function()
-	-- 	local step = 0.05
-	-- 	local timeLeft = DASH_COOLDOWN
-
-	-- 	while timeLeft > 0 do
-	-- 		if flashCooldownFiller then
-	-- 			flashCooldownFiller.Size = UDim2.new(1, 0, timeLeft / DASH_COOLDOWN, 0)
-	-- 		end
-	-- 		timeLeft = timeLeft - step
-	-- 		task.wait(step)
-	-- 	end
-
-	-- 	dashReady = true
-	-- 	if flashCooldownFiller then
-	-- 		flashCooldownFiller.Visible = false
-	-- 		flashCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
-	-- 	end
-	-- end)
+		dashReady = true
+		if flashCooldownFiller then
+			flashCooldownFiller.Visible = false
+			flashCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
+		end
+	end)
 end
 -----------------------------------------------------------
 
@@ -875,7 +836,7 @@ function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 	-- if isDashing then
 	-- 	HandleJump(jumpPower, deltaTimeRender)
 	-- 	CheckGravityCoil()
-	-- 	return 
+	-- 	return
 	-- end
 
 	local Origin = Board.Position
@@ -997,7 +958,9 @@ function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
 end
 
 function ApplyOrientation(deltaTimeRender)
-	--if isDashing then return end
+	-- if isDashing then
+	-- 	return
+	-- end
 
 	local BoardCF = Board.CFrame
 	local Origin = Board.Position
@@ -1133,7 +1096,6 @@ local function ResetStates()
 	Board = nil
 	bodyVelocity = nil
 	bodyGyro = nil
-	bodyPosition = nil
 	controls = nil
 	OgBoardRotation = 0
 	BoardRotation = 0
@@ -1178,7 +1140,7 @@ local function InputListeners()
 			end
 			if Input.KeyCode == Enum.KeyCode.F then
 				print("Hoverboard: Flash requested.")
-				ApplyDash(DASH_AMOUNT, DASH_DURATION, 100)
+				ApplyDash(DASH_AMOUNT, DASH_DURATION, DASH_DISTANCE)
 			end
 		end
 		if
@@ -1234,7 +1196,7 @@ local function InputListeners()
 	end)
 	flashButton.MouseButton1Click:Connect(function()
 		print("Hoverboard: Flash requested.")
-		ApplyDash(DASH_AMOUNT, DASH_DURATION)
+		ApplyDash(DASH_AMOUNT, DASH_DURATION, DASH_DISTANCE)
 	end)
 	gravityButton.MouseButton1Click:Connect(function()
 		print("Hovrboard: Gravity Coil requested.")
@@ -1309,6 +1271,7 @@ function NewController:StartHoverboard(config, HoverboardService)
 	runningConnection = RunService.PreRender:Connect(function(dt)
 		CalculateMoveDirection()
 		CalculateSpeed(topSpeed)
+		WallDetection(dt)
 		ApplyVelocity(acceleration, jumpPower, dt)
 		ApplyOrientation(dt)
 		UpdateFOV(topSpeed, dt)

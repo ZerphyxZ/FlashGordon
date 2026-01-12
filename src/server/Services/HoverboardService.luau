@@ -14,6 +14,9 @@ local playerHoverboards = {}
 local hoverboard
 local trailEquipped = true
 
+local bodyVelocity
+local bodyGyro
+
 local HoverboardService = Knit.CreateService({
 	Name = "HoverboardService",
 	Client = {
@@ -51,6 +54,21 @@ end
 -- Server: spawn hoverboard for a player's character (server clones model + creates constraints)
 -- Uses feet for placement and respects stored hoverboard choice
 ----------------------------------------------------------
+
+local function InitBodyMovers(Board)
+	bodyVelocity = Instance.new("BodyVelocity")
+	bodyGyro = Instance.new("BodyGyro")
+
+	bodyGyro.MaxTorque = Vector3.new(20000, 20000, 20000)
+	bodyGyro.P = 10000
+	bodyGyro.D = 500
+	bodyGyro.Parent = Board
+
+	bodyVelocity.MaxForce = Vector3.new(1e4, 0, 1e4)
+	bodyVelocity.Parent = Board
+end
+
+
 function HoverboardService:SpawnHoverboard(player, boardName)
 	print("Spawn hoverboard called")
 	local character = player.Character
@@ -94,6 +112,8 @@ function HoverboardService:SpawnHoverboard(player, boardName)
 	motor.Part1 = primary
 	motor.C0 = CFrame.new(0, -heightOffset, 0)
 	motor.Parent = hrp
+
+	InitBodyMovers(primary)
 
 	if hoverboard and hoverboard.PrimaryPart then
 		hoverboard.PrimaryPart:SetNetworkOwner(player)
