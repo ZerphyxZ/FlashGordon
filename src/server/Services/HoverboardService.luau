@@ -4,6 +4,7 @@ local Global =
 local Knit = Global.Knit
 local ReplicatedStorage = Global.ReplicatedStorage
 local RunService = Global.RunService
+local PhysicsService = game:GetService("PhysicsService")
 local Hoverboards = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("HoverboardData"))
 local Players = Global.Players
 local PlayerDataHandler = require(ReplicatedStorage.Shared.Modules.PlayerDataHandler)
@@ -68,6 +69,13 @@ local function InitBodyMovers(Board)
 	bodyVelocity.Parent = Board
 end
 
+local function SetModelCollisionGroup(model, groupName)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.CollisionGroup = groupName
+		end
+	end
+end
 
 function HoverboardService:SpawnHoverboard(player, boardName)
 	print("Spawn hoverboard called")
@@ -77,7 +85,9 @@ function HoverboardService:SpawnHoverboard(player, boardName)
 		return
 	end
 
-	boardName = boardName or (playerHoverboards[player.UserId] and playerHoverboards[player.UserId].Name) or DEFAULT_BOARD
+	boardName = boardName
+		or (playerHoverboards[player.UserId] and playerHoverboards[player.UserId].Name)
+		or DEFAULT_BOARD
 
 	local template = HoverboardModels:FindFirstChild(boardName)
 	if not template then
@@ -114,6 +124,7 @@ function HoverboardService:SpawnHoverboard(player, boardName)
 	motor.Parent = hrp
 
 	InitBodyMovers(primary)
+	SetModelCollisionGroup(hoverboard, "Player")
 
 	if hoverboard and hoverboard.PrimaryPart then
 		hoverboard.PrimaryPart:SetNetworkOwner(player)
@@ -203,23 +214,23 @@ end
 function HoverboardService.Client:RequestGravityCoil(player)
 	-- Validate if player owns the gravity coil product
 	local playerData = PlayerDataHandler:GetData(player)
-	
+
 	if not playerData then
 		return false, "Player data not found"
 	end
-	
+
 	-- Check if player owns the gravity coil (you need to implement this check based on your data structure)
 	local hasCoil = PlayerDataHandler:PlayerHasGravityCoil(player) -- You'll need to create this function
-	
+
 	if not hasCoil then
 		return false, "You don't own the Gravity Coil"
 	end
-	
+
 	-- Notify client to enable gravity coil
 	-- You'll need to add this signal to the service
 	print("Firing gravity signal")
 	self.GravitySignal:Fire(player, true)
-	
+
 	return true, "Gravity Coil activated"
 end
 
@@ -295,7 +306,6 @@ function HoverboardService.Client:GetHoverboardInventory(player)
 	}
 end
 
-
 ----------------------------------------------------------
 -- Trails (Client APIs)
 ----------------------------------------------------------
@@ -305,7 +315,9 @@ end
 
 function HoverboardService.Client:PurchaseTrail(player, trailName, price, currencyType)
 	local data = PlayerDataHandler:GetData(player)
-	if not data then return false end
+	if not data then
+		return false
+	end
 
 	if PlayerDataHandler:PlayerOwnsTrail(player, trailName) then
 		print("Player already owns this trail")
@@ -340,7 +352,6 @@ function HoverboardService.Client:GetEquippedTrail(player)
 	return PlayerDataHandler:GetEquippedTrail(player)
 end
 
-
 ----------------------------------------------------------
 -- Crates (Client APIs)
 ----------------------------------------------------------
@@ -350,7 +361,10 @@ end
 
 function HoverboardService.Client:PurchaseCrate(player, crateName, price, currencyType)
 	local data = PlayerDataHandler:GetData(player)
-	if not data then print("HoverboardService:PurchaseCrate failed") return false end
+	if not data then
+		print("HoverboardService:PurchaseCrate failed")
+		return false
+	end
 
 	if currencyType == "Coins" then
 		if data.Coins < price then
@@ -382,21 +396,42 @@ function HoverboardService.Client:GetOwnedCrates(player)
 	return PlayerDataHandler:GetOwnedCrates(player)
 end
 
-
 ----------------------------------------------------------
 -- Hoverboard Store/Purchase Methods
 ----------------------------------------------------------
 
-
 ----------------------------------------------------------
 -- Character Setup
 ----------------------------------------------------------
+local function CreateGroup(name)
+	pcall(function()
+		PhysicsService:RegisterCollisionGroup(name)
+	end)
+end
+
 function HoverboardService:OnCharacterAdded(player)
 	print("OnCharacterAdded called for:", player.Name)
-	
+
+	-- Create Collision Groups
+	CreateGroup("Player")
+	CreateGroup("PlayerInvincible")
+	CreateGroup("Obstacles")
+	CreateGroup("Walls")
+
+	-- Normal behavior
+	PhysicsService:CollisionGroupSetCollidable("Player", "Player", false)
+	PhysicsService:CollisionGroupSetCollidable("Player", "Obstacles", true)
+	PhysicsService:CollisionGroupSetCollidable("Player", "Walls", true)
+
+	-- Invincible behavior
+	PhysicsService:CollisionGroupSetCollidable("PlayerInvincible", "Obstacles", false)
+	PhysicsService:CollisionGroupSetCollidable("PlayerInvincible", "Walls", true)
+
+	SetModelCollisionGroup(player.Character, "Player")
+
 	-- Immediately disable controls while we set up
 	self.Client.ControlSignal:Fire(player, "Disable")
-	
+
 	-- Give default board immediately for immediate visual feedback
 	print("Giving immediate default hoverboard for:", player.Name)
 	playerHoverboards[player.UserId] = {
@@ -404,21 +439,21 @@ function HoverboardService:OnCharacterAdded(player)
 		Config = Hoverboards.GetConfig(DEFAULT_BOARD),
 	}
 	self:SpawnHoverboard(player, DEFAULT_BOARD)
-	
+
 	-- Enable controls temporarily with default board
 	self.Client.ControlSignal:Fire(player, "Enable")
-	
+
 	-- Now wait for profile to load in the background
 	task.spawn(function()
 		local maxWaitTime = 10
 		local startTime = os.time()
 		local profileLoaded = false
-		
+
 		-- Wait for profile to load
 		while not PlayerDataHandler:GetProfile(player) and (os.time() - startTime) < maxWaitTime do
 			task.wait(0.1)
 		end
-		
+
 		-- Check if profile was successfully loaded
 		local profile = PlayerDataHandler:GetProfile(player)
 		if not profile then
@@ -426,31 +461,31 @@ function HoverboardService:OnCharacterAdded(player)
 			-- Keep using default board
 			return
 		end
-		
+
 		profileLoaded = true
-		
+
 		-- Get equipped hoverboard from loaded profile
 		local saved = PlayerDataHandler:GetEquippedHoverboard(player)
 		print("Profile loaded, equipped hoverboard:", player.Name, "→", saved)
-		
+
 		-- If player has a saved board and it's different from default, switch to it
 		if saved and saved ~= "" and saved ~= DEFAULT_BOARD then
 			-- Check if player owns this hoverboard
 			if PlayerDataHandler:PlayerOwnsHoverboard(player, saved) then
 				print("Switching to saved hoverboard:", saved)
-				
+
 				-- Update memory cache
 				playerHoverboards[player.UserId] = {
 					Name = saved,
 					Config = Hoverboards.GetConfig(saved),
 				}
-				
+
 				-- Remove current board and spawn saved one
 				self:RemoveHoverboard(player)
 				self:SpawnHoverboard(player, saved)
 
 				self.Client.HoverboardSpawned:Fire(player, saved)
-				
+
 				print("Successfully switched to saved hoverboard for", player.Name)
 			else
 				warn("Player doesn't own saved hoverboard:", saved, "keeping default")
@@ -459,7 +494,7 @@ function HoverboardService:OnCharacterAdded(player)
 			-- Player has no saved board, give default and save it
 			print("Player has no hoverboard, saving default.")
 			PlayerDataHandler:SetEquippedHoverboard(player, DEFAULT_BOARD)
-			
+
 			-- Update memory cache
 			playerHoverboards[player.UserId] = {
 				Name = DEFAULT_BOARD,
@@ -467,39 +502,6 @@ function HoverboardService:OnCharacterAdded(player)
 			}
 		end
 	end)
-
-
-
-
-
-
-
-
-
-
-
-	-- self.Client.ControlSignal:Fire(player, "Disable")
-
-	-- local saved = PlayerDataHandler:GetEquippedHoverboard(player)
-	-- print("Player joined:", player.Name, "Equipped hoverboard:", saved)
-	-- playerHoverboards[player.UserId] = {
-	-- 	Name = saved,
-	-- 	Config = Hoverboards.GetConfig(saved),
-	-- }
-
-	-- -- If player has no stored hoverboard, give default. Otherwise spawn stored board.
-	-- if not playerHoverboards[player.UserId] or not playerHoverboards[player.UserId].Name then
-	-- 	print("Player has no hoverboard, giving default.")
-	-- 	self:GiveDefaultHoverboard(player)
-	-- else
-	-- 	-- spawn the stored board (will also create constraints)
-	-- 	print("Spawning stored hoverboard for player.")
-	-- 	local storedName = playerHoverboards[player.UserId].Name
-	-- 	self:SpawnHoverboard(player, storedName)
-	-- end
-
-	-- task.wait(0.3)
-	-- self.Client.ControlSignal:Fire(player, "Enable")
 end
 
 ----------------------------------------------------------
@@ -512,8 +514,7 @@ function HoverboardService:KnitStart()
 		end)
 	end)
 
-	Players.PlayerRemoving:Connect(function(player)
-	end)
+	Players.PlayerRemoving:Connect(function(player) end)
 end
 
 return HoverboardService

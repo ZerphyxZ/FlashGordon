@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local PhysicsService = game:GetService("PhysicsService")
 local player = Players.LocalPlayer
 local character
 local humanoid
@@ -25,8 +26,6 @@ local HoverboardData = require(Configuration:WaitForChild("HoverboardData"))
 local TrailsConfig = require(Configuration:WaitForChild("TrailsConfig"))
 local DashTrailModule = ReplicatedStorage:WaitForChild("VFX"):WaitForChild("HoverboardVFX"):WaitForChild("ElectricDash")
 local HoverboardService
-
---local characterVisualRig = ReplicatedStorage:WaitForChild("CharacterVisualRig")
 
 -- MOVEMENT / HOVERING
 local HoverStiffness = 10
@@ -207,10 +206,11 @@ function WallDetection(deltaTimeRender)
 	rayParams.FilterDescendantsInstances = { character, Board }
 
 	local lookDir = rootPart.CFrame.LookVector
-	local speed = Board.AssemblyLinearVelocity.Magnitude
+	local speed = bodyVelocity.Velocity.Magnitude
+	--local speed = Board.AssemblyLinearVelocity.Magnitude
 
 	-- Dynamic ray length (prevents tunneling)
-	local rayLength = math.max(7, speed * deltaTimeRender)
+	local rayLength = math.max(3, speed * deltaTimeRender + 1)
 
 	local origin = rootPart.Position
 	local direction = lookDir * rayLength
@@ -218,44 +218,17 @@ function WallDetection(deltaTimeRender)
 	local hit = workspace:Raycast(origin, direction, rayParams)
 
 	if hit then
-		print("Wall detected. Stopping movement.")
-		wallDetected = true
 		local normal = hit.Normal
+		--local currentVel = Board.AssemblyLinearVelocity
 		local currentVel = bodyVelocity.Velocity
 
-		-- Remove velocity going into the wall
+		-- Slide with the wall
 		local intoWall = currentVel:Dot(normal)
 		local slideVelocity = currentVel - normal * intoWall
 		if intoWall < 0 then
-			MAX_HORIZONTAL_ROTATION = 5
-			bodyVelocity.Velocity = Vector3.new(slideVelocity.X * 0.95, Board.AssemblyLinearVelocity.Y, slideVelocity.Z  * 0.95)
-			--bodyVelocity.Velocity = slideVelocity * 0.95
-		else
-			MAX_HORIZONTAL_ROTATION = 15
+			bodyVelocity.Velocity = Vector3.new(slideVelocity.X * 0, currentVel.Y, slideVelocity.Z * 0)
 		end
 		return
-
-		-- -- Distance from player to wall
-		-- local hitDistance = (hit.Position - origin).Magnitude
-
-		-- if hitDistance <= rayLength then
-		-- 	print("Wall detected. Stopping movement.")
-		-- 	local normal = hit.Normal
-		-- 	local currentVel = bodyVelocity.Velocity
-
-		-- 	-- Remove velocity going into the wall
-		-- 	local intoWall = currentVel:Dot(normal)
-
-		-- 	if intoWall < 0.001 then
-		-- 		local slideVelocity = currentVel - normal * intoWall
-		-- 		Board.AssemblyLinearVelocity = Vector3.new(slideVelocity.X * 1.005, Board.AssemblyLinearVelocity.Y, slideVelocity.Z  * 1.005)
-		-- 		--bodyVelocity.Velocity = slideVelocity * 1.005
-		-- 	end
-
-		-- 	return
-		-- end
-	else
-		wallDetected = false
 	end
 end
 
@@ -286,11 +259,9 @@ function ApplyBoost(boostDuration, boostAmount)
 	if not humanoid or not Board or not bodyVelocity then
 		return
 	end
-
 	if not boostReady or isBoosting then
 		return
 	end
-
 	if humanoid.MoveDirection.Magnitude < 0.1 then
 		return
 	end
@@ -300,10 +271,10 @@ function ApplyBoost(boostDuration, boostAmount)
 	local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
 
 	if horizontalVel.Magnitude < 20 then
-		print("Not enough speed.")
 		return
 	end
 
+	boostButton.Interactable = false
 	boostReady = false
 	isBoosting = true
 
@@ -340,13 +311,11 @@ function ApplyBoost(boostDuration, boostAmount)
 			+ Vector3.new(boostDir.X * boostAmount * dt * 60, 0, boostDir.Z * boostAmount * dt * 60)
 	end)
 
-	-- UI
+	-- Cooldown
 	if boostCooldownFiller then
 		boostCooldownFiller.Visible = true
 		boostCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
 	end
-
-	-- Cooldown
 	task.spawn(function()
 		local step = 0.05
 		local timeLeft = BOOST_COOLDOWN
@@ -364,6 +333,7 @@ function ApplyBoost(boostDuration, boostAmount)
 			boostCooldownFiller.Visible = false
 			boostCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
 		end
+		boostButton.Interactable = true
 	end)
 end
 -----------------------------------------------------------
@@ -427,12 +397,30 @@ local function CloneVFX()
 	end
 end
 
-local function EnableDashVFX(enable)
+local function EnableFlashVFX(enable)
 	for _, fx in ipairs(NewController._activeVFX or {}) do
 		if fx.ParticleEmitter then
 			print("VFX Enabled")
 			fx.ParticleEmitter.Enabled = enable
 		end
+	end
+end
+
+local function SetCollisionGroup(model, groupName)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.CollisionGroup = groupName
+		end
+	end
+end
+
+local function MakePlayerInvincible(state)
+	character:SetAttribute("Invincible", state)
+	local groupName = state and "PlayerInvincible" or "Player"
+
+	SetCollisionGroup(character, groupName)
+	if Board and Board.Parent then
+		SetCollisionGroup(Board.Parent, groupName)
 	end
 end
 
@@ -465,6 +453,8 @@ function ApplyDash(dashAmount, dashDuration, dashDistance)
 	print("Dash applied.")
 	dashReady = false
 	isDashing = true
+	flashButton.Interactable = false
+	EnableFlashVFX(true)
 
 	-- Calculate required speed for distance-based dash
 	local requiredSpeed = dashDistance / dashDuration
@@ -486,6 +476,8 @@ function ApplyDash(dashAmount, dashDuration, dashDistance)
 			end
 			-- Restore humanoid control
 			humanoid.AutoRotate = wasAutoRotate
+			MakePlayerInvincible(false)
+			EnableFlashVFX(false)
 			return
 		end
 
@@ -495,9 +487,8 @@ function ApplyDash(dashAmount, dashDuration, dashDistance)
 		--Stop dash after duration
 		if currentTime >= dashEndTime then
 			isDashing = false
-			if dashConnection then
-				dashConnection:Disconnect()
-			end
+			MakePlayerInvincible(false)
+			EnableFlashVFX(false)
 
 			-- Restore original settings
 			topSpeed = originalTopSpeed
@@ -518,9 +509,14 @@ function ApplyDash(dashAmount, dashDuration, dashDistance)
 				Board.AssemblyLinearVelocity = Vector3.new(newVel.X, v.Y, newVel.Z)
 			end
 
+			if dashConnection then
+				dashConnection:Disconnect()
+			end
+
 			return
 		end
-
+		-- Make the player invicible
+		MakePlayerInvincible(true)
 		local progress = elapsed / dashDuration
 
 		-- Apply easing for better feel (ease-out quad)
@@ -535,13 +531,11 @@ function ApplyDash(dashAmount, dashDuration, dashDistance)
 		)
 	end)
 
-	-- Cooldown UI (same as before)
+	-- Cooldown management
 	if flashCooldownFiller then
 		flashCooldownFiller.Visible = true
 		flashCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
 	end
-
-	-- Cooldown management
 	task.spawn(function()
 		local step = 0.05
 		local timeLeft = DASH_COOLDOWN
@@ -561,6 +555,7 @@ function ApplyDash(dashAmount, dashDuration, dashDistance)
 			flashCooldownFiller.Visible = false
 			flashCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
 		end
+		flashButton.Interactable = true
 	end)
 end
 -----------------------------------------------------------
