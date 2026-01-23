@@ -150,6 +150,11 @@ function DiePlayerController:Die()
 		return
 	end
 
+	if char:GetAttribute("Invincible") then
+		isDying = false
+		return
+	end
+
 	stopCharacterMovement(char)
 	hideCharacterVisuals(char)
 
