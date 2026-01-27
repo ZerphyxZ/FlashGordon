@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local PhysicsService = game:GetService("PhysicsService")
 local player = Players.LocalPlayer
 local character
 local humanoid
@@ -16,7 +17,6 @@ local Trail
 local rootPart
 local bodyVelocity
 local bodyGyro
-local bodyPosition
 local Camera = workspace.Camera
 local Config
 
@@ -29,37 +29,27 @@ local HoverboardService
 
 -- MOVEMENT / HOVERING
 local HoverStiffness = 10
-local HoverHeight = 3
+local HoverHeight = 0
 
 -- MOVEMENT / ORIENTATION
-local OgBoardRotation
 local ForwardLean = 0
 local Rayvelocity = 0.2
-
--- 180 TURN VARIABLES
-local LastInputVector = Vector3.zero
-local IsQuickTurning = false
-local QuickTurnProgress = 0
-
--- Global variables for controller
-local Normal
-local PreviousMoveVector = Vector3.zero
+local RayDistance = 5
 local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
-local ACCELERATION_FACTOR = 1
 local DECELERATION_FACTOR = 0.5
-local ORIENTATION_FACTOR = 30
-local MAX_HORIZONTAL_ROTATION = 15
+local ORIENTATION_FACTOR = 10
+local MAX_HORIZONTAL_ROTATION = 10
 local FOV_FACTOR = 1
-local MAX_FORCE = 10000
 local FLOATING_ERROR_MARGIN = 0.01
 local JUMP_POWER = 70
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
 local DOWNHILL_SLOPE_ANGLE = 45
 local RAY_PREFERENCE_DISTANCE = 2
-local QUICK_TURN_DURATION = 0.3 -- seconds for 180° turn
+local MIN_FOV = 70
+local MAX_FOV = 100
 
 -- MOVEMENT / SPEED
 local IsDecelerating = false
@@ -72,22 +62,13 @@ local topSpeed
 local jumpPower
 
 -- JUMP
-local Jump = false
-local LastJump = false
 local CanJump = false
 local spaceHeld = false
-local WaitForLanding = true
-local canDoubleJump = false
+local jumpConsumed = false
+local jumpReady = false
+local jumpQueued = false
 local hasDoubleJump = false
 local hasFly = false
-local MAX_AIR_JUMPS = 6
-local AIR_JUMP_INTERVAL = 0.3
-local AirJumps = 1
-local JumpRequestTime = 0
-local firstJumpTime = 0
-local lastAirJumpTime = 0
-local DOUBLE_JUMP_DELAY = 0.1
-local JUMP_INTERVAL = 0.8 -- Time between jumps when space is held
 
 -- FLY
 local MAX_FLY_ENERGY = 1
@@ -115,30 +96,20 @@ local isDashing = false
 local dashReady = true
 local isJumping = false
 local isFalling = false
-
--- SPEED REFERENCES
-local MAX_BARS = 10
-local MAX_BAR_HEIGHT = 0.6
-local MAX_BAR_WIDTH = 0.08
-local BASE_TWEEN_DURATION = 1
-local SMOOTHING_FACTOR = 0.18 -- how smooth the bar grows
-local TWEEN_EASING = Enum.EasingStyle.Quad
-local TWEEN_DIR = Enum.EasingDirection.Out
-local MIN_FOV = 70
-local MAX_FOV = 100
-
-local speedBars = {}
+local isBraking = false
+local flipping = false
+local flipAngle = 0
 
 -- Boost config
-local BOOST_AMOUNT = 50
-local BOOST_DURATION = 0.5
+local BOOST_DURATION = 1
+local BOOST_AMOUNT = 2.5
 local BOOST_COOLDOWN = 3
-local BOOSTED_ACCELERATION = 1
+
 -- Dash config
-local DASH_DISTANCE = 70
 local DASH_DURATION = 0.25
+local DASH_DISTANCE = 50
+local DASH_AMOUNT = 4000
 local DASH_COOLDOWN = 3
-local DASH_SPEED_MULTIPLIER = 3
 
 -- UI References
 local playerGUI = player:WaitForChild("PlayerGui")
@@ -173,6 +144,16 @@ local flyButton = flyFrame:WaitForChild("FlyButton")
 
 local controls
 local RayParams
+local wallDetected
+
+local motor
+local BASE_C0
+local BASE_C1
+local FLIP_DURATION = 0.45          -- seconds
+local FLIP_ANGLE = math.pi * 2      -- 360°
+local FLIP_SPEED = FLIP_ANGLE / FLIP_DURATION
+
+
 
 local function GetControls()
 	if controls then
@@ -184,18 +165,11 @@ local function GetControls()
 end
 
 local function InitBodyMovers()
-	bodyVelocity = Instance.new("BodyVelocity")
-	bodyGyro = Instance.new("BodyGyro")
-	bodyPosition = Instance.new("BodyPosition")
-
-	bodyPosition.MaxForce = Vector3.new(2e9, 2e9, 2e9)
-	bodyPosition.Position = rootPart.Position
-
-	bodyGyro.MaxTorque = Vector3.new(2e9, 2e9, 2e9)
-	bodyGyro.Parent = Board
-
-	bodyVelocity.MaxForce = Vector3.new(2e9, 0, 2e9)
-	bodyVelocity.Parent = Board
+	bodyVelocity = Board:WaitForChild("BodyVelocity")
+	bodyGyro = Board:WaitForChild("BodyGyro")
+	
+	--bodyVelocity = rootPart:WaitForChild("BodyVelocity")
+	--bodyGyro = rootPart:WaitForChild("BodyGyro")
 end
 
 local function CalculateJumpInterval(jumpPower)
@@ -208,39 +182,127 @@ local function IsMovingDownward()
 	if not rootPart or not Board then
 		return false
 	end
+
+	--local verticalVelocity = rootPart.AssemblyLinearVelocity.Y 	--Added
 	local verticalVelocity = Board.AssemblyLinearVelocity.Y
 	-- Negative Y velocity means moving downward (towards negative Y)
 	return verticalVelocity < 20
 end
 
-------------------- UPDATE SPEED GUI -----------------------
-local TWEEN_INFO = TweenInfo.new(BASE_TWEEN_DURATION, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+function WallDetection(dt)
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.IgnoreWater = true
+	rayParams.FilterDescendantsInstances = { character, Board }
 
-local function GetTweenInfo()
-	local duration = BASE_TWEEN_DURATION * SMOOTHING_FACTOR
-	return TweenInfo.new(duration, TWEEN_EASING, TWEEN_DIR)
-end
+	-- Use board velocity direction (NOT look vector)
+	local velocity = Board.AssemblyLinearVelocity
+	local horizontalVel = Vector3.new(velocity.X, 0, velocity.Z)
 
-local function LoadSpeedGUI()
-	speedBars = {}
-	for i = 1, MAX_BARS do
-		local bar = bars:WaitForChild("Bar" .. i)
-		table.insert(speedBars, bar)
-		bar.Visible = true
-		bar.Size = UDim2.new(0, 0, MAX_BAR_HEIGHT, 0)
+	if horizontalVel.Magnitude < 0.1 then
+		return
 	end
+
+	local moveDir = horizontalVel.Unit
+
+	-- Ray origin: front of the board (covers whole board width implicitly)
+	local halfSize = Board.Size.Z * 0.5
+	local origin = Board.Position + moveDir * halfSize
+
+	-- Dynamic ray length (prevents tunneling)
+	local rayLength = math.max(1, horizontalVel.Magnitude * dt + 1)
+	local direction = moveDir * rayLength
+
+	local hit = workspace:Raycast(origin, direction, rayParams)
+	if not hit then return end
+
+	-- Wall normal (flattened to horizontal)
+	local wallNormal = Vector3.new(hit.Normal.X, 0, hit.Normal.Z)
+	if wallNormal.Magnitude < 0.01 then return end
+	wallNormal = wallNormal.Unit
+
+	-- Check if actually moving INTO the wall
+	local intoWall = horizontalVel:Dot(wallNormal)
+	if intoWall >= 0 then return end
+
+	----------------------------------------------------------------
+	-- SMOOTH SLIDE: project velocity onto wall plane
+	----------------------------------------------------------------
+	local slideVel = horizontalVel - wallNormal * intoWall
+
+	-- Preserve vertical velocity (hover / gravity)
+	local finalVelocity = Vector3.new(
+		slideVel.X * 0,
+		velocity.Y,
+		slideVel.Z * 0
+	)
+
+	-- Smooth application (no snapping)
+	local SMOOTHNESS = 0.15
+	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, SMOOTHNESS)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	-- local rayParams = RaycastParams.new()
+	-- rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	-- rayParams.IgnoreWater = true
+	-- rayParams.FilterDescendantsInstances = { character, Board }
+
+	-- local lookDir = rootPart.CFrame.LookVector
+	-- local speed = Board.AssemblyLinearVelocity.Magnitude
+	-- --local speed = bodyVelocity.Velocity.Magnitude
+
+	-- -- Dynamic ray length (prevents tunneling)
+	-- local rayLength = math.max(5, speed * deltaTimeRender + 1)
+
+	-- local origin = rootPart.Position
+	-- local direction = lookDir * rayLength
+
+	-- local hit = workspace:Raycast(origin, direction, rayParams)
+
+	-- if hit then
+	-- 	print("Wall detected!")
+	-- 	local normal = hit.Normal
+	-- 	local currentVel = Board.AssemblyLinearVelocity
+	-- 	--local currentVel = bodyVelocity.Velocity
+
+	-- 	-- Slide with the wall
+	-- 	local intoWall = currentVel:Dot(normal)
+	-- 	local slideVelocity = currentVel - normal * intoWall
+	-- 	--local maxSlideSpeed = currentVel.Magnitude
+	-- 	--slideVelocity = slideVelocity.Unit * math.min(slideVelocity.Magnitude, maxSlideSpeed)
+	-- 	if intoWall < 0 then
+	-- 		--Board.AssemblyLinearVelocity = Vector3.new(slideVelocity.X * 0, currentVel.Y, slideVelocity.Z * 0)
+	-- 		bodyVelocity.Velocity = Vector3.new(slideVelocity.X * 0.95, 0, slideVelocity.Z * 0.95)
+	-- 	end
+	-- 	return
+	-- end
 end
 
-local function AnimateFrame(frame, scale, visible)
-	local tweenInfo = GetTweenInfo()
-	TweenService:Create(frame, tweenInfo, {
-		Size = UDim2.new(scale, 0, MAX_BAR_HEIGHT, 0),
-	}):Play()
-	frame.Visible = visible
-end
-
+------------------- UPDATE SPEED GUI -----------------------
 function UpdateSpeedGUI(MaxSpeed)
-	local value = (bodyVelocity.Velocity * Vector3.new(1, 0, 1)).Magnitude or 0
+	--local value = (bodyVelocity.Velocity * Vector3.new(1, 0, 1)).Magnitude or 0
+	local value = (Board.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude or 0
 	speedLabel.Text = string.format("Speed: %.0f", math.round(value))
 
 	local xScale = 1
@@ -261,78 +323,85 @@ local function RefreshBoostGUI()
 	end
 end
 
-function ApplyBoost()
-	if not humanoid then
-		print("Humanoid: ", humanoid)
+function ApplyBoost(boostDuration, boostAmount)
+	if not humanoid or not Board or not bodyVelocity then
 		return
 	end
-	if not boostReady then
-		print("boostReady: ", boostReady)
+	if not boostReady or isBoosting then
 		return
 	end
 	if humanoid.MoveDirection.Magnitude < 0.1 then
-		print("humanoid.MoveDirection.Magnitude ", humanoid.MoveDirection.Magnitude)
-		return
-	end
-	if not NewController.SpeedVar or NewController.SpeedVar < 20 then
 		return
 	end
 
-	-- Activate boost
+	-- Current horizontal speed
+	local currentVel = bodyVelocity.Velocity
+	local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
+
+	if horizontalVel.Magnitude < 20 then
+		return
+	end
+
+	boostButton.Interactable = false
 	boostReady = false
 	isBoosting = true
 
-	print("Boost activated")
+	local boostDir = horizontalVel.Magnitude > 0 and horizontalVel.Unit or humanoid.MoveDirection
+	local boostStartTime = tick()
+	local boostEndTime = boostStartTime + boostDuration
 
-	local originalAcceleration = acceleration
-	local originalTopSpeed = topSpeed
-
-	-- Boosted values
-	local boostedSpeed = NewController.SpeedVar + BOOST_AMOUNT
-	NewController.SpeedVar = boostedSpeed
-
-	-- mutate refs
-	acceleration = BOOSTED_ACCELERATION
-	topSpeed = boostedSpeed
-
-	if boostCooldownFiller then
-		boostCooldownFiller.Visible = true
-		-- start full progress and will shrink
-		boostCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
-	end
-
-	-- End boost after duration: restore accel/top speed
-	task.delay(BOOST_DURATION, function()
-		isBoosting = false
-		if acceleration then
-			acceleration = originalAcceleration
+	local boostConnection
+	boostConnection = RunService.Heartbeat:Connect(function(dt)
+		if not Board or not isBoosting then
+			if boostConnection then
+				boostConnection:Disconnect()
+			end
+			return
 		end
-		if topSpeed then
-			topSpeed = originalTopSpeed
+
+		if tick() >= boostEndTime then
+			isBoosting = false
+			boostConnection:Disconnect()
+
+			-- Clamp back to topSpeed after boost ends
+			local v = bodyVelocity.Velocity
+			local flat = Vector3.new(v.X, 0, v.Z)
+
+			if flat.Magnitude > topSpeed then
+				local clamped = flat.Unit * topSpeed
+				bodyVelocity.Velocity = Vector3.new(clamped.X, v.Y, clamped.Z)
+			end
+			return
 		end
+
+		-- Inject boost velocity (preserve Y)
+		bodyVelocity.Velocity = bodyVelocity.Velocity
+			+ Vector3.new(boostDir.X * boostAmount * dt * 60, 0, boostDir.Z * boostAmount * dt * 60)
 	end)
 
-	-- Start cooldown UI / timer
+	-- Cooldown
+	if boostCooldownFiller then
+		boostCooldownFiller.Visible = true
+		boostCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
+	end
 	task.spawn(function()
 		local step = 0.05
 		local timeLeft = BOOST_COOLDOWN
 
 		while timeLeft > 0 do
-			-- update UI filler: shrink from 1->0 vertically
 			if boostCooldownFiller then
-				local frac = timeLeft / BOOST_COOLDOWN
-				boostCooldownFiller.Size = UDim2.new(1, 0, frac, 0)
+				boostCooldownFiller.Size = UDim2.new(1, 0, timeLeft / BOOST_COOLDOWN, 0)
 			end
 			timeLeft = timeLeft - step
 			task.wait(step)
 		end
 
-		-- cooldown end
 		boostReady = true
 		if boostCooldownFiller then
 			boostCooldownFiller.Visible = false
 			boostCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
 		end
+		boostButton.Interactable = true
 	end)
 end
 -----------------------------------------------------------
@@ -396,7 +465,7 @@ local function CloneVFX()
 	end
 end
 
-local function EnableDashVFX(enable)
+local function EnableFlashVFX(enable)
 	for _, fx in ipairs(NewController._activeVFX or {}) do
 		if fx.ParticleEmitter then
 			print("VFX Enabled")
@@ -405,194 +474,222 @@ local function EnableDashVFX(enable)
 	end
 end
 
-local function DashVelocityMethod(hoverboard, moveDir, distance, duration)
-	if not hoverboard or moveDir.Magnitude == 0 then
-		return
-	end
-
-	local bodyVelocity = hoverboard:FindFirstChildOfClass("BodyVelocity")
-	if not bodyVelocity then
-		warn("Dash failed: BodyVelocity not found")
-		return
-	end
-
-	-- preserve existing velocity state
-	local startVel = bodyVelocity.Velocity
-	local dashSpeed = distance / math.max(duration, 0.0001) * DASH_SPEED_MULTIPLIER
-	local dashVelXZ = moveDir.Unit * dashSpeed
-
-	local t = 0
-	local holdT = duration
-
-	local conn
-	conn = RunService.Heartbeat:Connect(function(dt)
-		if not bodyVelocity or not conn then
-			if conn then
-				conn:Disconnect()
-			end
-			return
+local function SetCollisionGroup(model, groupName)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.CollisionGroup = groupName
 		end
-
-		t = t + dt
-
-		if t <= holdT then
-			-- Dash controls ONLY XZ, preserves Y (hover/jump safe)
-			bodyVelocity.Velocity = Vector3.new(dashVelXZ.X, bodyVelocity.Velocity.Y, dashVelXZ.Z)
-		else
-			-- Smooth restore to previous movement velocity
-			local restoreDur = 0.2
-			local alpha = math.min((t - holdT) / restoreDur, 1)
-
-			bodyVelocity.Velocity =
-				bodyVelocity.Velocity:Lerp(Vector3.new(startVel.X, bodyVelocity.Velocity.Y, startVel.Z), alpha)
-
-			if alpha >= 1 then
-				conn:Disconnect()
-			end
-		end
-	end)
-
-	--if not hoverboard or moveDir.Magnitude == 0 then
-	--	print("Returned from here.")
-	--	return
-	--end
-	--local primary = hoverboard
-	--local startVel = primary.AssemblyLinearVelocity
-
-	--local bodyVelocity = hoverboard:FindFirstChildOfClass("BodyVelocity")
-	--local oldMaxForce
-	--if bodyVelocity then
-	--	oldMaxForce = bodyVelocity.MaxForce
-	--	bodyVelocity.MaxForce = Vector3.zero
-	--end
-
-	---- compute dash velocity required to traverse distance in duration
-	--local dashSpeed = distance / math.max(duration, 0.0001) * DASH_SPEED_MULTIPLIER
-	--print("Dash speed: ", dashSpeed)
-	--local dashVel = moveDir.Unit * dashSpeed
-	--print("dashing vel: ", dashVel)
-
-	---- apply: ramp assembly velocity towards dashVel, hold, then restore
-	--local t = 0
-	--local holdT = duration
-	--local lastTime = tick()
-	---- create a short run-service loop for reliable timing
-	--local conn
-	--conn = RunService.Heartbeat:Connect(function(dt)
-	--	if not primary or not conn then
-	--		if conn then
-	--			conn:Disconnect()
-	--		end
-	--		return
-	--	end
-	--	t = t + dt
-	--	print("dashing : T ", t)
-	--	if t <= holdT then
-	--		-- lerp current assembly velocity towards dashVel (fast)
-	--		local cur = primary.AssemblyLinearVelocity
-	--		local lerpT = 1 - math.exp(-60 * dt)
-	--		local new = cur:Lerp(Vector3.new(dashVel.X, cur.Y, dashVel.Z), lerpT)
-	--		print("dashing : New : ", new)
-	--		primary.AssemblyLinearVelocity = new
-	--	else
-	--		-- restore: lerp back to startVel over 0.2s
-	--		local restoreDur = 0.2
-	--		local restoreT = math.min((t - holdT) / restoreDur, 1)
-	--		local cur = primary.AssemblyLinearVelocity
-	--		local target = Vector3.new(startVel.X, cur.Y, startVel.Z)
-	--		local new = cur:Lerp(target, restoreT)
-	--		print("dashing : New 2 : ", new)
-	--		primary.AssemblyLinearVelocity = new
-
-	--		if restoreT >= 1 then
-	--			print("Disconnecting")
-	--			if bodyVelocity then
-	--				bodyVelocity.MaxForce = oldMaxForce or Vector3.new(2e9, 2e9, 2e9)
-	--			end
-	--			conn:Disconnect()
-	--		end
-	--	end
-	--end)
+	end
 end
 
-function ApplyDash(currentSpeed, hoverboard)
-	if not humanoid then
-		warn("HoverboardDash: humanoid nil")
+local function MakePlayerInvincible(state)
+	character:SetAttribute("Invincible", state)
+	local groupName = state and "PlayerInvincible" or "Player"
+
+	SetCollisionGroup(character, groupName)
+	if Board and Board.Parent then
+		SetCollisionGroup(Board.Parent, groupName)
+	end
+end
+
+function ApplyDash(dashAmount, dashDuration, dashDistance)
+	if not humanoid or not Board or not bodyVelocity then
 		return
 	end
-	if not dashReady then
-		print("Dash not ready.")
+
+	if not dashReady or isDashing then
 		return
 	end
+
 	if humanoid.MoveDirection.Magnitude < 0.1 then
-		print("Humanoid not moving")
-		return
-	end
-	if not hoverboard then
-		warn("HoverboardDash: invalid hoverboard")
-		return
-	end
-	if currentSpeed < 20 then
 		return
 	end
 
-	local bodyVelocity = hoverboard:FindFirstChildOfClass("BodyVelocity")
-	if not bodyVelocity then
-		warn("HoverboardDash: BodyVelocity missing")
+	-- Store the current direction BEFORE applying dash
+	local currentVel = Board.AssemblyLinearVelocity
+	local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
+
+	-- CRITICAL: Store dash direction ONCE at the start
+	local initialDashDir = humanoid.MoveDirection --or horizontalVel.Magnitude > 0 and horizontalVel.Unit
+	initialDashDir = Vector3.new(initialDashDir.X, 0, initialDashDir.Z).Unit
+
+	if horizontalVel.Magnitude < 20 then
+		print("Not enough speed.")
 		return
 	end
-
-	local vel = bodyVelocity.Velocity
-	local moveDir = Vector3.new(vel.X, 0, vel.Z)
-
-	if moveDir.Magnitude < 1 then
-		-- Prevent dash when barely moving
-		return
-	end
-
-	moveDir = moveDir.Unit
 
 	print("Dash applied.")
 	dashReady = false
 	isDashing = true
+	flashButton.Interactable = false
+	EnableFlashVFX(true)
 
-	-- dash params
-	local distance = math.max(DASH_DISTANCE, math.clamp(currentSpeed * 0.6, 8, 40))
-	local duration = DASH_DURATION
+	-- Calculate required speed for distance-based dash
+	local requiredSpeed = dashDistance / dashDuration
+	local dashStartTime = tick()
+	local dashEndTime = dashStartTime + dashDuration
 
-	DashVelocityMethod(hoverboard, moveDir, distance, duration)
-	--EnableDashVFX(true)
+	local originalTopSpeed = topSpeed
+	local lockedDashDir = initialDashDir
 
+	-- Disable humanoid control during dash (optional but recommended)
+	local wasAutoRotate = humanoid.AutoRotate
+	humanoid.AutoRotate = false
+
+	local dashConnection
+	dashConnection = RunService.Heartbeat:Connect(function(dt)
+		if not Board or not isDashing then
+			if dashConnection then
+				dashConnection:Disconnect()
+			end
+			-- Restore humanoid control
+			humanoid.AutoRotate = wasAutoRotate
+			MakePlayerInvincible(false)
+			EnableFlashVFX(false)
+			return
+		end
+
+		local currentTime = tick()
+		local elapsed = currentTime - dashStartTime
+
+		--Stop dash after duration
+		if currentTime >= dashEndTime then
+			isDashing = false
+			MakePlayerInvincible(false)
+			EnableFlashVFX(false)
+
+			-- Restore original settings
+			topSpeed = originalTopSpeed
+			humanoid.AutoRotate = wasAutoRotate
+
+			-- Apply post-dash velocity (keep momentum but prevent excessive speed)
+			local v = Board.AssemblyLinearVelocity
+			local flat = Vector3.new(v.X, 0, v.Z)
+
+			-- Calculate velocity decay
+			local currentSpeed = flat.Magnitude
+
+			if currentSpeed > originalTopSpeed then
+				-- Smooth deceleration to normal speed
+				local deceleration = (currentSpeed - originalTopSpeed) * 0.8
+				local newSpeed = math.max(currentSpeed - deceleration * dt, originalTopSpeed)
+				local newVel = flat.Unit * newSpeed
+				Board.AssemblyLinearVelocity = Vector3.new(newVel.X, v.Y, newVel.Z)
+			end
+
+			if dashConnection then
+				dashConnection:Disconnect()
+			end
+
+			return
+		end
+		-- Make the player invicible
+		MakePlayerInvincible(true)
+		local progress = elapsed / dashDuration
+
+		-- Apply easing for better feel (ease-out quad)
+		local easeFactor = 1 - (1 - progress) * (1 - progress)
+		local currentDashSpeed = requiredSpeed * (0.9 + 0.2 * easeFactor)
+
+		local vel = Board.AssemblyLinearVelocity
+		Board.AssemblyLinearVelocity = Vector3.new(
+			lockedDashDir.X * currentDashSpeed, -- Always use locked direction
+			vel.Y, -- Preserve vertical velocity
+			lockedDashDir.Z * currentDashSpeed -- Always use locked direction
+		)
+	end)
+
+	-- Cooldown management
 	if flashCooldownFiller then
 		flashCooldownFiller.Visible = true
 		flashCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
 	end
-
-	-- end dash
-	task.delay(duration, function()
-		isDashing = false
-		EnableDashVFX(false)
-	end)
-
-	-- cooldown
 	task.spawn(function()
 		local step = 0.05
 		local timeLeft = DASH_COOLDOWN
 
 		while timeLeft > 0 do
 			if flashCooldownFiller then
-				local frac = timeLeft / DASH_COOLDOWN
-				flashCooldownFiller.Size = UDim2.new(1, 0, frac, 0)
+				local progress = 1 - (timeLeft / DASH_COOLDOWN)
+				local sizeProgress = progress * progress
+				flashCooldownFiller.Size = UDim2.new(1, 0, 1 - sizeProgress, 0)
 			end
 			timeLeft = timeLeft - step
 			task.wait(step)
 		end
 
 		dashReady = true
-		print("Dash ready")
+		if flashCooldownFiller then
+			flashCooldownFiller.Visible = false
+			flashCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
+		end
+		flashButton.Interactable = true
 	end)
-	return true
 end
+
+function Dash(dashPower)
+	if not Board or not humanoid then
+		return
+	end
+
+	-- Cooldown / state checks
+	if not dashReady or isDashing then
+		return
+	end
+
+	local velocity = bodyVelocity.Velocity	--Board.AssemblyLinearVelocity
+	local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+
+	if horizontal.Magnitude < 0.1 then
+		return
+	end
+
+	-- ===== DASH START =====
+	dashReady = false
+	isDashing = true
+	flashButton.Interactable = false
+	EnableFlashVFX(true)
+	MakePlayerInvincible(true)
+
+	-- APPLY DASH
+	local dashDir = horizontal.Unit
+	Board:ApplyImpulse(dashDir * dashPower)
+
+	task.delay(DASH_DURATION, function()
+		isDashing = false
+		MakePlayerInvincible(false)
+		EnableFlashVFX(false)
+	end)
+
+	-- ===== COOLDOWN UI (same as ApplyDash) =====
+	if flashCooldownFiller then
+		flashCooldownFiller.Visible = true
+		flashCooldownFiller.Size = UDim2.new(1, 0, 1, 0)
+	end
+
+	task.spawn(function()
+		local step = 0.05
+		local timeLeft = DASH_COOLDOWN
+
+		while timeLeft > 0 do
+			if flashCooldownFiller then
+				local progress = 1 - (timeLeft / DASH_COOLDOWN)
+				local sizeProgress = progress * progress
+				flashCooldownFiller.Size = UDim2.new(1, 0, 1 - sizeProgress, 0)
+			end
+			timeLeft = timeLeft - step
+			task.wait(step)
+		end
+
+		dashReady = true
+		if flashCooldownFiller then
+			flashCooldownFiller.Visible = false
+			flashCooldownFiller.Size = UDim2.new(1, 0, 0, 0)
+		end
+		flashButton.Interactable = true
+	end)
+end
+
 -----------------------------------------------------------
 
 ----------------- GRAVITY METHODS -------------------------
@@ -680,89 +777,9 @@ local function CheckGravityCoil()
 end
 -----------------------------------------------------------
 
------------------ DOUBLE JUMP MODULE ----------------------
-local function CanUseAirJump()
-	if CanJump then
-		return false
-	end
-	if hasFly and flyEnergy > 0 and AirJumps > 0 then
-		return true
-	end
-	if hasDoubleJump and AirJumps > 0 then
-		return true
-	end
-	return false
-end
+----------------- MOVEMENT METHODS ------------------------
 
-local function CheckForDoubleJump()
-	if not hasDoubleJump then
-		print("Has double jump returning")
-		return false
-	end
-	if not canDoubleJump then
-		print("Can double jump returning")
-		return false
-	end
-	if CanJump then
-		print("Can jump returning")
-		return false
-	end
-	if AirJumps <= 0 then
-		print("Air jumps returning")
-		return false
-	end
-	if not spaceReleasedAfterJump then
-		print("Space released returning")
-		return false
-	end
-	if (tick() - firstJumpTime) < DOUBLE_JUMP_DELAY then
-		print("Time returning")
-		return false
-	end
-
-	return true
-end
-
-local function ExecuteDoubleJump(jumpPower)
-	canDoubleJump = false -- Use up the double jump
-	AirJumps = 0
-	spaceReleasedAfterJump = false -- Reset for next time
-
-	-- Apply double jump force
-	bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
-	bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower, bodyVelocity.Velocity.Z)
-
-	isJumping = true
-	isFalling = false
-	LastJump = true
-	WaitForLanding = true -- Prevent immediate triple jumps
-end
------------------------------------------------------------
-
---------------------- FLY MODULE --------------------------
-local function ExecuteAirJump(jumpPower)
-	if AirJumps <= 0 then
-		return
-	end
-	if flyEnergy <= 0 then
-		return
-	end
-	print("Executing air jump.")
-	AirJumps = AirJumps - 1
-	flyEnergy = math.max(0, flyEnergy - FLY_ENERGY_DEPLETION_RATE)
-	lastAirJumpTime = tick()
-	LastJump = true
-
-	--print("Executing air jump. Remaining jumps: ", AirJumps, " Remaining energy: ", flyEnergy)
-	--energyLabel.Text = "Energy: " .. flyEnergy
-	bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
-	bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower, bodyVelocity.Velocity.Z)
-end
------------------------------------------------------------
-
----------------- CONTROLLER METHODS -----------------------
-
-local function ReturnAngleBetweenVectors(VectorA: Vector3, VectorB: Vector3): number
+local function ReturnAngleBetweenVectors(VectorA, VectorB)
 	if VectorA.Magnitude <= FLOATING_ERROR_MARGIN or VectorB.Magnitude <= FLOATING_ERROR_MARGIN then
 		return 0
 	end
@@ -773,7 +790,7 @@ local function ReturnAngleBetweenVectors(VectorA: Vector3, VectorB: Vector3): nu
 	return math.deg(math.acos(normalizedDotProduct))
 end
 
-local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector: Vector3, NormalVector: Vector3?)
+local function ReturnDirectionAndTiltAngle(ReferenceVector, OtherVector, NormalVector)
 	NormalVector = NormalVector or Vector3.yAxis
 
 	if ReferenceVector.Magnitude == 0 or OtherVector.Magnitude == 0 then
@@ -783,7 +800,7 @@ local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector
 	local crossProduct = ReferenceVector:Cross(OtherVector)
 	local direction = crossProduct:Dot(NormalVector) >= 0 and 1 or -1
 
-	ReferenceVector *= Vector3.new(1, 0, 1)
+	ReferenceVector = ReferenceVector * Vector3.new(1, 0, 1)
 	OtherVector = OtherVector * Vector3.new(1, 0, 1)
 
 	local dotProduct = ReferenceVector:Dot(OtherVector)
@@ -794,132 +811,20 @@ local function ReturnDirectionAndTiltAngle(ReferenceVector: Vector3, OtherVector
 	return direction, angle
 end
 
-local function ExponentialDecay(InitialValue: number, FinalValue: number, DecayRate: number, TimeDelta: number)
-	return FinalValue + (InitialValue - FinalValue) * math.exp(-DecayRate * TimeDelta)
-end
-
-local function HandleJump(jumpPower, dt)
-	local currentInterval = CalculateJumpInterval(jumpPower)
-
-	if spaceHeld and hasFly and not CanJump and AirJumps > 0 then
-		if (tick() - lastAirJumpTime) >= AIR_JUMP_INTERVAL then
-			ExecuteAirJump(jumpPower)
-		end
-	end
-	if spaceHeld then
-		print("Running")
-		local currentTime = tick()
-		if CanJump and not WaitForLanding and (currentTime - JumpRequestTime >= JUMP_INTERVAL) then
-			Jump = true
-			WaitForLanding = true
-			canDoubleJump = true
-			JumpRequestTime = currentTime
-		end
-	end
-
-	if Jump then
-		Jump = false
-		LastJump = true
-		isJumping = true
-		isFalling = false
-		firstJumpTime = tick()
-
-		bodyVelocity.MaxForce = Vector3.new(2e9, 2e9, 2e9)
-		bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, jumpPower, bodyVelocity.Velocity.Z)
-	end
-end
-
-local function Hover(DeltaTime, JumpPower)
-	if isDashing then
-		return
-	end
-
-	local Origin = Board.Position
-	local Direction = Vector3.new(0, -1, 0)
-	local CheckingDistance = HoverHeight + 4
-	local PotentialMap = workspace:FindFirstChild("CurrentMap")
-
-	local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
-
-	local SwaySpeed = 2.5
-	local MaxSwayHeight = 0.1
-	local HeightSway = math.sin(tick() * SwaySpeed) * MaxSwayHeight
-	local Normal
-
-	HandleJump(JumpPower, DeltaTime)
-	CheckGravityCoil()
-
-	if RaycastResult then
-		CanJump = true
-		WaitForLanding = false
-		canDoubleJump = true
-
-		if not spaceHeld then
-			flyEnergy = flyEnergy + FLY_ENERGY_RECHARGE_RATE
-			flyEnergy = math.clamp(flyEnergy, 0, MAX_FLY_ENERGY)
-			--energyLabel.Text = "Energy: " .. flyEnergy
-		end
-		if not LastJump then
-			bodyVelocity.MaxForce = Vector3.new(MAX_FORCE, MAX_FORCE, MAX_FORCE)
-			local HoverPosition = RaycastResult.Position + Vector3.new(0, HoverHeight + HeightSway, 0)
-			local VelocityY = ((HoverPosition - rootPart.Position).Y + HoverHeight) * HoverStiffness
-			Normal = RaycastResult.Normal
-
-			local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
-			local yoffset = (BoardCF.LookVector * NewController.SpeedVar * Vector3.new(0, 1, 0)).Y
-
-			bodyVelocity.Velocity = Vector3.new(
-				bodyVelocity.Velocity.X,
-				ExponentialDecay(Board.AssemblyLinearVelocity.Y, VelocityY + yoffset, 20, DeltaTime),
-				bodyVelocity.Velocity.Z
-			)
-		end
-
-		if not Jump then
-			if hasFly then
-				AirJumps = MAX_AIR_JUMPS
-			elseif hasDoubleJump then
-				AirJumps = 1
-			else
-				AirJumps = 0
-			end
-		end
-	else
-		CanJump = false
-		if not LastJump then
-			bodyVelocity.MaxForce = Vector3.new(MAX_FORCE, 0, MAX_FORCE)
-			bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, -HoverHeight, bodyVelocity.Velocity.Z)
-		end
-		LastJump = false
-	end
-end
------------------------------------------------------------
-
------------------ MOVEMENT METHODS ------------------------
 function CalculateMoveDirection()
 	local controls = GetControls()
 	local inputVector = controls:GetMoveVector()
-
-	-- translate input vector with respect to camera
-	-- this will give the world vector to apply force on player
-	local cameraCFrame = Camera.CFrame
-	local cameraLookVector = cameraCFrame.LookVector
-	local cameraRightVector = cameraCFrame.RightVector
-
-	local factor = 1000
-
-	local goal
-	if inputVector.Magnitude > 0 then
-		local goalCFrame = Camera.CFrame * CFrame.new(inputVector.X * factor, 0, inputVector.Z * factor)
+	if inputVector.Magnitude > 0.1 then
+		local goalCFrame = Camera.CFrame * CFrame.new(inputVector.X, 0, inputVector.Z)
 		local goalMoveVector = (goalCFrame.Position - Camera.CFrame.Position)
-
 		NewController.MoveVector = (goalMoveVector * Vector3.new(1, 0, 1)).Unit
 	else
 		NewController.MoveVector = Vector3.zero
+		isBraking = false
 	end
 end
 
-function Lerp(Start, Target, Alpha): number
+function Lerp(Start, Target, Alpha)
 	return Start + (Target - Start) * Alpha
 end
 
@@ -929,11 +834,10 @@ function CalculateSpeed(topSpeed)
 	if NewController.CurrentSpeed ~= newTargetSpeed then
 		IsDecelerating = newTargetSpeed == 0
 	end
-
 	NewController.CurrentSpeed = newTargetSpeed
 end
 
-function ReturnDownhillVector(SurfaceNormal: Vector3?): Vector3
+function ReturnDownhillVector(SurfaceNormal)
 	if SurfaceNormal then
 		local horizontalVector = SurfaceNormal:Cross(Vector3.yAxis)
 		local downhillVector = SurfaceNormal:Cross(horizontalVector)
@@ -946,188 +850,170 @@ function ReturnDownhillVector(SurfaceNormal: Vector3?): Vector3
 	return Vector3.zero
 end
 
-function ApplyVelocity(Acceleration, jumpPower, deltaTimeRender)
-	local Origin = Board.Position
-	local Direction = Vector3.new(0, -1, 0)
-	local CheckingDistance = HoverHeight + 4
-	local Size = Board.Size.Z / 2
+function GetRaycastResult()
+	local boardSize = Board.Size.Y
+	-- Start ray from bottom of board
+	local origin = Board.Position - Vector3.new(0, boardSize/2, 0)
+	local direction = Vector3.new(0, -1, 0)
 
-	local frontRaycast: RaycastResult =
-		workspace:Raycast(Origin + Board.CFrame.LookVector * 3.5, Direction * CheckingDistance, RayParams)
-	local middleRaycast: RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
-	local backRaycast: RaycastResult =
-		workspace:Raycast(Origin - Board.CFrame.LookVector * 3.5, Direction * CheckingDistance, RayParams)
+	-- Dynamic ray distance based on expected fall distance
+	local rayDistance = 10  -- Adjust based on your needs
 
-	local RaycastResult = middleRaycast
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { Board, character }
 
-	if
-		RaycastResult == nil
-		or (backRaycast and backRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE)
-	then
-		RaycastResult = backRaycast
-	end
+	return workspace:Raycast(origin, direction * rayDistance, rayParams)
+	
+	
+	
+	
+	--local Origin = Board.Position
+	--local Direction = Vector3.new(0, -1, 0)
+	--local CheckingDistance = HoverHeight + RayDistance
+	--local Size = Board.Size.Y / 2
 
-	if
-		RaycastResult == nil
-		or (frontRaycast and frontRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE)
-	then
-		RaycastResult = frontRaycast
-	end
+	--local RayParams = RaycastParams.new()
+	--RayParams.FilterType = Enum.RaycastFilterType.Exclude
+	--RayParams.FilterDescendantsInstances = { Board, character }
+	
+	--local offsetY = (Direction * CheckingDistance)
 
-	local SwaySpeed = 2.5
-	local MaxSwayHeight = 0.1
-	local HeightSway = math.sin(tick() * SwaySpeed) * MaxSwayHeight
+	--local frontRaycast =
+	--	workspace:Raycast(Origin + Board.CFrame.LookVector * 3.5, offsetY, RayParams)
+	--local middleRaycast = workspace:Raycast(Origin, offsetY, RayParams)
+	--local backRaycast =
+	--	workspace:Raycast(Origin - Board.CFrame.LookVector * 3.5, offsetY, RayParams)
 
-	HandleJump(jumpPower, deltaTimeRender)
-	CheckGravityCoil()
+	--local RaycastResult = middleRaycast
+	
+	--if
+	--	RaycastResult == nil
+	--	or (backRaycast and backRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE)
+	--then
+	--	RaycastResult = backRaycast
+	--end
 
-	local yVelocityComponent = 0
+	--if
+	--	RaycastResult == nil
+	--	or (frontRaycast and frontRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE)
+	--then
+	--	RaycastResult = frontRaycast
+	--end
+	
+	--return RaycastResult
+end
 
-	if RaycastResult then
-		CanJump = true
-		WaitForLanding = false
-		canDoubleJump = true
-
-		if not spaceHeld then
-			flyEnergy = flyEnergy + FLY_ENERGY_RECHARGE_RATE
-			flyEnergy = math.clamp(flyEnergy, 0, MAX_FLY_ENERGY)
-		end
-
-		if not LastJump then
-			bodyVelocity.MaxForce = Vector3.new(MAX_FORCE, MAX_FORCE, MAX_FORCE)
-			local HoverPosition = RaycastResult.Position + Vector3.new(0, HoverHeight + HeightSway, 0)
-			local VelocityY = ((HoverPosition - rootPart.Position).Y + HoverHeight) * HoverStiffness
-			Normal = RaycastResult.Normal
-
-			local BoardCF = Board.CFrame * CFrame.Angles(math.rad(-ForwardLean), 0, 0)
-			local yoffset = (BoardCF.LookVector * NewController.SpeedVar * Vector3.new(0, 1, 0)).Y
-
-			yVelocityComponent =
-				ExponentialDecay(Board.AssemblyLinearVelocity.Y, VelocityY + yoffset, 20, deltaTimeRender)
-			bodyVelocity.Velocity = Vector3.new(
-				bodyVelocity.Velocity.X,
-				ExponentialDecay(Board.AssemblyLinearVelocity.Y, VelocityY + yoffset, 20, deltaTimeRender),
-				bodyVelocity.Velocity.Z
-			)
-		end
-
-		if not Jump then
-			if hasFly then
-				AirJumps = MAX_AIR_JUMPS
-			elseif hasDoubleJump then
-				AirJumps = 1
-			else
-				AirJumps = 0
-			end
-		end
-	else
-		CanJump = false
-		if not LastJump then
-			bodyVelocity.MaxForce = Vector3.new(MAX_FORCE, 0, MAX_FORCE)
-			yVelocityComponent = -HoverHeight
-			bodyVelocity.Velocity = Vector3.new(bodyVelocity.Velocity.X, -HoverHeight, bodyVelocity.Velocity.Z)
-		end
-		LastJump = false
-	end
-
+function ApplyVelocity(Acceleration, deltaTimeRender)
+	local RaycastResult = GetRaycastResult()
 	local velocityFactor = Acceleration
 	if IsDecelerating then
-		-- local brakeFactor = Acceleration * 10
-		-- if IsBraking then
-		-- 	velocityFactor = CanJump and brakeFactor
-		-- else
-		-- 	velocityFactor = CanJump and Acceleration * 2 or DECELERATION_FACTOR
-		-- end
-		velocityFactor = CanJump and Acceleration * 2 or DECELERATION_FACTOR
+		velocityFactor = CanJump and Acceleration * 1.5 or DECELERATION_FACTOR
 	end
 
 	local downhillVector = Vector3.zero
 	local downhillAngle = 0
 
 	if RaycastResult then
-		downhillVector = ReturnDownhillVector(RaycastResult.Normal)
-		downhillAngle = ReturnAngleBetweenVectors(RaycastResult.Normal, Vector3.yAxis)
+		local distanceToGround = RaycastResult.Distance
+		if distanceToGround < 1.2 then
+			CanJump = true
+			downhillVector = ReturnDownhillVector(RaycastResult.Normal)
+			downhillAngle = ReturnAngleBetweenVectors(RaycastResult.Normal, Vector3.yAxis)
+		else
+			CanJump = false
+		end
 	end
-
+		
 	downhillAngle = math.clamp(math.abs(downhillAngle), 0, 45)
 
 	local finalVelocity = Vector3.new(
 		NewController.MoveVector.X * NewController.CurrentSpeed,
-		yVelocityComponent,
+		bodyVelocity.Velocity.Y,
 		NewController.MoveVector.Z * NewController.CurrentSpeed
-	) + downhillVector * (workspace.Gravity / 10) * (downhillAngle / DOWNHILL_SLOPE_ANGLE)
+	) + downhillVector * (workspace.Gravity / 2) * (downhillAngle / DOWNHILL_SLOPE_ANGLE)
+
 	local direction, tiltAngle =
 		ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1), bodyVelocity.Velocity * Vector3.new(1, 0, 1))
 	HorizontalTiltAngle = -direction * tiltAngle
+
 	bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * velocityFactor)
 end
 
 function ApplyOrientation(deltaTimeRender)
+	local RaycastResult = GetRaycastResult()
 	local BoardCF = Board.CFrame
-	local Origin = Board.Position + BoardCF.LookVector + Board.AssemblyLinearVelocity * Rayvelocity
-	local Direction = Vector3.new(0, -1, 0)
-	local CheckingDistance = HoverHeight + 4
 
-	local SwaySpeed = 0 --2
-	local MaxSwayAngle = 0 --1.5
-	local TiltAngle = math.sin(tick() * SwaySpeed) * MaxSwayAngle
-	local newNormal
-	local LerpFactor = 0.8
+	local newNormal = RaycastResult and RaycastResult.Normal or Vector3.yAxis
+	if newNormal then
+		local velocity = Board.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
+		local LookVector = BoardCF.LookVector
 
-	if NewController.MoveVector then
-		local RaycastResult = workspace:Raycast(Origin, Direction * CheckingDistance, RayParams)
-
-		if ForwardLean ~= 0 then
-			TiltAngle = ForwardLean
+		if velocity.Magnitude < 0.1 then
+			return
 		end
+		LookVector = velocity.Unit
 
-		if RaycastResult then
-			newNormal = RaycastResult.Normal
-		else
-			newNormal = Vector3.yAxis
+		local RightVector = LookVector:Cross(newNormal)
+		if RightVector.Magnitude < 0.1 then
+			return
 		end
+		RightVector = RightVector.Unit
+		local UpVector = newNormal
+		local AlignedCFrame = CFrame.fromMatrix(Board.Position, RightVector, UpVector)
 
-		if newNormal then
-			local velocity = bodyVelocity.Velocity * Vector3.new(1, 0, 1)
-			--local LookVector = NewController.MoveVector.Unit
-			
-			local LookVector = rootPart.CFrame.LookVector
+		--local normalizedTilt = 0
+		--if CanJump and NewController.MoveVector.Magnitude > FLOATING_ERROR_MARGIN then
+		--end
+		local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION)
 
-			if velocity.Magnitude >= FLOATING_ERROR_MARGIN then
-				print("Printing Look Vector")
-				LookVector = velocity.Unit
-			else
-				--warn("...............")
-			end
-
-			local RightVector = LookVector:Cross(newNormal).Unit
-			local UpVector = newNormal
-			local AlignedCFrame = CFrame.fromMatrix(rootPart.Position, RightVector, UpVector)
-
-			local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_ROTATION, MAX_HORIZONTAL_ROTATION)
-
-			local alpha = math.clamp(deltaTimeRender * ORIENTATION_FACTOR, 0, 1)
-			--bodyGyro.CFrame = AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt))
-			
-			bodyGyro.CFrame = bodyGyro.CFrame:Lerp(
-				AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt)), alpha
-			)
-		end
+		local alpha = 1 - math.exp(-ORIENTATION_FACTOR * 0.8 * deltaTimeRender)
+		local targetCFrame = AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt))
+		bodyGyro.CFrame = bodyGyro.CFrame:Lerp(targetCFrame, alpha)
 	end
 end
 
 function UpdateFOV(topSpeed, deltaTimeRender)
 	local diff = MAX_FOV - MIN_FOV
-	-- Camera.FieldOfView = Lerp(Camera.FieldOfView, math.clamp(MIN_FOV + diff * (bodyVelocity.Velocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV), .5)
-	Camera.FieldOfView = Lerp(
-		Camera.FieldOfView,
-		math.clamp(MIN_FOV + diff * (bodyVelocity.Velocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV),
-		deltaTimeRender * FOV_FACTOR
-	)
+	local speedBasedFOV =
+		math.clamp(MIN_FOV + diff * (Board.AssemblyLinearVelocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV)
+	if isBoosting or isDashing then
+		speedBasedFOV = math.min(speedBasedFOV + 10, MAX_FOV + 10)
+	end
+	
+	Camera.FieldOfView = Lerp(Camera.FieldOfView, speedBasedFOV, deltaTimeRender * FOV_FACTOR)
 end
+
+function JumpAnimation(dt)
+	if not flipping then return end
+
+	flipAngle = flipAngle + FLIP_SPEED * dt
+
+	if flipAngle >= FLIP_ANGLE then
+		flipAngle = FLIP_ANGLE
+		flipping = false
+	end
+
+	local flipCF = CFrame.Angles(flipAngle, 0, 0)
+
+	-- APPLY VIA MOTOR6D ONLY
+	motor.C0 = BASE_C0 * flipCF
+	motor.C1 = BASE_C1 * flipCF
+end
+
 -----------------------------------------------------------
 
 -- PLAYER LIFECYCLE
+local function HideCharacter(char)
+	for _, obj in ipairs(char:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			obj.Transparency = 1
+			obj.CastShadow = false
+		elseif obj:IsA("Decal") then
+			obj.Transparency = 1
+		end
+	end
+end
 
 local function SetTrail(trailColor)
 	if Trail then
@@ -1165,27 +1051,17 @@ local function ResetStates()
 	humanoid = nil
 	rootPart = nil
 	Board = nil
-	bodyVelocity = nil
 	bodyGyro = nil
-	bodyPosition = nil
 	controls = nil
-	OgBoardRotation = 0
-	BoardRotation = 0
-	SmoothBoardRotation = 0
 	acceleration = 0
 	topSpeed = 0
 	jumpPower = 0
 	ForwardLean = 0
 	NewController.SpeedVar = 0
 	NewController.CurrentSpeed = 0
-	AirJumps = 1
 	flyEnergy = MAX_FLY_ENERGY
-	Jump = false
-	LastJump = false
 	CanJump = false
 	isHoverboardInitialized = false
-	isOnHoverboard = false
-	CameraHeld = false
 	boostReady = true
 	dashReady = true
 	isDashing = false
@@ -1193,59 +1069,43 @@ local function ResetStates()
 	hasGravityCoil = false
 	hasDoubleJump = false
 	hasFly = false
-	JumpRequestTime = 0
-	JUMP_INTERVAL = 0.8
 	NewController:SetGravityCoil(false)
 	workspace.Gravity = DEFAULT_GRAVITY
 end
 
-local function InputListeners(HoverboardService, JumpPower)
-	UserInputService.InputBegan:Connect(function(Input: InputObject, gameProcessedEvent)
+local function InputListeners()
+	UserInputService.InputBegan:Connect(function(Input, gameProcessedEvent)
 		if gameProcessedEvent then
 			return
 		end
 
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
-			if Input.KeyCode == Enum.KeyCode.Space then
-			end
 			if Input.KeyCode == Enum.KeyCode.Q then
 				print("Hoverboard: Boost requested.")
-				ApplyBoost(acceleration, topSpeed)
+				ApplyBoost(BOOST_DURATION, BOOST_AMOUNT)
 			end
 			if Input.KeyCode == Enum.KeyCode.F then
 				print("Hoverboard: Flash requested.")
-				ApplyDash(NewController.SpeedVar, Board)
+				--ApplyDash(DASH_AMOUNT, DASH_DURATION, DASH_DISTANCE)
+				Dash(DASH_AMOUNT)
+			end
+			if Input.KeyCode == Enum.KeyCode.Space then
+				spaceHeld = true
 			end
 		end
 		if
 			Input.UserInputType == Enum.UserInputType.MouseButton2
 			or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
 		then
-			CameraHeld = true
+			
 		end
 	end)
 	UserInputService.JumpRequest:Connect(function()
-		spaceHeld = true
-		JumpRequestTime = tick()
-		WaitForLanding = false
-
-		-- GROUND JUMP
 		if CanJump then
-			Jump = true
-			LastJump = true
-			return
-		end
-
-		-- AIR JUMPS (ONLY if module exists)
-		if CanUseAirJump() then
-			if hasFly then
-				ExecuteAirJump(jumpPower)
-			else
-				ExecuteDoubleJump(jumpPower)
-			end
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 		end
 	end)
-	UserInputService.InputEnded:Connect(function(Input: InputObject, GameProcessed: boolean)
+	UserInputService.InputEnded:Connect(function(Input, GameProcessed)
 		if GameProcessed then
 			return
 		end
@@ -1253,7 +1113,6 @@ local function InputListeners(HoverboardService, JumpPower)
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
 			if Input.KeyCode == Enum.KeyCode.Space then
 				spaceHeld = false
-				spaceReleasedAfterJump = true
 			end
 		end
 
@@ -1261,17 +1120,17 @@ local function InputListeners(HoverboardService, JumpPower)
 			Input.UserInputType == Enum.UserInputType.MouseButton2
 			and UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter
 		then
-			CameraHeld = false
+			
 		end
 	end)
-
 	boostButton.MouseButton1Click:Connect(function()
 		print("Hoverboard: Boost requested.")
-		ApplyBoost(acceleration, topSpeed)
+		ApplyBoost(BOOST_DURATION, BOOST_AMOUNT)
 	end)
 	flashButton.MouseButton1Click:Connect(function()
 		print("Hoverboard: Flash requested.")
-		ApplyDash(NewController.SpeedVar, Board)
+		--ApplyDash(DASH_AMOUNT, DASH_DURATION, DASH_DISTANCE)
+		Dash(DASH_AMOUNT)
 	end)
 	gravityButton.MouseButton1Click:Connect(function()
 		print("Hovrboard: Gravity Coil requested.")
@@ -1310,46 +1169,45 @@ function NewController:SetActiveConfig(boardName)
 	Board = character:WaitForChild("Hoverboard"):WaitForChild("PrimaryPart")
 	Trail = Board:WaitForChild("Trail")
 	Trail.Enabled = false
-	ApplyEquippedTrail()
-	OgBoardRotation = Board.CFrame.Rotation.Y
-	BoardRotation = OgBoardRotation
-	SmoothBoardRotation = OgBoardRotation
-	isOnHoverboard = true
+	--ApplyEquippedTrail()
 	isHoverboardInitialized = true
+
 	self:StartHoverboard(config, HoverboardService)
 end
 
 function NewController:StartHoverboard(config, HoverboardService)
 	print("StartHoverboard called")
-	InitBodyMovers()
-
 	acceleration = config.Acceleration or ACCELERATION
 	topSpeed = config.TopSpeed or MAX_SPEED
 	jumpPower = config.JumpPower or JUMP_POWER
+	humanoid.UseJumpPower = true
+	humanoid.JumpPower = jumpPower
+	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
 
+	InitBodyMovers()
 	RefreshBoostGUI()
 	RefreshFlashGUI()
 	CloneVFX()
-	InputListeners(HoverboardService, jumpPower)
 
-	print("Hoverboard: Got acceleration and top speed: ", acceleration, " ", topSpeed)
 	if runningConnection then
 		runningConnection:Disconnect()
 	end
 	runningConnection = RunService.PreRender:Connect(function(dt)
 		CalculateMoveDirection()
 		CalculateSpeed(topSpeed)
-		ApplyVelocity(acceleration, jumpPower, dt)
+		ApplyVelocity(acceleration, dt)
 		ApplyOrientation(dt)
 		UpdateFOV(topSpeed, dt)
-
+		if CanJump and spaceHeld then
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+		
 		if speedGUI and speedLabel and speedFrame then
 			UpdateSpeedGUI(topSpeed)
 		end
 	end)
 end
 
--- Function to initialize hoverboard
 local function InitializeHoverboard()
 	if character then
 		print("Initializing hoverboard for character.")
@@ -1375,15 +1233,46 @@ local function InitializeHoverboard()
 	end
 end
 
+function HandleHumanoidStates()
+	humanoid.StateChanged:Connect(function(oldState, newState)
+		if oldState == Enum.HumanoidStateType.Physics
+			and newState == Enum.HumanoidStateType.Jumping then
+			
+		end
+	
+		if oldState == Enum.HumanoidStateType.Jumping then
+			if newState == Enum.HumanoidStateType.Landed or newState == Enum.HumanoidStateType.Freefall 
+				or newState == Enum.HumanoidStateType.Running then
+					humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+			end
+		end
+	end)
+end
+
 function OnCharacterAdded(char)
 	HoverboardService = Knit.GetService("HoverboardService")
 	character = char
 	humanoid = char:WaitForChild("Humanoid")
-	humanoid.PlatformStand = true
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+	humanoid.AutoRotate = false
+	HandleHumanoidStates()
+	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+
+	-- Disable all humanoid animations
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if animator then
+		animator:Destroy()
+	end
+	-- Also remove Animate script if present (extra safety)
+	local animateScript = character:FindFirstChild("Animate")
+	if animateScript then
+		animateScript:Destroy()
+	end
 	rootPart = char:WaitForChild("HumanoidRootPart")
+	rootPart.CastShadow = false
+	motor = rootPart:WaitForChild("HoverboardMotor")
+	BASE_C0 = motor.C0
+	BASE_C1 = motor.C1
+	InputListeners()
 	InitializeHoverboard()
 end
 
@@ -1409,11 +1298,12 @@ local function OnPlayerAdded(plr)
 end
 
 -- [External Modifier Functions]		------
-function NewController:ApplyAssist(ForceVector: Vector3)
-	bodyVelocity.Velocity += ForceVector
+function NewController:ApplyAssist(ForceVector)
+	bodyVelocity.Velocity = bodyVelocity.Velocity + ForceVector
+	--rootPart.AssemblyLinearVelocity += ForceVector	--Added
 end
 
-function NewController:ApplyJump(JumpPower: number)
+function NewController:ApplyJump(JumpPower)
 	local v = Board.AssemblyLinearVelocity
 	Board.AssemblyLinearVelocity = Vector3.new(v.X, JumpPower, v.Z)
 end
@@ -1422,7 +1312,7 @@ function NewController:Slow()
 	bodyVelocity.Velocity = Vector3.zero
 	local originalAcceleration = acceleration
 
-	acceleration *= 0.1
+	acceleration = acceleration * 0.1
 	task.delay(0.2, function()
 		acceleration = originalAcceleration
 	end)
@@ -1443,7 +1333,6 @@ function NewController:KnitStart()
 	end)
 	HoverboardService.HoverboardRemoved:Connect(function()
 		isHoverboardInitialized = false
-		isOnHoverboard = false
 	end)
 	HoverboardService.TrailEquipped:Connect(function(owner, trailName)
 		print("EquipTrail event received")

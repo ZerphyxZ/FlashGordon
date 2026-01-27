@@ -39,9 +39,9 @@ local SpinNumber = SpinButton:WaitForChild("Amount")
 local SpinTimerText = MainFrame:WaitForChild("TimeLabel")
 local CloseButton = DailySpin:WaitForChild("CloseButton")
 
-local MainGui = PlayerGui:FindFirstChild("MainGui")
-local CoinsFrame = MainGui:FindFirstChild("CoinsFrame")
-local CoinsUI = CoinsFrame:FindFirstChild("CoinsTextLabel")
+-- local MainGui = PlayerGui:FindFirstChild("MainGui")
+-- local CoinsFrame = MainGui:FindFirstChild("CoinsFrame")
+-- local CoinsUI = CoinsFrame:FindFirstChild("CoinsTextLabel")
 
 -- [Variables]			-----
 

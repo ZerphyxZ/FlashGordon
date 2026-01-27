@@ -1,15 +1,15 @@
 local Hoverboards = {
 	Hoverboard1 = {
-		TopSpeed = 55,
-		Acceleration = 1,
-		JumpPower = 39,
+		TopSpeed = 70,
+		Acceleration = 2,
+		JumpPower = 45,
 		Price = 1,
 		Currency = "Coins",
 		Image = "rbxassetid://18566592803",
 	},
 	Hoverboard2 = {
 		TopSpeed = 60,
-		Acceleration = 1.05,
+		Acceleration = 2.1,
 		JumpPower = 39,
 		Price = 1,
 		Currency = "Coins",
@@ -17,7 +17,7 @@ local Hoverboards = {
 	},
 	Hoverboard3 = {
 		TopSpeed = 65,
-		Acceleration = 1.1,
+		Acceleration = 2.2,
 		JumpPower = 40,
 		Price = 1,
 		Currency = "Coins",
@@ -25,7 +25,7 @@ local Hoverboards = {
 	},
 	Hoverboard4 = {
 		TopSpeed = 70,
-		Acceleration = 1.15,
+		Acceleration = 2.3,
 		JumpPower = 43,
 		Price = 1,
 		Currency = "Coins",
@@ -33,15 +33,15 @@ local Hoverboards = {
 	},
 	Hoverboard5 = {
 		TopSpeed = 75,
-		Acceleration = 1.15,
+		Acceleration = 2.4,
 		JumpPower = 41,
 		Price = 1,
 		Currency = "Coins",
 		Image = "rbxassetid://18566592803",
 	},
 	Hoverboard6 = {
-		TopSpeed = 110,
-		Acceleration = 1.2,
+		TopSpeed = 90,
+		Acceleration = 2.5,
 		JumpPower = 55,
 		Price = 1,
 		Currency = "Coins",
@@ -49,7 +49,7 @@ local Hoverboards = {
 	},
 	Hoverboard7 = {
 		TopSpeed = 85,
-		Acceleration = 1.25,
+		Acceleration = 2.6,
 		JumpPower = 44,
 		Price = 1,
 		Currency = "Coins",
@@ -57,7 +57,7 @@ local Hoverboards = {
 	},
 	Hoverboard8 = {
 		TopSpeed = 90,
-		Acceleration = 1.3,
+		Acceleration = 2.7,
 		JumpPower = 50,
 		Price = 1,
 		Currency = "Coins",
@@ -65,7 +65,7 @@ local Hoverboards = {
 	},
 	Hoverboard9 = {
 		TopSpeed = 95,
-		Acceleration = 1.35,
+		Acceleration = 2.8,
 		JumpPower = 51,
 		Price = 1,
 		Currency = "Coins",
@@ -73,7 +73,7 @@ local Hoverboards = {
 	},
 	Hoverboard10 = {
 		TopSpeed = 100,
-		Acceleration = 1.4,
+		Acceleration = 2.9,
 		JumpPower = 55,
 		Price = 1,
 		Currency = "Coins",
