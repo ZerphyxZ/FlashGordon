@@ -4,7 +4,7 @@ local Knit = Global.Knit
 local ReplicatedStorage = Global.ReplicatedStorage
 local PlayerDataHandler = require(ReplicatedStorage.Shared.Modules.PlayerDataHandler)
 
-local DOUBLE_JUMP_DURATION = 100 -- seconds
+local DOUBLE_JUMP_DURATION = 10 -- seconds
 
 local ProductsService = Knit.CreateService({
 	Name = "ProductsService",

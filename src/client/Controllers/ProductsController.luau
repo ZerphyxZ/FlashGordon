@@ -41,7 +41,7 @@ end
 function ProductsController:BindDoubleJump()
     ProductsService.DoubleJumpActivated:Connect(function(endTime)
         print("Double Jump Activated until:", endTime)
-        doubleJumpButton.Visible = true
+        doubleJumpButton.Interactable = false
         doubleJumpDuration.Visible = true
 
         -- Update duration timer
@@ -49,7 +49,7 @@ function ProductsController:BindDoubleJump()
             local timeLeft = endTime - os.time()
             if timeLeft < 0 then
                 doubleJumpDuration.Text = "0s"
-                doubleJumpButton.Visible = false
+                doubleJumpButton.Interactable = true
                 doubleJumpDuration.Visible = false
                 return
             end
@@ -79,7 +79,6 @@ end
 function ProductsController:OnCharacterAdded(character)
     ProductsService = Knit.GetService("ProductsService")
     self:UIReferences()
-    self:BindInput()
 end
 
 function ProductsController:OnCharacterRemoving(character)
@@ -104,6 +103,7 @@ end
 
 function ProductsController:KnitStart()
     self:OnPlayerAdded(player)
+    self:BindInput()
     self:BindDoubleJump()
 end
 

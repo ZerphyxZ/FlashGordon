@@ -69,7 +69,7 @@ local spaceHeld = false
 local totalJumps = 0
 local canDoubleJump = false
 local jumpConsumed = false
-local hasDoubleJump = false
+local HasDoubleJump = false
 local hasFly = false
 
 -- FLY
@@ -1024,9 +1024,9 @@ local function ResetStates()
 	dashReady = true
 	isDashing = false
 	spaceHeld = false
-	hasGravityCoil = false
-	hasDoubleJump = false
-	hasFly = false
+	--hasGravityCoil = false
+	--hasDoubleJump = false
+	--hasFly = false
 	NewController:SetGravityCoil(false)
 	workspace.Gravity = DEFAULT_GRAVITY
 end
@@ -1049,25 +1049,19 @@ local function InputListeners()
 			end
 			if Input.KeyCode == Enum.KeyCode.Space then
 				spaceHeld = true
-				
+				print("Has double jump:", HasDoubleJump)
 				--Double jump from the air
 				if
 					humanoid:GetState() == Enum.HumanoidStateType.Freefall
 					and canDoubleJump
-					and hasDoubleJump
+					and HasDoubleJump
 					and totalJumps < 2
 				then
-					print("Hoverboard: Double Jump activated.")
 					totalJumps = totalJumps + 1
 					canDoubleJump = false
 					humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 				end
 			end
-		end
-		if
-			Input.UserInputType == Enum.UserInputType.MouseButton2
-			or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
-		then
 		end
 	end)
 	UserInputService.JumpRequest:Connect(function()
@@ -1094,12 +1088,6 @@ local function InputListeners()
 				spaceHeld = false
 			end
 		end
-
-		if
-			Input.UserInputType == Enum.UserInputType.MouseButton2
-			and UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter
-		then
-		end
 	end)
 	boostButton.MouseButton1Click:Connect(function()
 		print("Hoverboard: Boost requested.")
@@ -1115,9 +1103,6 @@ local function InputListeners()
 		hasGravityCoil = true
 		--HoverboardService:RequestGravityCoil()
 	end)
-	-- doubleJumpButton.MouseButton1Click:Connect(function()
-	-- 	print("Hoverboard: Double Jump requested.")
-	-- end)
 	flyButton.MouseButton1Click:Connect(function()
 		print("Hoverboard: Fly requested.")
 		hasFly = true
@@ -1149,8 +1134,6 @@ function NewController:SetActiveConfig(boardName)
 	Trail.Enabled = false
 	--ApplyEquippedTrail()
 	isHoverboardInitialized = true
-
-	self:BindProducts()
 	self:StartHoverboard(config, HoverboardService)
 end
 
@@ -1219,7 +1202,7 @@ function HandleHumanoidStates()
 			totalJumps = 0
 			canDoubleJump = false
 		end
-		if oldState == Enum.HumanoidStateType.Jumping and hasDoubleJump and totalJumps == 1
+		if oldState == Enum.HumanoidStateType.Jumping and HasDoubleJump and totalJumps == 1
 			and newState == Enum.HumanoidStateType.Freefall then
 			canDoubleJump = true
 		end
@@ -1338,7 +1321,11 @@ end
 
 function NewController:BindProducts()
 	ProductsService.DoubleJumpActivated:Connect(function(endTime)
-		hasDoubleJump = true
+		HasDoubleJump = true
+	end)
+	ProductsService.DoubleJumpExpired:Connect(function()
+		print("Double Jump Expired")
+		HasDoubleJump = false
 	end)
 
 	-- ProductsService.FlyActivated:Connect(function(owner)
@@ -1353,7 +1340,7 @@ function NewController:KnitStart()
 	print("NewController started")
 	self:OnPlayerAdded(player)
 	self:BindGear()
-	
+	self:BindProducts()
 end
 
 return NewController
