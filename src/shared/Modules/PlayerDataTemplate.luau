@@ -37,6 +37,9 @@ local PlayerDataTemplate = {
 	TotalCrates = 5, -- Total available crates in game
 	OwnedCrates = {"BasicBoard"}, -- Start with default crate
 	EquippedCrate = "BasicBoard", -- Currently equipped crate
+
+	--Products Inventory
+	DoubleJumpEndTime = nil, -- timestamp or nil
 }
 
 return PlayerDataTemplate

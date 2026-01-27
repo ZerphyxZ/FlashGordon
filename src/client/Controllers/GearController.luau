@@ -1,4 +1,3 @@
-print("Loading GearController")
 local Global =
 	require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Global"))
 

@@ -3,6 +3,9 @@
 -- Adds spin helpers used by SpinService (non-breaking).
 -- DEBUG prints added.
 
+local Global =
+	require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Global"))
+local Knit = Global.Knit
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
@@ -135,7 +138,7 @@ end
 -- === lifecycle ===============================================================
 function PlayerDataHandler:LoadProfile(player)
 	-- Start a profile session for this player's data:
-
+	local ProductsService = Knit.GetService("ProductsService")
 	local profile = PlayerStore:StartSessionAsync(`{player.UserId}`, {
 		Cancel = function()
 			return player.Parent ~= Players
@@ -158,6 +161,16 @@ function PlayerDataHandler:LoadProfile(player)
 		if player.Parent == Players then
 			Profiles[player] = profile
 			JoinTimes[player] = os.time()
+
+			-- Check if the player has equipped the double jump in a previous session
+			-- Restore Double Jump if active
+			if self:HasDoubleJump(player) then
+				local endTime = profile.Data.DoubleJumpEndTime
+				task.defer(function()
+					ProductsService.Client.DoubleJumpActivated:Fire(player, endTime)
+				end)
+			end
+
 			print(`Profile loaded for {player.DisplayName}!`)
 		else
 			-- The player has left before the profile session started
@@ -349,10 +362,61 @@ end
 
 function PlayerDataHandler:PlayerHasGravityCoil(player)
 	local data = self:GetData(player)
-	if not data then return false end
-	
+	if not data then
+		return false
+	end
+
 	-- Adjust this based on how you track purchased items
 	return data.GravityCoilOwned == true or false
+end
+
+--------- Double Jump ================================================
+function PlayerDataHandler:HasDoubleJump(player: Player): boolean
+	local data = self:GetData(player)
+	if not data then
+		return false
+	end
+
+	return typeof(data.DoubleJumpEndTime) == "number" and data.DoubleJumpEndTime > os.time()
+end
+
+function PlayerDataHandler:GetDoubleJumpRemaining(player: Player): number
+	local data = self:GetData(player)
+	if not data or not data.DoubleJumpEndTime then
+		return 0
+	end
+
+	return math.max(0, data.DoubleJumpEndTime - os.time())
+end
+
+function PlayerDataHandler:GrantDoubleJump(player: Player, durationSeconds: number)
+	local profile = Profiles[player]
+	if not profile or not profile:IsActive() then
+		return
+	end
+
+	local now = os.time()
+	local currentEndTime = profile.Data.DoubleJumpEndTime or 0
+
+	-- Extend if already active, otherwise start fresh
+	local newEndTime = math.max(currentEndTime, now) + durationSeconds
+	profile.Data.DoubleJumpEndTime = newEndTime
+
+	pcall(function()
+		profile:Save()
+	end)
+
+	return newEndTime
+end
+
+function PlayerDataHandler:ClearDoubleJump(player: Player)
+	local profile = Profiles[player]
+	if profile and profile:IsActive() then
+		profile.Data.DoubleJumpEndTime = nil
+		pcall(function()
+			profile:Save()
+		end)
+	end
 end
 
 -- === Hoverboard storage ================================================
@@ -384,7 +448,7 @@ function PlayerDataHandler:SetEquippedHoverboard(player: Player, boardName: stri
 			profile.Data.EquippedHoverboard = boardName
 			profile:Save()
 			-- pcall(function()
-				
+
 			-- end)
 			print("[PlayerDataHandler] Hoverboard equipped for", player.Name, "→", boardName)
 			return true
@@ -480,7 +544,7 @@ end
 function PlayerDataHandler:GetTotalHoverboards(): number
 	return PlayerDataTemplate.TotalHoverboards or 20
 end
---------------------------------------------------------------------------------- 
+---------------------------------------------------------------------------------
 
 -- === Trail storage ================================================
 function PlayerDataHandler:GetEquippedTrail(player: Player): string?
@@ -539,7 +603,6 @@ function PlayerDataHandler:AddTrailToInventory(player: Player, trailName: string
 	return false
 end
 --------------------------------------------------------------------------
-
 
 -- === Crate storage ================================================
 function PlayerDataHandler:GetEquippedCrate(player: Player): string?
