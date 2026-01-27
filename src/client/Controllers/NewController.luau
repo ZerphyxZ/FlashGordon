@@ -28,6 +28,7 @@ local TrailsConfig = require(Configuration:WaitForChild("TrailsConfig"))
 local DashTrailModule = ReplicatedStorage:WaitForChild("VFX"):WaitForChild("HoverboardVFX"):WaitForChild("ElectricDash")
 local HoverboardService
 local ProductsService
+local ProductsController
 
 -- MOVEMENT / HOVERING
 local HoverStiffness = 10
@@ -68,22 +69,18 @@ local CanJump = false
 local spaceHeld = false
 local totalJumps = 0
 local canDoubleJump = false
+local canFly = false
 local jumpConsumed = false
 local HasDoubleJump = false
 local hasFly = false
 
 -- FLY
+local MAX_JUMPS = 6
 local MAX_FLY_ENERGY = 1
 local FLY_ENERGY_DEPLETION_RATE = 0.2 -- per second
 local FLY_ENERGY_RECHARGE_TIME = 2
 local FLY_ENERGY_RECHARGE_RATE = MAX_FLY_ENERGY / FLY_ENERGY_RECHARGE_TIME
 local flyEnergy = MAX_FLY_ENERGY
-
--- GRAVITY
-local hasGravityCoil = false
-local DEFAULT_GRAVITY = workspace.Gravity
-local gravityCoilModel = nil
-local gravityCoilWeld = nil
 
 -- CONNECTIONS
 local runningConnection
@@ -132,18 +129,6 @@ local flashFrame = gameHUD:WaitForChild("FlashFrame")
 local flashButton = flashFrame:WaitForChild("FlashButton")
 local flashCooldownFiller = flashFrame:WaitForChild("CooldownFill")
 
--- Gravity UI
-local gravityFrame = gameHUD:WaitForChild("GravityCoil")
-local gravityButton = gravityFrame:WaitForChild("GravityButton")
-
--- Double Jump UI
-local doubleJumpFrame = gameHUD:WaitForChild("DoubleJumpFrame")
-local doubleJumpButton = doubleJumpFrame:WaitForChild("DoubleJumpButton")
-
--- Fly UI
-local flyFrame = gameHUD:WaitForChild("FlyFrame")
-local flyButton = flyFrame:WaitForChild("FlyButton")
-
 local controls
 local RayParams
 local wallDetected
@@ -172,21 +157,12 @@ local function InitBodyMovers()
 	--bodyGyro = rootPart:WaitForChild("BodyGyro")
 end
 
-local function CalculateJumpInterval(jumpPower)
-	-- Scale linearly: interval = jumpPower / 70
-	return jumpPower / 60
-end
-
--- Add function to check if player is moving upward or downward
-local function IsMovingDownward()
-	if not rootPart or not Board then
-		return false
+local function SetCollisionGroup(model, groupName)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.CollisionGroup = groupName
+		end
 	end
-
-	--local verticalVelocity = rootPart.AssemblyLinearVelocity.Y 	--Added
-	local verticalVelocity = Board.AssemblyLinearVelocity.Y
-	-- Negative Y velocity means moving downward (towards negative Y)
-	return verticalVelocity < 20
 end
 
 function WallDetection(dt)
@@ -277,6 +253,18 @@ function WallDetection(dt)
 	-- 	end
 	-- 	return
 	-- end
+end
+
+function GetMaxJumps()
+	if ProductsController then
+		if ProductsController.HasFly then
+			return MAX_JUMPS
+		end
+		if ProductsController.HasDoubleJump then
+			return 2
+		end
+	end
+	return 1
 end
 
 ------------------- UPDATE SPEED GUI -----------------------
@@ -454,14 +442,6 @@ local function EnableFlashVFX(enable)
 	end
 end
 
-local function SetCollisionGroup(model, groupName)
-	for _, inst in ipairs(model:GetDescendants()) do
-		if inst:IsA("BasePart") then
-			inst.CollisionGroup = groupName
-		end
-	end
-end
-
 local function MakePlayerInvincible(state)
 	character:SetAttribute("Invincible", state)
 	local groupName = state and "PlayerInvincible" or "Player"
@@ -617,7 +597,7 @@ function Dash(dashPower)
 		return
 	end
 
-	local velocity = bodyVelocity.Velocity --Board.AssemblyLinearVelocity
+	local velocity = Board.AssemblyLinearVelocity
 	local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
 
 	if horizontal.Magnitude < 0.1 then
@@ -668,92 +648,6 @@ function Dash(dashPower)
 		end
 		flashButton.Interactable = true
 	end)
-end
-
------------------------------------------------------------
-
------------------ GRAVITY METHODS -------------------------
-function NewController:SetGravityCoil(enabled)
-	hasGravityCoil = enabled
-	print("Gravity coil enabled")
-	if enabled then
-		print("Gravity coil: enabled")
-		-- Attach coil model to character's right arm
-		self:AttachGravityCoilModel()
-	else
-		print("Gravity coil: disabled")
-		-- Remove coil model
-		self:RemoveGravityCoilModel()
-		-- Reset gravity
-		workspace.Gravity = DEFAULT_GRAVITY
-	end
-end
-
-function NewController:AttachGravityCoilModel()
-	-- Check if character exists
-	if not character then
-		warn("Cannot attach gravity coil: character not found")
-		return
-	end
-
-	-- Find right arm
-	local rightArm = character:FindFirstChild("RightHand") or character:FindFirstChild("RightArm")
-	if not rightArm then
-		warn("Cannot attach gravity coil: right arm not found")
-		return
-	end
-
-	-- Remove existing coil if any
-	self:RemoveGravityCoilModel()
-
-	-- Find coil model in StarterPack
-	local starterPack = player:WaitForChild("StarterPack")
-	local coilTemplate = starterPack:FindFirstChild("Gravity coil")
-
-	if not coilTemplate then
-		warn("Gravity coil model not found in StarterPack")
-		return
-	end
-
-	-- Clone and attach the model
-	gravityCoilModel = coilTemplate:Clone()
-	gravityCoilModel.Parent = workspace
-
-	-- Position it on the right arm (adjust offset as needed)
-	local offset = CFrame.new(0, 0, 0) * CFrame.Angles(0, 0, 0)
-
-	-- Create weld
-	gravityCoilWeld = Instance.new("Weld")
-	gravityCoilWeld.Name = "GravityCoilWeld"
-	gravityCoilWeld.Part0 = rightArm
-	gravityCoilWeld.Part1 = gravityCoilModel
-	gravityCoilWeld.C0 = offset
-	gravityCoilWeld.Parent = rightArm
-
-	-- Parent to character
-	gravityCoilModel.Parent = character
-
-	print("Gravity coil model attached to character")
-end
-
-function NewController:RemoveGravityCoilModel()
-	if gravityCoilModel then
-		gravityCoilModel:Destroy()
-		gravityCoilModel = nil
-	end
-
-	if gravityCoilWeld then
-		gravityCoilWeld:Destroy()
-		gravityCoilWeld = nil
-	end
-end
-
-local function CheckGravityCoil()
-	if hasGravityCoil and IsMovingDownward() then
-		workspace.Gravity = DEFAULT_GRAVITY * 0.25
-	else
-		workspace.Gravity = DEFAULT_GRAVITY -- Always reset to default
-	end
 end
 -----------------------------------------------------------
 
@@ -959,6 +853,31 @@ function JumpAnimation(dt)
 	motor.C1 = BASE_C1 * flipCF
 end
 
+function SpaceHeld()
+	if spaceHeld then
+		if CanJump then
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			return
+		else
+			print("Running not can jump logic")
+			local state = humanoid:GetState()
+			local maxJumps = GetMaxJumps()
+			print("Max jumps:", maxJumps)
+			print("Total jumps:", totalJumps)
+			print("Has Fly:", ProductsController.HasFly)
+
+			--Fly handling
+			if canFly and totalJumps < maxJumps then
+				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+				return
+			end
+		end
+	end
+
+	-- --Keep jumping from the ground
+	-- if state == Enum.HumanoidStateType.Physics then
+	-- end
+end
 -----------------------------------------------------------
 
 -- PLAYER LIFECYCLE
@@ -1049,18 +968,36 @@ local function InputListeners()
 			end
 			if Input.KeyCode == Enum.KeyCode.Space then
 				spaceHeld = true
-				print("Has double jump:", HasDoubleJump)
-				--Double jump from the air
-				if
-					humanoid:GetState() == Enum.HumanoidStateType.Freefall
-					and canDoubleJump
-					and HasDoubleJump
-					and totalJumps < 2
-				then
+
+				-- Double jump and fly handling
+				local maxJumps = GetMaxJumps()
+				if humanoid:GetState() == Enum.HumanoidStateType.Freefall and totalJumps < maxJumps then
+					-- Double jump restriction (only applies when NOT flying)
+					if not ProductsController.HasFly then
+						if not canDoubleJump then
+							return
+						end
+						canDoubleJump = false
+					end
+
 					totalJumps = totalJumps + 1
-					canDoubleJump = false
 					humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 				end
+
+				--Fly from the air
+
+				--Double jump from the air
+				-- if
+				-- 	humanoid:GetState() == Enum.HumanoidStateType.Freefall
+				-- 	and canDoubleJump
+				-- 	and ProductsController.HasDoubleJump
+				-- 	and totalJumps < 2
+				-- 	and not ProductsController.HasFly
+				-- then
+				-- 	totalJumps = totalJumps + 1
+				-- 	canDoubleJump = false
+				-- 	humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+				-- end
 			end
 		end
 	end)
@@ -1068,10 +1005,7 @@ local function InputListeners()
 		if not CanJump then
 			return
 		end
-		local state = humanoid:GetState()
-		
-		--Single jump from the ground
-		if state == Enum.HumanoidStateType.Physics then
+		if humanoid:GetState() == Enum.HumanoidStateType.Physics then
 			totalJumps = 1
 			canDoubleJump = false
 			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -1097,15 +1031,6 @@ local function InputListeners()
 		print("Hoverboard: Flash requested.")
 		--ApplyDash(DASH_AMOUNT, DASH_DURATION, DASH_DISTANCE)
 		Dash(DASH_AMOUNT)
-	end)
-	gravityButton.MouseButton1Click:Connect(function()
-		print("Hovrboard: Gravity Coil requested.")
-		hasGravityCoil = true
-		--HoverboardService:RequestGravityCoil()
-	end)
-	flyButton.MouseButton1Click:Connect(function()
-		print("Hoverboard: Fly requested.")
-		hasFly = true
 	end)
 end
 
@@ -1160,9 +1085,7 @@ function NewController:StartHoverboard(config, HoverboardService)
 		ApplyVelocity(acceleration, dt)
 		ApplyOrientation(dt)
 		UpdateFOV(topSpeed, dt)
-		if CanJump and spaceHeld then
-			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-		end
+		SpaceHeld()
 
 		if speedGUI and speedLabel and speedFrame then
 			UpdateSpeedGUI(topSpeed)
@@ -1202,8 +1125,23 @@ function HandleHumanoidStates()
 			totalJumps = 0
 			canDoubleJump = false
 		end
-		if oldState == Enum.HumanoidStateType.Jumping and HasDoubleJump and totalJumps == 1
-			and newState == Enum.HumanoidStateType.Freefall then
+
+		if
+			oldState == Enum.HumanoidStateType.Jumping
+			and newState == Enum.HumanoidStateType.Freefall
+			and ProductsController.HasFly
+			and totalJumps == 1
+		then
+			canFly = true
+		end
+
+		if
+			oldState == Enum.HumanoidStateType.Jumping
+			and ProductsController.HasDoubleJump
+			and not ProductsController.HasFly
+			and totalJumps == 1
+			and newState == Enum.HumanoidStateType.Freefall
+		then
 			canDoubleJump = true
 		end
 	end)
@@ -1212,7 +1150,8 @@ end
 function NewController:OnCharacterAdded(char)
 	HoverboardService = Knit.GetService("HoverboardService")
 	ProductsService = Knit.GetService("ProductsService")
-	
+	ProductsController = Knit.GetController("ProductsController")
+
 	character = char
 	humanoid = char:WaitForChild("Humanoid")
 	humanoid.AutoRotate = false
@@ -1318,23 +1257,6 @@ function NewController:BindGear()
 		end
 	end)
 end
-
-function NewController:BindProducts()
-	ProductsService.DoubleJumpActivated:Connect(function(endTime)
-		HasDoubleJump = true
-	end)
-	ProductsService.DoubleJumpExpired:Connect(function()
-		print("Double Jump Expired")
-		HasDoubleJump = false
-	end)
-
-	-- ProductsService.FlyActivated:Connect(function(owner)
-	-- 	if owner ~= player then
-	-- 		return
-	-- 	end
-	-- 	hasFly = true
-	-- end)
-end	
 
 function NewController:KnitStart()
 	print("NewController started")

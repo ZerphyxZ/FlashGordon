@@ -40,6 +40,7 @@ local PlayerDataTemplate = {
 
 	--Products Inventory
 	DoubleJumpEndTime = nil, -- timestamp or nil
+	GravityEndTime = nil, -- timestamp or nil
 }
 
 return PlayerDataTemplate

@@ -161,15 +161,8 @@ function PlayerDataHandler:LoadProfile(player)
 		if player.Parent == Players then
 			Profiles[player] = profile
 			JoinTimes[player] = os.time()
-
-			-- Check if the player has equipped the double jump in a previous session
-			-- Restore Double Jump if active
-			if self:HasDoubleJump(player) then
-				local endTime = profile.Data.DoubleJumpEndTime
-				task.defer(function()
-					ProductsService.Client.DoubleJumpActivated:Fire(player, endTime)
-				end)
-			end
+			print("Profile loaded: ", Profiles[player])
+			--self:CheckDoubleJumpExpiry(ProductsService, player, profile)
 
 			print(`Profile loaded for {player.DisplayName}!`)
 		else
@@ -370,21 +363,57 @@ function PlayerDataHandler:PlayerHasGravityCoil(player)
 	return data.GravityCoilOwned == true or false
 end
 
+function PlayerDataHandler:GrantGravityCoil(player: Player, durationSeconds: number)
+	local profile = Profiles[player]
+	if not profile or not profile:IsActive() then
+		return
+	end
+
+	local now = os.time()
+	local currentEndTime = profile.Data.GravityEndTime or 0
+
+	-- Extend if already active, otherwise start fresh
+	print("Gravity duration seconds: ", durationSeconds)
+	local newEndTime = math.max(currentEndTime, now) + durationSeconds
+	profile.Data.GravityEndTime = newEndTime
+	print("Saved gravity end time: ", profile.Data.GravityEndTime - os.time())
+
+	pcall(function()
+		profile:Save()
+	end)
+
+	return newEndTime
+end
+
+function PlayerDataHandler:ClearGravityCoil(player: Player)
+	local profile = Profiles[player]
+	if not profile or not profile:IsActive() then
+		return
+	end
+	profile.Data.GravityEndTime = nil
+	pcall(function()
+		profile:Save()
+	end)
+end
+
+
 --------- Double Jump ================================================
 function PlayerDataHandler:HasDoubleJump(player: Player): boolean
-	local data = self:GetData(player)
-	if not data then
+	local profile = Profiles[player]
+	if not profile or not profile:IsActive() then
 		return false
 	end
 
-	return typeof(data.DoubleJumpEndTime) == "number" and data.DoubleJumpEndTime > os.time()
+	local endTime = profile.Data.DoubleJumpEndTime
+	return endTime ~= nil and endTime >= os.time()
 end
 
 function PlayerDataHandler:GetDoubleJumpRemaining(player: Player): number
 	local data = self:GetData(player)
-	if not data or not data.DoubleJumpEndTime then
-		return 0
-	end
+	-- if not data or not data.DoubleJumpEndTime then
+	-- 	print("Returning from here.")
+	-- 	return 0
+	-- end
 
 	return math.max(0, data.DoubleJumpEndTime - os.time())
 end
@@ -399,8 +428,10 @@ function PlayerDataHandler:GrantDoubleJump(player: Player, durationSeconds: numb
 	local currentEndTime = profile.Data.DoubleJumpEndTime or 0
 
 	-- Extend if already active, otherwise start fresh
+	print("Duration seconds: ", durationSeconds)
 	local newEndTime = math.max(currentEndTime, now) + durationSeconds
 	profile.Data.DoubleJumpEndTime = newEndTime
+	print("Saved end time: ", profile.Data.DoubleJumpEndTime - os.time())
 
 	pcall(function()
 		profile:Save()
@@ -411,14 +442,31 @@ end
 
 function PlayerDataHandler:ClearDoubleJump(player: Player)
 	local profile = Profiles[player]
-	if profile and profile:IsActive() then
-		profile.Data.DoubleJumpEndTime = nil
-		pcall(function()
-			profile:Save()
-		end)
+	if not profile or not profile:IsActive() then
+		return
 	end
+	profile.Data.DoubleJumpEndTime = nil
+	pcall(function()
+		profile:Save()
+	end)
 end
 
+function PlayerDataHandler:CheckDoubleJumpExpiry(ProductsService, player, profile)
+	-- Check if the player has equipped the double jump in a previous session
+	-- Restore Double Jump if active
+	local endTime = profile.Data.DoubleJumpEndTime - os.time()
+	print("End time: ", endTime)
+	if endTime < 0 then return end
+	
+	ProductsService.Client.DoubleJumpActivated:Fire(player, endTime)
+	task.delay(endTime, function()
+		self:ClearDoubleJump(player)
+		ProductsService.Client.DoubleJumpExpired:Fire(player)
+	end)
+	self:ClearDoubleJump(player)
+	-- if remaining > 0 then
+	-- end
+end
 -- === Hoverboard storage ================================================
 
 function PlayerDataHandler:GetEquippedHoverboard(player: Player): string
