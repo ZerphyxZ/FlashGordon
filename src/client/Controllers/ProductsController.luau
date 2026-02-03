@@ -1,18 +1,20 @@
-local Global =
-	require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild("Global"))
+local Global = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Modules"):WaitForChild(
+    "Global"))
 
 local TweenService = game:GetService("TweenService")
 local Knit = Global.Knit
 local Players = Global.Players
 local player = Players.LocalPlayer
+local character
+local humanoid
 local ReplicatedStorage = Global.ReplicatedStorage
 local workspace = game:GetService("Workspace")
 local ProductsController = Knit.CreateController({
-    Name = "ProductsController",
+    Name = "ProductsController"
 })
 local ProductsService
 
---UI References
+-- UI References
 local playerGui
 local gameHUD
 local doubleJumpButton
@@ -21,13 +23,17 @@ local flyButton
 local flyDuration
 local gravityButton
 local gravityDuration
+ProductsController.flybar = nil
+local flyBarBackground
+local billboard
 
-ProductsController.HasDoubleJump = true
-ProductsController.HasFly = true
+ProductsController.HasDoubleJump = false
+ProductsController.HasFly = false
+ProductsController.IsFlying = false
 ProductsController.HasGravity = false
 
 local DEFAULT_GRAVITY = workspace.Gravity
-local REDUCED_GRAVITY = workspace.Gravity / 2.5
+local REDUCED_GRAVITY = workspace.Gravity / 2
 
 ---------------------- Common functions ------------------------
 function ProductsController:UIReferences()
@@ -36,21 +42,40 @@ function ProductsController:UIReferences()
     doubleJumpButton = gameHUD:WaitForChild("DoubleJumpFrame"):WaitForChild("DoubleJumpButton")
     doubleJumpDuration = gameHUD:WaitForChild("DoubleJumpFrame"):WaitForChild("DurationTimer")
     flyButton = gameHUD:WaitForChild("FlyFrame"):WaitForChild("FlyButton")
+    flyDuration = gameHUD:WaitForChild("FlyFrame"):WaitForChild("DurationTimer")
     gravityButton = gameHUD:WaitForChild("GravityFrame"):WaitForChild("GravityButton")
     gravityDuration = gameHUD:WaitForChild("GravityFrame"):WaitForChild("DurationTimer")
 end
 
+function ProductsController:ClearUI()
+    playerGui = nil
+    gameHUD = nil
+    doubleJumpButton = nil
+    doubleJumpDuration = nil
+    flyButton = nil
+    flyDuration = nil
+    gravityButton = nil
+    gravityDuration = nil
+    ProductsController.flybar = nil
+    flyBarBackground = nil
+    billboard = nil
+    ProductsController.HasDoubleJump = false
+    ProductsController.HasFly = false
+    ProductsController.IsFlying = false
+    ProductsController.HasGravity = false
+end
+
 function ProductsController:BindInput()
     doubleJumpButton.MouseButton1Click:Connect(function()
-        self:RequestDoubleJump()
+        ProductsService:PurchaseDoubleJump()
     end)
 
     flyButton.MouseButton1Click:Connect(function()
-        self:RequestFly()
+        ProductsService:PurchaseFly()
     end)
 
     gravityButton.MouseButton1Click:Connect(function()
-        self:RequestGravity()
+        ProductsService:PurchaseGravity()
     end)
 end
 
@@ -64,14 +89,14 @@ function ProductsController:BindTimedProduct(options)
 
     activatedSignal:Connect(function(endTime)
         print(options.Name .. " Activated until:", endTime)
-        if button then 
-            button.Interactable = false 
+        if button then
+            button.Interactable = false
         end
-        if label then 
-            label.Visible = true 
-        end 
-        if onActivate then 
-            onActivate() 
+        if label then
+            label.Visible = true
+        end
+        if onActivate then
+            onActivate()
         end
 
         task.spawn(function()
@@ -87,8 +112,8 @@ function ProductsController:BindTimedProduct(options)
                     end
                     break
                 end
-                if label then 
-                    label.Text = timeLeft .. "s" 
+                if label then
+                    label.Text = timeLeft .. "s"
                 end
                 task.wait(1)
             end
@@ -97,38 +122,40 @@ function ProductsController:BindTimedProduct(options)
 
     expiredSignal:Connect(function()
         print(options.Name .. " Expired.")
-        if label then 
-            label.Visible = false 
+        if label then
+            label.Visible = false
         end
-        if button then 
-            button.Interactable = true 
+        if button then
+            button.Interactable = true
         end
-        if onExpire then 
+        if onExpire then
             onExpire()
         end
     end)
 end
 
+function UpdateTimer(button, duration, endTime)
+    local timeLeft = math.max(0, math.ceil(endTime - tick()))
+    duration.Text = tostring(timeLeft) .. "s"
+    if timeLeft <= 0 then
+        button.Interactable = true
+        duration.Visible = false
+        return
+    end
+    task.delay(1, function()
+        UpdateTimer(button, duration, endTime)
+    end)
+end
+
+------Double Jump--------
 function ProductsController:BindDoubleJump()
-    ProductsService.DoubleJumpActivated:Connect(function(endTime)
-        print("Double Jump Activated until:", endTime)
+    ProductsService.DoubleJumpActivated:Connect(function(duration)
+        print("Double Jump Activated until:", duration)
         doubleJumpButton.Interactable = false
         doubleJumpDuration.Visible = true
         ProductsController.HasDoubleJump = true
-
-        -- Update duration timer
-        local function updateTimer()
-            local timeLeft = endTime - os.time()
-            if timeLeft < 0 then
-                doubleJumpDuration.Text = "0s"
-                doubleJumpButton.Interactable = true
-                doubleJumpDuration.Visible = false
-                return
-            end
-            doubleJumpDuration.Text = tostring(timeLeft) .. "s"
-            task.delay(1, updateTimer)
-        end
-        updateTimer()
+        local endAt = tick() + duration
+        UpdateTimer(doubleJumpButton, doubleJumpDuration, endAt)
     end)
 
     ProductsService.DoubleJumpExpired:Connect(function()
@@ -136,28 +163,18 @@ function ProductsController:BindDoubleJump()
         ProductsController.HasDoubleJump = false
     end)
 end
+-------------------------
 
+------Gravity------------
 function ProductsController:BindGravity()
-    ProductsService.GravityActivated:Connect(function(endTime)
-        print("Gravity Activated until:", endTime)
+    ProductsService.GravityActivated:Connect(function(duration)
+        print("Gravity Activated until:", duration)
         gravityButton.Interactable = false
         gravityDuration.Visible = true
         ProductsController.HasGravity = true
         workspace.Gravity = REDUCED_GRAVITY
-
-        -- Update duration timer
-        local function updateTimer()
-            local timeLeft = endTime - os.time()
-            if timeLeft < 0 then
-                gravityDuration.Text = "0s"
-                gravityButton.Interactable = true
-                gravityDuration.Visible = false
-                return
-            end
-            gravityDuration.Text = tostring(timeLeft) .. "s"
-            task.delay(1, updateTimer)
-        end
-        updateTimer()
+        local endAt = tick() + duration
+        UpdateTimer(gravityButton, gravityDuration, endAt)
     end)
 
     ProductsService.GravityExpired:Connect(function()
@@ -166,30 +183,80 @@ function ProductsController:BindGravity()
         workspace.Gravity = DEFAULT_GRAVITY
     end)
 end
--------------------------------------------------------
+-------------------------
 
---------------------- Client callable functions -----------------
-function ProductsController:RequestDoubleJump()
-    print("Double Jump Requested.")
-    ProductsService:PurchaseDoubleJump()
+----------Fly------------
+function ProductsController:BindFly()
+    ProductsService.FlyActivated:Connect(function(duration)
+        print("Fly Activated until:", duration)
+        flyButton.Interactable = false
+        flyDuration.Visible = true
+        ProductsController.HasFly = true
+        local endAt = tick() + duration
+        self:CreateFlyBar()
+        UpdateTimer(flyButton, flyDuration, endAt)
+    end)
+
+    ProductsService.FlyExpired:Connect(function()
+        print("Fly Expired.")
+        ProductsController.HasFly = false
+        self:DestroyFlyBar()
+    end)
 end
 
-function ProductsController:RequestFly()
-    print("Fly Requested.")
-    ProductsService:PurchaseFly()
+function ProductsController:CreateFlyBar()
+    billboard = Instance.new("BillboardGui")
+    billboard.Name = "FlyEnergyBillboard"
+    billboard.Parent = humanoid
+
+    billboard.Size = UDim2.fromScale(0.85, 4)
+    billboard.StudsOffsetWorldSpace = Vector3.new(3, -1.5, 0)
+    billboard.AlwaysOnTop = true
+    billboard.LightInfluence = 0
+    billboard.ResetOnSpawn = false
+
+    flyBarBackground = Instance.new("Frame")
+    flyBarBackground.Name = "Background"
+    flyBarBackground.Parent = billboard
+    flyBarBackground.Size = UDim2.fromScale(1, 1)
+    flyBarBackground.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    flyBarBackground.BorderSizePixel = 0
+    flyBarBackground.BackgroundTransparency = 0.2
+    -- UICorner for Background
+    local bgCorner = Instance.new("UICorner")
+    bgCorner.CornerRadius = UDim.new(0.1, 0)
+    bgCorner.Parent = flyBarBackground
+
+    ProductsController.flybar = Instance.new("Frame")
+    ProductsController.flybar.Name = "EnergyBar"
+    ProductsController.flybar.Parent = flyBarBackground
+    ProductsController.flybar.Size = UDim2.fromScale(1, 1)
+    ProductsController.flybar.AnchorPoint = Vector2.new(0, 1)
+    ProductsController.flybar.Position = UDim2.fromScale(0, 1)
+    ProductsController.flybar.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    ProductsController.flybar.BorderSizePixel = 0
+    -- UICorner for Energy Bar
+    local barCorner = Instance.new("UICorner")
+    barCorner.CornerRadius = UDim.new(0.1, 0)
+    barCorner.Parent = ProductsController.flybar
 end
 
-function ProductsController:RequestGravity()
-    print("Gravity Requested.")
-    ProductsService:PurchaseGravity()
+function ProductsController:DestroyFlyBar()
+    if billboard then
+        billboard:Destroy()
+    end
 end
--------------------------------------------------------
-
+-------------------------
 
 -- Player lifecycle methods
-function ProductsController:OnCharacterAdded(character)
+function ProductsController:OnCharacterAdded(char)
+    character = char
+    humanoid = character:WaitForChild("Humanoid")
     ProductsService = Knit.GetService("ProductsService")
     self:UIReferences()
+    if ProductsController.HasFly then
+        self:CreateFlyBar()
+    end
 end
 
 function ProductsController:OnCharacterRemoving(character)
@@ -198,17 +265,17 @@ end
 
 function ProductsController:OnPlayerAdded(plr)
     if plr ~= player then
-		return
-	end
-	plr.CharacterAdded:Connect(function()
-		self:OnCharacterAdded(plr.Character)
-	end)
-	plr.CharacterRemoving:Connect(function()
-		self:OnCharacterRemoving(plr.Character)
-	end)
-	if plr.Character then
-		self:OnCharacterAdded(plr.Character)
-	end
+        return
+    end
+    plr.CharacterAdded:Connect(function()
+        self:OnCharacterAdded(plr.Character)
+    end)
+    plr.CharacterRemoving:Connect(function()
+        self:OnCharacterRemoving(plr.Character)
+    end)
+    if plr.Character then
+        self:OnCharacterAdded(plr.Character)
+    end
 end
 ----------------------------------------------
 
@@ -217,6 +284,7 @@ function ProductsController:KnitStart()
     self:BindInput()
     self:BindDoubleJump()
     self:BindGravity()
+    self:BindFly()
 end
 
 return ProductsController

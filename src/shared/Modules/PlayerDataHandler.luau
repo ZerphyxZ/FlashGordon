@@ -162,7 +162,8 @@ function PlayerDataHandler:LoadProfile(player)
 			Profiles[player] = profile
 			JoinTimes[player] = os.time()
 			print("Profile loaded: ", Profiles[player])
-			--self:CheckDoubleJumpExpiry(ProductsService, player, profile)
+
+			self:CheckTimedProductsAtStart(ProductsService, player, profile)
 
 			print(`Profile loaded for {player.DisplayName}!`)
 		else
@@ -352,7 +353,6 @@ function PlayerDataHandler:ResetProfileToTemplate(player: Player)
 end
 
 -- === Gravity Coil ================================================
-
 function PlayerDataHandler:PlayerHasGravityCoil(player)
 	local data = self:GetData(player)
 	if not data then
@@ -360,7 +360,8 @@ function PlayerDataHandler:PlayerHasGravityCoil(player)
 	end
 
 	-- Adjust this based on how you track purchased items
-	return data.GravityCoilOwned == true or false
+	local endTime = data.GravityEndTime
+	return data.GravityEndTime ~= nil and endTime >= os.time()
 end
 
 function PlayerDataHandler:GrantGravityCoil(player: Player, durationSeconds: number)
@@ -370,6 +371,7 @@ function PlayerDataHandler:GrantGravityCoil(player: Player, durationSeconds: num
 	end
 
 	local now = os.time()
+	print("Now on server time: ", now)
 	local currentEndTime = profile.Data.GravityEndTime or 0
 
 	-- Extend if already active, otherwise start fresh
@@ -381,7 +383,7 @@ function PlayerDataHandler:GrantGravityCoil(player: Player, durationSeconds: num
 	pcall(function()
 		profile:Save()
 	end)
-
+	print("New end time: ", newEndTime)
 	return newEndTime
 end
 
@@ -396,7 +398,62 @@ function PlayerDataHandler:ClearGravityCoil(player: Player)
 	end)
 end
 
+function PlayerDataHandler:CheckGravityAtStart(ProductsService, player, profile)
+	print("Checking gravity at the start.")
+	if not profile then return end
+	local endTime = profile.Data.GravityEndTime
+	local endTimeDuration = endTime - os.time()
+	if endTime == nil or endTime <= 0 or endTimeDuration <= 0 then print("Something not right.") return end
+	
+	ProductsService.Client.GravityActivated:Fire(player, endTime)
+	task.delay(endTimeDuration, function()
+		ProductsService.Client.GravityExpired:Fire(player)
+		self:ClearGravityCoil(player)
+	end)
+end
 
+function PlayerDataHandler:CheckTimedProductsAtStart(ProductsService, player, profile)
+	if not player or not profile or not ProductsService then return end
+	local flyDuration, gravityDuration, doubleJumpDuration = 0
+	local flyEndTime = profile.Data.FlyEndTime
+	if flyEndTime then
+		flyDuration = math.max(0, flyEndTime - os.time())
+	end
+	local gravityEndTime = profile.Data.GravityEndTime
+	if gravityEndTime then
+		gravityDuration = math.max(0, gravityEndTime - os.time())
+	end
+	local doubleJumpEndTime = profile.Data.DoubleJumpEndTime
+	if doubleJumpEndTime then
+		doubleJumpDuration = math.max(0, doubleJumpEndTime - os.time())
+	end
+
+	if flyEndTime and flyDuration > 0 then
+		ProductsService.Client.FlyActivated:Fire(player, flyDuration)
+		task.delay(flyDuration, function()
+			ProductsService.Client.FlyExpired:Fire(player)
+			self:ClearFly(player)
+		end)
+	end
+
+	if gravityEndTime and gravityDuration > 0 then
+		ProductsService.Client.GravityActivated:Fire(player, gravityDuration)
+		task.delay(gravityDuration, function()
+			ProductsService.Client.GravityExpired:Fire(player)
+			self:ClearGravityCoil(player)
+		end)
+	end
+
+	if doubleJumpEndTime and doubleJumpDuration > 0 then
+		ProductsService.Client.DoubleJumpActivated:Fire(player, doubleJumpDuration)
+		task.delay(doubleJumpDuration, function()
+			ProductsService.Client.DoubleJumpExpired:Fire(player)
+			self:ClearDoubleJump(player)
+		end)
+	end
+	
+
+end
 --------- Double Jump ================================================
 function PlayerDataHandler:HasDoubleJump(player: Player): boolean
 	local profile = Profiles[player]
@@ -451,21 +508,80 @@ function PlayerDataHandler:ClearDoubleJump(player: Player)
 	end)
 end
 
-function PlayerDataHandler:CheckDoubleJumpExpiry(ProductsService, player, profile)
-	-- Check if the player has equipped the double jump in a previous session
-	-- Restore Double Jump if active
-	local endTime = profile.Data.DoubleJumpEndTime - os.time()
-	print("End time: ", endTime)
-	if endTime < 0 then return end
+function PlayerDataHandler:CheckDoubleJumpAtStart(ProductsService, player, profile)
+	print("Checking double jump at the start.")
+	if not profile then return end
+	
+	local endTime = profile.Data.DoubleJumpEndTime
+	local endTimeDuration = endTime - os.time()
+	if endTime == nil or endTime <= 0 or endTimeDuration <=0 then return end
 	
 	ProductsService.Client.DoubleJumpActivated:Fire(player, endTime)
-	task.delay(endTime, function()
-		self:ClearDoubleJump(player)
+	task.delay(endTimeDuration, function()
 		ProductsService.Client.DoubleJumpExpired:Fire(player)
+		self:ClearDoubleJump(player)
 	end)
-	self:ClearDoubleJump(player)
-	-- if remaining > 0 then
-	-- end
+end
+
+--------- Fly ================================================
+function PlayerDataHandler:HasFly(player)
+	local data = self:GetData(player)
+	if not data then
+		return false
+	end
+
+	-- Adjust this based on how you track purchased items
+	local endTime = data.FlyEndTime
+	return endTime ~= nil and endTime >= os.time()
+end
+
+function PlayerDataHandler:GrantFly(player, durationSeconds)
+	local profile = Profiles[player]
+	if not profile or not profile:IsActive() then
+		return
+	end
+
+	local now = os.time()
+	local currentEndTime = profile.Data.FlyEndTime or 0
+
+	-- Extend if already active, otherwise start fresh
+	print("Fly duration seconds: ", durationSeconds)
+	local newEndTime = math.max(currentEndTime, now) + durationSeconds
+	profile.Data.FlyEndTime = newEndTime
+	print("Fly saved end time: ", profile.Data.FlyEndTime - os.time())
+
+	pcall(function()
+		profile:Save()
+	end)
+
+	return newEndTime
+end
+
+function PlayerDataHandler:ClearFly(player: Player)
+	local profile = Profiles[player]
+	if not profile or not profile:IsActive() then
+		return
+	end
+	profile.Data.FlyEndTime = nil
+	pcall(function()
+		profile:Save()
+	end)
+end
+
+function PlayerDataHandler:CheckFlyAtStart(ProductsService, player, profile)
+	print("Checking fly at the start.")
+	if not profile then return end
+	
+	local endTime = profile.Data.FlyEndTime
+	local endTimeDuration = endTime - os.time()
+	if endTime == nil or endTime < 0 or endTimeDuration <= 0 then return end
+
+	ProductsService.Client.FlyActivated:Fire(player, endTime)
+	print("Fly duration at the start: ", endTimeDuration)
+	task.delay(endTimeDuration, function()
+		ProductsService.Client.FlyExpired:Fire(player)
+		self:ClearFly(player)
+	end)
 end
 -- === Hoverboard storage ================================================
 
