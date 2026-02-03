@@ -20,7 +20,7 @@ local hoverboard
 local Gear
 local mainFrame
 local closeBtn
-local BG
+local Contents
 local cardTemplate
 local overlay
 
@@ -28,6 +28,7 @@ local overlay
 local boardsFrame
 local boardsList
 local boardSelectionFrame
+local purchaseFrame
 local boardPurchaseBtn
 local boardEquipButton
 local boardCurrentButton
@@ -79,8 +80,9 @@ local cratePurchaseButton
 local trailsFrame
 local trailsList
 local trailSelectionFrame
+local trailSelectionInnerFrame
+local trailPurchaseFrame
 local trailItemDetails
-local trailsItemDetailsBGImage
 local trailItemDetailsTitleLabel
 local trailItemDetailsDescriptionLabel
 local trailPurchaseButton
@@ -93,8 +95,8 @@ local boardsTab
 local trailsTab
 local cratesTab
 
-local SELECTED_COLOR = Color3.fromRGB(107, 223, 255) -- #6bdfff
-local NORMAL_COLOR = Color3.fromRGB(69, 168, 255)
+-- local SELECTED_COLOR = Color3.fromRGB(107, 223, 255) -- #6bdfff
+-- local NORMAL_COLOR = Color3.fromRGB(69, 168, 255)
 
 local GearController = Knit.CreateController({ Name = "GearController" })
 
@@ -132,47 +134,47 @@ local function UIReferences()
 
 	Gear = playerGui:WaitForChild("Gear")
 	mainFrame = Gear:WaitForChild("MainFrame")
-	closeBtn = mainFrame:WaitForChild("Close"):WaitForChild("Button")
-	BG = mainFrame:WaitForChild("BG")
-	cardTemplate = BG:WaitForChild("CardTemplate")
+	closeBtn = mainFrame:WaitForChild("Close")
+	Contents = mainFrame:WaitForChild("Contents")
+	cardTemplate = Contents:WaitForChild("CardTemplate")
 	overlay = Gear:WaitForChild("Overlay")
 
 	--BOARDS SECTION
-	boardsFrame = BG:WaitForChild("HoverboardsFrame")
+	boardsFrame = Contents:WaitForChild("HoverboardsFrame")
 	boardsList = boardsFrame:WaitForChild("Hoverboards")
 	boardSelectionFrame = boardsFrame:WaitForChild("SelectionFrame")
-	local purchaseFrame = boardSelectionFrame:WaitForChild("PurchaseFrame")
+	purchaseFrame = boardSelectionFrame:WaitForChild("Contents"):WaitForChild("PurchaseFrame")
 	boardPurchaseBtn = purchaseFrame:WaitForChild("PurchaseButton")
 	boardEquipButton = purchaseFrame:WaitForChild("EquipButton")
 	boardCurrentButton = purchaseFrame:WaitForChild("CurrentButton")
-	revolvingContainer = boardSelectionFrame:WaitForChild("RevolvingContainer")
-	boardItemDetails = boardSelectionFrame:WaitForChild("ItemDetails")
-	boardItemDetailsBGImage = boardItemDetails:WaitForChild("BGImage")
-	topSpeed = boardItemDetailsBGImage:WaitForChild("TopSpeed")
+	revolvingContainer = boardSelectionFrame:WaitForChild("Contents"):WaitForChild("RevolvingContainer")
+	boardItemDetails = boardSelectionFrame:WaitForChild("Contents"):WaitForChild("ItemDetails")
+	-- boardItemDetailsBGImage = boardItemDetails:WaitForChild("BGImage")
+	topSpeed = boardItemDetails:WaitForChild("TopSpeed")
 	topSpeedFillerBG = topSpeed:WaitForChild("FillerBG")
 	topSpeedFiller = topSpeedFillerBG:WaitForChild("Filler")
 	topSpeedTitle = topSpeed:WaitForChild("Title")
 	topSpeedValue = topSpeed:WaitForChild("Value")
-	acceleration = boardItemDetailsBGImage:WaitForChild("Acceleration")
+	acceleration = boardItemDetails:WaitForChild("Acceleration")
 	accelerationFillerBG = acceleration:WaitForChild("FillerBG")
 	accelerationFiller = accelerationFillerBG:WaitForChild("Filler")
 	accelerationTitle = acceleration:WaitForChild("Title")
 	accelerationValue = acceleration:WaitForChild("Value")
-	jumpPower = boardItemDetailsBGImage:WaitForChild("JumpPower")
+	jumpPower = boardItemDetails:WaitForChild("JumpPower")
 	jumpPowerFillerBG = jumpPower:WaitForChild("FillerBG")
 	jumpPowerFiller = jumpPowerFillerBG:WaitForChild("Filler")
 	jumpPowerTitle = jumpPower:WaitForChild("Title")
 	jumpPowerValue = jumpPower:WaitForChild("Value")
-	boardItemDetailsTitleLabel = boardItemDetailsBGImage:WaitForChild("TitleLable")
+	boardItemDetailsTitleLabel = revolvingContainer:WaitForChild("TitleLable")
 
 	--CRATES SECTION
-	cratesFrame = BG:WaitForChild("CratesFrame")
+	cratesFrame = Contents:WaitForChild("CratesFrame")
 	crateScrollingItemTemplate = cratesFrame:WaitForChild("CrateScrollingItem")
 	cratesList = cratesFrame:WaitForChild("Crates")
 	crateSelectionFrame = cratesFrame:WaitForChild("SelectionFrame")
-	cratePurchaseFrame = crateSelectionFrame:WaitForChild("PurchaseFrame")
-	crateSelectionInnerFrame = crateSelectionFrame:WaitForChild("Frame")
-	crateItemsScrollingFrame = crateSelectionFrame:WaitForChild("ItemsScrollingFrame")
+	cratePurchaseFrame = crateSelectionFrame:WaitForChild("Contents"):WaitForChild("PurchaseFrame")
+	crateSelectionInnerFrame = crateSelectionFrame:WaitForChild("Contents"):WaitForChild("Frame")
+	crateItemsScrollingFrame = crateSelectionFrame:WaitForChild("Contents"):WaitForChild("ItemsScrollingFrame")
 	crateSelectionItemImage = crateSelectionInnerFrame:WaitForChild("ItemImage")
 	crateSelectionItemNameLabel = crateSelectionInnerFrame:WaitForChild("ItemNameLabel")
 	cratePurchaseButton = cratePurchaseFrame:WaitForChild("PurchaseButton")
@@ -187,21 +189,21 @@ local function UIReferences()
 	winningBoardFrameShine = winningBoardFrame:WaitForChild("ShiningRay")
 
 	--TRAILS SECTION
-	trailsFrame = BG:WaitForChild("TrailsFrame")
+	trailsFrame = Contents:WaitForChild("TrailsFrame")
 	trailsList = trailsFrame:WaitForChild("TrailsList")
 	trailSelectionFrame = trailsFrame:WaitForChild("SelectionFrame")
-	trailItemDetails = trailSelectionFrame:WaitForChild("ItemDetails")
-	trailsItemDetailsBGImage = trailItemDetails:WaitForChild("BGImage")
-	trailItemDetailsTitleLabel = trailsItemDetailsBGImage:WaitForChild("Name")
-	trailItemDetailsDescriptionLabel = trailsItemDetailsBGImage:WaitForChild("Description")
+	trailItemDetails = trailSelectionFrame:WaitForChild("Contents"):WaitForChild("ItemDetails")
+	trailSelectionInnerFrame = trailSelectionFrame:WaitForChild("Contents"):WaitForChild("Frame")
+	trailItemDetailsTitleLabel = trailSelectionInnerFrame:WaitForChild("ItemNameLabel")
+	trailItemDetailsDescriptionLabel = trailItemDetails:WaitForChild("Description")
 
-	local trailPurchaseFrame = trailSelectionFrame:WaitForChild("PurchaseFrame")
+	trailPurchaseFrame = trailSelectionFrame:WaitForChild("Contents"):WaitForChild("PurchaseFrame")
 	trailPurchaseButton = trailPurchaseFrame:WaitForChild("PurchaseButton")
 	trailEquipButton = trailPurchaseFrame:WaitForChild("EquipButton")
 	trailUnequipButton = trailPurchaseFrame:WaitForChild("UnequipButton")
 
 	--TABS SECTION
-	tabs = BG:WaitForChild("Tabs")
+	tabs = Contents:WaitForChild("Tabs")
 	boardsTab = tabs:WaitForChild("BoardsButton")
 	trailsTab = tabs:WaitForChild("TrailsButton")
 	cratesTab = tabs:WaitForChild("CratesButton")
@@ -286,7 +288,7 @@ local function SelectHoverboard(boardName)
 				end
 			else
 				print("Owns false")
-				boardPurchaseBtn:WaitForChild("TextLabel").Text = tostring(data.Price)
+				boardPurchaseBtn:WaitForChild("Price").Text = tostring(data.Price)
 				SetBoardButtonState("Purchase")
 			end
 		end)
@@ -529,7 +531,7 @@ local function SelectCrate(crateName)
 	currentCrateConfig = crateName
 	crateSelectionItemNameLabel.Text = data.Name
 	crateSelectionItemImage.Image = data.Image
-	cratePurchaseButton:WaitForChild("TextLabel").Text = tostring(data.Price)
+	cratePurchaseButton:WaitForChild("Price").Text = tostring(data.Price)
 
 	PopulateCrateItemBoardsList(data)
 end
@@ -720,9 +722,9 @@ local function CloseGearGui()
 end
 
 local function SetSelectedTab(selected)
-	boardsTab.BackgroundColor3 = (selected == boardsTab) and SELECTED_COLOR or NORMAL_COLOR
-	cratesTab.BackgroundColor3 = (selected == cratesTab) and SELECTED_COLOR or NORMAL_COLOR
-	trailsTab.BackgroundColor3 = (selected == trailsTab) and SELECTED_COLOR or NORMAL_COLOR
+	boardsTab:WaitForChild("Select").Visible = (selected == boardsTab)
+	cratesTab:WaitForChild("Select").Visible = (selected == cratesTab)
+	trailsTab:WaitForChild("Select").Visible = (selected == trailsTab)
 end
 
 local function OpenTab(selectedTab)
@@ -811,7 +813,7 @@ local function CleanStates()
 	Gear = nil
 	mainFrame = nil
 	closeBtn = nil
-	BG = nil
+	Contents = nil
 	boardsFrame = nil
 	boardsList = nil
 	cardTemplate = nil

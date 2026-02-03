@@ -18,11 +18,11 @@ return {
     },
 
     Events = {
-    --     [76680813943017] = {
-    --         Index = 1,
-    --         Name = "Eid-ul-Fitr",
-    --         BackgroundImage = "rbxassetid://17385065978"
-    --     }
+        [76680813943017] = {
+            Index = 1,
+            Name = "Eid-ul-Fitr",
+            BackgroundImage = "rbxassetid://17385065978"
+        }
     },
 
     Gamemodes = {

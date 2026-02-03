@@ -18,7 +18,7 @@ local Trove = TroveModule.new()
 
 --[UI References]
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local RewardsGUI = PlayerGui:WaitForChild("RewardsGUI")
+local RewardsGUI = PlayerGui:WaitForChild("Rewards")
 local Rewards = RewardsGUI:WaitForChild("Rewards")
 local Contents = Rewards:WaitForChild("Contents")
 local TimeFrame = Contents:WaitForChild("Time")
