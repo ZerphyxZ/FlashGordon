@@ -12,9 +12,10 @@ local Knit = require(ReplicatedStorage.Packages:WaitForChild("Knit"))
 -- [UI References]      -----
 local LocalPlayer = PlayerService.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local WorldsGui = PlayerGui:WaitForChild("WorldsGui")
+local WorldsGui = PlayerGui:WaitForChild("Worlds")
 
 local WorldsUI: Frame = WorldsGui:WaitForChild("Worlds")
+local CloseButton: ImageButton = WorldsUI:WaitForChild("Close")
 local Content: Frame = WorldsUI:WaitForChild("Content")
 local WorldParent: ScrollingFrame = Content:WaitForChild("ScrollingFrame")
 
@@ -135,6 +136,10 @@ function LoadWorldsFromTable(Type: string, ModeTable: {})
 		-- click connection
 		content.Teleport.Button.Activated:Connect(function()
 			RequestTeleport(placeId)
+		end)
+		
+		CloseButton.Activated:Connect(function()
+			WorldUIController:Enable(false)
 		end)
 
 		WorldUIController.Index += 1

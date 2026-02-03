@@ -13,7 +13,8 @@ local Knit = require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Kn
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 local GameHUD = PlayerGui:WaitForChild("GameHUD")
-local ItemHolder = GameHUD:WaitForChild("Items")
+local LeftItemHolder = GameHUD:WaitForChild("ItemsLeft")
+local RightItemHolder = GameHUD:WaitForChild("ItemsRight")
 
 
 local hoverTweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
@@ -28,12 +29,12 @@ local UIController = Knit.CreateController({
 UIController.CurrentActiveScreen = nil
 
 UIController.Buttons = {
-	Spin = ItemHolder:WaitForChild("Spin"),
-	DailyReward = ItemHolder:WaitForChild("DailyReward"),
-	Codes = ItemHolder:WaitForChild("Codes"),
-	TimeReward = ItemHolder:WaitForChild("TimeReward"),
-    Boards = ItemHolder:WaitForChild("Boards"),
-	Worlds = ItemHolder:WaitForChild("Worlds"),
+	Spin = RightItemHolder:WaitForChild("Items"):WaitForChild("Spin"),
+	DailyReward = RightItemHolder:WaitForChild("Items"):WaitForChild("DailyReward"),
+	-- Codes = LeftItemHolder:WaitForChild("Codes"),
+	TimeReward = RightItemHolder:WaitForChild("TimeReward"),
+    Boards = LeftItemHolder:WaitForChild("Boards"),
+	Worlds = LeftItemHolder:WaitForChild("Worlds"),
 }
 
 UIController.Module = { MainGui = UIController }

@@ -13,7 +13,7 @@ local Knit = require(ReplicatedStorage.Packages.Knit)
 
 -- [UI References]		----
 local PlayerGui = PlayerService.LocalPlayer:WaitForChild("PlayerGui")
-local RewardsGUI = PlayerGui:WaitForChild("RewardsGUI")
+local RewardsGUI = PlayerGui:WaitForChild("Rewards")
 local Rewards = RewardsGUI:WaitForChild("Rewards")
 local Contents = Rewards:WaitForChild("Contents")
 

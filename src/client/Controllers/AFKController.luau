@@ -33,7 +33,7 @@ function AFKController:_EnterAFK()
     self._isAFK = true
 
     if self._afkScreen then
-        self._afkScreen.Visible = true
+        self._afkScreen.Enabled = true
     end
 
     if self._controls then
@@ -55,7 +55,7 @@ function AFKController:_ExitAFK()
     self._isAFK = false
 
     if self._afkScreen then
-        self._afkScreen.Visible = false
+        self._afkScreen.Enabled = false
     end
 
     if self._controls then
@@ -76,15 +76,15 @@ function AFKController:KnitStart()
     local playerGui = player:WaitForChild("PlayerGui")
     local gameHUD = playerGui:WaitForChild("GameHUD")
 
-    local itemsFrame = gameHUD:WaitForChild("Items")
-    self._itemAFKButton = itemsFrame:WaitForChild("ItemAFK")
+    local itemsFrame = gameHUD:WaitForChild("ItemsLeft")
+    self._itemAFKButton = itemsFrame:WaitForChild("AFK")
 
-    self._afkScreen = gameHUD:WaitForChild("AFKScreen")
-    local returnFrame = self._afkScreen:WaitForChild("ReturnButtonFrame")
-    self._skipButton = returnFrame:WaitForChild("SkipButton")
+    self._afkScreen = playerGui:WaitForChild("AFK")
+    local mainFrame = self._afkScreen:WaitForChild("MainFrame")
+    self._skipButton = mainFrame:WaitForChild("SkipButton")
 
     -- Make sure AFKScreen starts hidden
-    self._afkScreen.Visible = false
+    self._afkScreen.Enabled = false
 
     -- Disable movement using the built-in PlayerModule controls
     local playerScripts = player:WaitForChild("PlayerScripts")

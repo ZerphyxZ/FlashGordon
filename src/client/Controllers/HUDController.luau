@@ -8,7 +8,7 @@ local ReplicatedStorage = Global.ReplicatedStorage
 --UI References
 local playerGui = player:WaitForChild("PlayerGui")
 local GameHUD = playerGui:WaitForChild("GameHUD")
-local itemsList = GameHUD:WaitForChild("Items")
+local itemsList = GameHUD:WaitForChild("ItemsLeft")
 
 local HUDController = Knit.CreateController({ Name = "HUDController" })
 
