@@ -151,10 +151,6 @@ function HoverboardService:RemoveHoverboard(player)
 end
 
 ----------------------------------------------------------
--- Client Requestable Methods
-----------------------------------------------------------
-
-----------------------------------------------------------
 -- Hoverboards (Client APIs)
 ----------------------------------------------------------
 function HoverboardService.Client:RequestEquipHoverboard(player, boardName)
@@ -243,54 +239,6 @@ end
 
 function HoverboardService.Client:GetEquippedHoverboard(player)
 	return PlayerDataHandler:GetEquippedHoverboard(player)
-end
-
-function HoverboardService.Client:PurchaseHoverboard(player, boardName, price, currencyType)
-	print("PurchaseHoverboard called:", player.Name, boardName, price, currencyType)
-	-- currencyType: "Coins" or "Robux"
-	local playerData = PlayerDataHandler:GetData(player)
-
-	if not playerData then
-		return false, "Player data not found"
-	end
-
-	-- Check if already owned
-	if PlayerDataHandler:PlayerOwnsHoverboard(player, boardName) then
-		return false, "Already owned"
-	end
-
-	-- Check if valid hoverboard
-	local config = Hoverboards.GetConfig(boardName)
-	if not config then
-		return false, "Invalid hoverboard"
-	end
-
-	-- Process payment
-	if currencyType == "Coins" then
-		if playerData.Coins < price then
-			return false, "Insufficient coins"
-		end
-		PlayerDataHandler:DeductCoins(player, price)
-	elseif currencyType == "Robux" then
-		-- Implement Robux purchase logic here
-		-- This would typically use MarketplaceService
-		return false, "Robux purchases not implemented yet"
-	else
-		return false, "Invalid currency type"
-	end
-
-	-- Add to inventory
-	local success = PlayerDataHandler:AddHoverboardToInventory(player, boardName)
-	if success then
-		print("[HoverboardService] Purchased hoverboard:", player.Name, boardName, price, currencyType)
-		return true, "Purchase successful"
-	else
-		-- Refund if failed to add to inventory
-		if currencyType == "Coins" then
-			PlayerDataHandler:IncrementCoins(player, price)
-		end
-		return false, "Purchase failed"
-	end
 end
 
 function HoverboardService.Client:GetHoverboardInventory(player)

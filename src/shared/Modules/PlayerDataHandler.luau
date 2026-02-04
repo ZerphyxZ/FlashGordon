@@ -248,8 +248,9 @@ function PlayerDataHandler:DeductCoins(player: Player, amountDeducted: number)
 	local playerData = self:GetData(player)
 	if playerData then
 		local prevCoins = playerData.Coins
+		print("Previous coins: ", prevCoins)
 		local updatedCoins = prevCoins - amountDeducted
-		--print(updatedCoins,"updatedCoins")
+		print("Updated coins: ", updatedCoins)
 		self:SetPlayerData(player, { Coins = updatedCoins })
 		player:SetAttribute("Coins", updatedCoins)
 	end
@@ -352,6 +353,47 @@ function PlayerDataHandler:ResetProfileToTemplate(player: Player)
 	return true
 end
 
+function PlayerDataHandler:CheckTimedProductsAtStart(ProductsService, player, profile)
+	if not player or not profile or not ProductsService then return end
+	local flyDuration, gravityDuration, doubleJumpDuration = 0
+	local flyEndTime = profile.Data.FlyEndTime
+	if flyEndTime then
+		flyDuration = math.max(0, flyEndTime - os.time())
+	end
+	local gravityEndTime = profile.Data.GravityEndTime
+	if gravityEndTime then
+		gravityDuration = math.max(0, gravityEndTime - os.time())
+	end
+	local doubleJumpEndTime = profile.Data.DoubleJumpEndTime
+	if doubleJumpEndTime then
+		doubleJumpDuration = math.max(0, doubleJumpEndTime - os.time())
+	end
+
+	if flyEndTime and flyDuration > 0 then
+		ProductsService.Client.FlyActivated:Fire(player, flyDuration)
+		task.delay(flyDuration, function()
+			ProductsService.Client.FlyExpired:Fire(player)
+			self:ClearFly(player)
+		end)
+	end
+
+	if gravityEndTime and gravityDuration > 0 then
+		ProductsService.Client.GravityActivated:Fire(player, gravityDuration)
+		task.delay(gravityDuration, function()
+			ProductsService.Client.GravityExpired:Fire(player)
+			self:ClearGravityCoil(player)
+		end)
+	end
+
+	if doubleJumpEndTime and doubleJumpDuration > 0 then
+		ProductsService.Client.DoubleJumpActivated:Fire(player, doubleJumpDuration)
+		task.delay(doubleJumpDuration, function()
+			ProductsService.Client.DoubleJumpExpired:Fire(player)
+			self:ClearDoubleJump(player)
+		end)
+	end
+end
+
 -- === Gravity Coil ================================================
 function PlayerDataHandler:PlayerHasGravityCoil(player)
 	local data = self:GetData(player)
@@ -410,49 +452,6 @@ function PlayerDataHandler:CheckGravityAtStart(ProductsService, player, profile)
 		ProductsService.Client.GravityExpired:Fire(player)
 		self:ClearGravityCoil(player)
 	end)
-end
-
-function PlayerDataHandler:CheckTimedProductsAtStart(ProductsService, player, profile)
-	if not player or not profile or not ProductsService then return end
-	local flyDuration, gravityDuration, doubleJumpDuration = 0
-	local flyEndTime = profile.Data.FlyEndTime
-	if flyEndTime then
-		flyDuration = math.max(0, flyEndTime - os.time())
-	end
-	local gravityEndTime = profile.Data.GravityEndTime
-	if gravityEndTime then
-		gravityDuration = math.max(0, gravityEndTime - os.time())
-	end
-	local doubleJumpEndTime = profile.Data.DoubleJumpEndTime
-	if doubleJumpEndTime then
-		doubleJumpDuration = math.max(0, doubleJumpEndTime - os.time())
-	end
-
-	if flyEndTime and flyDuration > 0 then
-		ProductsService.Client.FlyActivated:Fire(player, flyDuration)
-		task.delay(flyDuration, function()
-			ProductsService.Client.FlyExpired:Fire(player)
-			self:ClearFly(player)
-		end)
-	end
-
-	if gravityEndTime and gravityDuration > 0 then
-		ProductsService.Client.GravityActivated:Fire(player, gravityDuration)
-		task.delay(gravityDuration, function()
-			ProductsService.Client.GravityExpired:Fire(player)
-			self:ClearGravityCoil(player)
-		end)
-	end
-
-	if doubleJumpEndTime and doubleJumpDuration > 0 then
-		ProductsService.Client.DoubleJumpActivated:Fire(player, doubleJumpDuration)
-		task.delay(doubleJumpDuration, function()
-			ProductsService.Client.DoubleJumpExpired:Fire(player)
-			self:ClearDoubleJump(player)
-		end)
-	end
-	
-
 end
 --------- Double Jump ================================================
 function PlayerDataHandler:HasDoubleJump(player: Player): boolean
