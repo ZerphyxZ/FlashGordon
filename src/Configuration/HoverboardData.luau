@@ -79,6 +79,38 @@ local Hoverboards = {
 		Currency = "Coins",
 		Image = "rbxassetid://18566592803",
 	},
+	Hoverboard11 = {
+		TopSpeed = 110,
+		Acceleration = 2.9,
+		JumpPower = 60,
+		Price = 1,
+		Currency = "Coins",
+		Image = "rbxassetid://18566592803",
+	},
+	Hoverboard12 = {
+		TopSpeed = 110,
+		Acceleration = 2.9,
+		JumpPower = 60,
+		Price = 1,
+		Currency = "Coins",
+		Image = "rbxassetid://18566592803",
+	},
+	Hoverboard13 = {
+		TopSpeed = 110,
+		Acceleration = 2.9,
+		JumpPower = 60,
+		Price = 1,
+		Currency = "Coins",
+		Image = "rbxassetid://18566592803",
+	},
+	Hoverboard14 = {
+		TopSpeed = 110,
+		Acceleration = 2.9,
+		JumpPower = 60,
+		Price = 1,
+		Currency = "Coins",
+		Image = "rbxassetid://18566592803",
+	},
 }
 
 function Hoverboards.GetConfig(name)

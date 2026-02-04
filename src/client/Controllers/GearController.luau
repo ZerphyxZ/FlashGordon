@@ -10,6 +10,8 @@ local hoverboardsData = require(ReplicatedStorage:WaitForChild("Configuration"):
 local trailData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("TrailsConfig"))
 local cratesData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("CratesConfig"))
 local HoverboardService
+local GearService
+local CoinsController
 
 local character
 local hoverboard
@@ -94,22 +96,25 @@ local tabs
 local boardsTab
 local trailsTab
 local cratesTab
+local statusMessage
 
 -- local SELECTED_COLOR = Color3.fromRGB(107, 223, 255) -- #6bdfff
 -- local NORMAL_COLOR = Color3.fromRGB(69, 168, 255)
 
-local GearController = Knit.CreateController({ Name = "GearController" })
-
 local currentBoardConfig = nil
 local equippedBoard = nil
-
 local currentTrailConfig = nil
 local equippedTrail = nil
-
 local currentCrateConfig = nil
 local equippedCrate = nil
-
 local TAB_CONFIG = {}
+
+local WARNING_TEXT = "Something went wrong!"
+local RED_COLOR = Color3.fromRGB(255, 0, 0)
+local GREEN_COLOR = Color3.fromRGB(0, 255, 0)
+local YELLOW_COLOR = Color3.fromRGB(255, 255, 0)
+
+local GearController = Knit.CreateController({ Name = "GearController" })
 
 local FILL_TWEEN_INFO = TweenInfo.new(
 	0.2, -- duration
@@ -208,12 +213,22 @@ local function UIReferences()
 	trailsTab = tabs:WaitForChild("TrailsButton")
 	cratesTab = tabs:WaitForChild("CratesButton")
 
+	statusMessage = mainFrame:WaitForChild("StatusMessage")
+
 	TAB_CONFIG = {
 		[boardsTab] = boardsFrame,
 		[cratesTab] = cratesFrame,
 		[trailsTab] = trailsFrame,
 	}
 	print("UI references rebuilt on character spawn")
+end
+
+local function ShowStatusMessage(message, color)
+	statusMessage.Visible = true
+	statusMessage.BackgroundColor3 = color
+	statusMessage.Text = message
+	task.wait(2)
+	statusMessage.Visible = false
 end
 
 local function SetButtonsActive(active)
@@ -253,12 +268,9 @@ local function UpdateSelectionStats(boardName, data)
 	jumpPowerValue.Text = tostring(data.JumpPower)
 
 	-- Tween Fillers
-	TweenFiller(topSpeedFiller, data.TopSpeed / 100)
-	TweenFiller(accelerationFiller, data.Acceleration / 2)
+	TweenFiller(topSpeedFiller, data.TopSpeed / 150)
+	TweenFiller(accelerationFiller, data.Acceleration / 4)
 	TweenFiller(jumpPowerFiller, data.JumpPower / 100)
-	-- topSpeedFiller.Size = UDim2.new(data.TopSpeed / 100, 0, 1, 0)
-	-- accelerationFiller.Size = UDim2.new(data.Acceleration / 2, 0, 1, 0)
-	-- jumpPowerFiller.Size = UDim2.new(data.JumpPower / 100, 0, 1, 0)
 end
 
 local function SelectHoverboard(boardName)
@@ -275,7 +287,7 @@ local function SelectHoverboard(boardName)
 		return
 	end
 
-	HoverboardService:PlayerOwnsHoverboard(boardName)
+	GearService:PlayerOwnsHoverboard(boardName)
 		:andThen(function(owns)
 			print("Owns:", owns)
 
@@ -349,11 +361,23 @@ local function PurchaseHoverboard()
 		return
 	end
 
-	local success, message =
-		HoverboardService:PurchaseHoverboard(currentBoardConfig, boardData.Price, boardData.Currency)
-	if success then
-		SetBoardButtonState("Equip")
-	end
+	GearService:PurchaseHoverboard(currentBoardConfig, boardData.Price, boardData.Currency)
+	:andThen(function(success, message)
+		print("Success status:", success)
+		print("Message:", message)
+
+		if success then
+			CoinsController:RefreshDisplay()
+			SetBoardButtonState("Equip")
+			ShowStatusMessage(message, GREEN_COLOR)
+		else
+			ShowStatusMessage(message, RED_COLOR)
+		end
+
+	end):catch(function(err)
+		warn("PurchaseHoverboard failed:", err)
+		ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
+	end)
 end
 --------------------------------------------------------
 
@@ -409,7 +433,7 @@ local function PopulateTrails()
 			card:SetAttribute("TrailCard", true)
 
 			card:WaitForChild("Title").Text = data.Name
-			--card:WaitForChild("ItemImage").Image = data.Image
+			card:WaitForChild("ItemImage").Image = data.Image
 			card:WaitForChild("Frame"):WaitForChild("Price").Text = tostring(data.Price)
 
 			card.MouseButton1Click:Connect(function()
@@ -429,28 +453,53 @@ local function PurchaseTrail()
 		return
 	end
 
-	local success = HoverboardService:PurchaseTrail(currentTrailConfig, data.Price, data.Currency)
-
-	if success then
-		SetTrailButtonState("Equip")
-	end
+	GearService:PurchaseTrail(currentTrailConfig, data.Price, data.Currency)
+	:andThen(function(success, message)
+		print("Success: ", success)
+		print("Message: ", message)
+		
+		if success then
+			CoinsController:RefreshDisplay()
+			SetTrailButtonState("Equip")
+			ShowStatusMessage(message, GREEN_COLOR)
+		else
+			ShowStatusMessage(message, RED_COLOR)
+		end
+		
+	end):catch(function(err)
+		warn("PurchaseTrail failed:", err)
+		ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
+	end)
 end
 
 local function EquipTrail()
-	if not currentTrailConfig then
-		return
-	end
-
-	HoverboardService:EquipTrail(currentTrailConfig)
-	equippedTrail = currentTrailConfig
-	print("equippedTrail", equippedTrail)
-	SetTrailButtonState("Unequip")
+	if not currentTrailConfig then return end
+	GearService:EquipTrail(currentTrailConfig):andThen(function(success, message)
+		if success then
+			equippedTrail = currentTrailConfig
+			print("equippedTrail", equippedTrail)
+			SetTrailButtonState("Unequip")
+			ShowStatusMessage(message, GREEN_COLOR)
+		else
+			ShowStatusMessage(message, RED_COLOR)
+		end
+	end):catch(function()
+		ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
+	end)
 end
 
 local function UnequipTrail()
-	HoverboardService:UnequipTrail()
-	equippedTrail = nil
-	SetTrailButtonState("Equip")
+	GearService:UnequipTrail():andThen(function(success, message)
+		if success then
+			equippedTrail = nil
+			SetTrailButtonState("Equip")
+			ShowStatusMessage(message, GREEN_COLOR)
+		else
+			ShowStatusMessage(message, RED_COLOR)
+		end
+	end):catch(function()
+		ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
+	end)
 end
 --------------------------------------------------------
 
@@ -861,6 +910,9 @@ end
 
 local function OnCharacterAdded(char)
 	HoverboardService = Knit.GetService("HoverboardService")
+	GearService = Knit.GetService("GearService")
+	CoinsController = Knit.GetController("CoinsController")
+	
 	UIReferences()
 	BindInput()
 	PopulateItems()

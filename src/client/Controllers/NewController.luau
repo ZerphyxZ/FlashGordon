@@ -30,11 +30,12 @@ local HoverboardData = require(Configuration:WaitForChild("HoverboardData"))
 local TrailsConfig = require(Configuration:WaitForChild("TrailsConfig"))
 local DashTrailModule = ReplicatedStorage:WaitForChild("VFX"):WaitForChild("HoverboardVFX"):WaitForChild("ElectricDash")
 local HoverboardService
+local GearService
 local ProductsService
 local ProductsController
 
 -- MOVEMENT / ORIENTATION
-local RayDistance = 4
+local RayDistance = 10
 local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
@@ -207,18 +208,13 @@ function GetMaxJumps()
 end
 
 ------------------- UPDATE SPEED GUI -----------------------
-function UpdateSpeedGUI(MaxSpeed)
-    -- local value = (bodyVelocity.Velocity * Vector3.new(1, 0, 1)).Magnitude or 0
-    local value = (Board.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude or 0
-    speedLabel.Text = string.format("Speed: %.0f", math.round(value))
-
-    local xScale = 1
-    if topSpeed then
-        xScale = 1 - (value / topSpeed)
-    end
-
-    xScale = math.clamp(xScale, 0, 1)
-    speedFrame.Size = UDim2.fromScale(xScale, speedFrame.Size.Y.Scale)
+function UpdateSpeedGUI(topSpeed)
+    if not bodyVelocity or not topSpeed or topSpeed <= 0 then return end
+    
+    local speed = (bodyVelocity.Velocity * Vector3.new(1, 0, 1)).Magnitude or 0
+    speedLabel.Text = string.format("Speed: %.0f", math.round(speed))
+    local alpha = math.clamp(speed / topSpeed, 0, 1)
+    speedFrame.Size = UDim2.new(alpha, 0, speedFrame.Size.Y.Scale, 0)
 end
 -----------------------------------------------------------
 
@@ -866,10 +862,6 @@ local function ResetStates()
     dashReady = true
     isDashing = false
     spaceHeld = false
-    -- hasGravityCoil = false
-    -- hasDoubleJump = false
-    -- hasFly = false
-    NewController:SetGravityCoil(false)
     workspace.Gravity = DEFAULT_GRAVITY
 end
 
@@ -1056,6 +1048,7 @@ end
 
 function NewController:OnCharacterAdded(char)
     HoverboardService = Knit.GetService("HoverboardService")
+    GearService = Knit.GetService("GearService")
     ProductsService = Knit.GetService("ProductsService")
     ProductsController = Knit.GetController("ProductsController")
 
@@ -1140,7 +1133,7 @@ function NewController:BindGear()
     HoverboardService.HoverboardRemoved:Connect(function()
         isHoverboardInitialized = false
     end)
-    HoverboardService.TrailEquipped:Connect(function(owner, trailName)
+    GearService.TrailEquipped:Connect(function(owner, trailName)
         print("EquipTrail event received")
         if owner ~= player then
             return
@@ -1151,7 +1144,7 @@ function NewController:BindGear()
             SetTrail(trailConfig.Color)
         end
     end)
-    HoverboardService.TrailUnequipped:Connect(function()
+    GearService.TrailUnequipped:Connect(function()
         Trail.Enabled = false
     end)
     HoverboardService.ControlSignal:Connect(function(action)
