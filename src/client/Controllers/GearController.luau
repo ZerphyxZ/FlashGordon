@@ -431,11 +431,9 @@ local function PopulateTrails()
 			card.Visible = true
 			card.Parent = trailsList
 			card:SetAttribute("TrailCard", true)
-
 			card:WaitForChild("Title").Text = data.Name
 			card:WaitForChild("ItemImage").Image = data.Image
 			card:WaitForChild("Frame"):WaitForChild("Price").Text = tostring(data.Price)
-
 			card.MouseButton1Click:Connect(function()
 				SelectTrail(trailName)
 			end)
@@ -855,9 +853,9 @@ local function CleanStates()
 	trailsFrame.Visible = false
 
 	-- Optional: reset tab colors
-	boardsTab.BackgroundColor3 = NORMAL_COLOR
-	cratesTab.BackgroundColor3 = NORMAL_COLOR
-	trailsTab.BackgroundColor3 = NORMAL_COLOR
+	-- boardsTab.BackgroundColor3 = NORMAL_COLOR
+	-- cratesTab.BackgroundColor3 = NORMAL_COLOR
+	-- trailsTab.BackgroundColor3 = NORMAL_COLOR
 
 	Gear = nil
 	mainFrame = nil

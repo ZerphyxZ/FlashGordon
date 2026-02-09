@@ -818,7 +818,8 @@ local function SetTrail(trailColor)
 end
 
 local function ApplyEquippedTrail()
-    HoverboardService:GetEquippedTrail():andThen(function(trailName)
+    GearService:GetEquippedTrail():andThen(function(trailName)
+        print("Trail: ", trailName)
         if not Trail then
             return
         end
@@ -836,7 +837,7 @@ local function ApplyEquippedTrail()
             return
         end
         Trail.Enabled = true
-        Trail.Color = ColorSequence.new(config.Color)
+        SetTrail(config.Color)
         print("Trail applied:", trailName)
     end)
 end
@@ -852,7 +853,6 @@ local function ResetStates()
     acceleration = 0
     topSpeed = 0
     jumpPower = 0
-    ForwardLean = 0
     NewController.SpeedVar = 0
     NewController.CurrentSpeed = 0
     flyEnergy = 0
@@ -862,7 +862,6 @@ local function ResetStates()
     dashReady = true
     isDashing = false
     spaceHeld = false
-    workspace.Gravity = DEFAULT_GRAVITY
 end
 
 local function InitializeHoverboard()
@@ -909,8 +908,7 @@ function NewController:SetActiveConfig(boardName)
     Board = character:WaitForChild("Hoverboard"):WaitForChild("PrimaryPart")
     invisiblePart = Board.Parent:WaitForChild("Invisible")
     Trail = Board:WaitForChild("Trail")
-    Trail.Enabled = false
-    -- ApplyEquippedTrail()
+    ApplyEquippedTrail()
     isHoverboardInitialized = true
     self:StartHoverboard(config)
 end
@@ -1057,7 +1055,7 @@ function NewController:OnCharacterAdded(char)
     humanoid.AutoRotate = false
     HandleHumanoidStates()
     humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-
+    
     -- Disable all humanoid animations
     local animator = humanoid:FindFirstChildOfClass("Animator")
     if animator then
@@ -1133,23 +1131,18 @@ function NewController:BindGear()
     HoverboardService.HoverboardRemoved:Connect(function()
         isHoverboardInitialized = false
     end)
-    GearService.TrailEquipped:Connect(function(owner, trailName)
+    GearService.TrailEquipped:Connect(function(trailName)
         print("EquipTrail event received")
-        if owner ~= player then
-            return
-        end
         local trailConfig = TrailsConfig.GetConfig(trailName)
-        if trailConfig then
-            Trail.Enabled = true
-            SetTrail(trailConfig.Color)
-        end
+        if not trailConfig then return end
+        Trail.Enabled = true
+        SetTrail(trailConfig.Color)
     end)
     GearService.TrailUnequipped:Connect(function()
         Trail.Enabled = false
     end)
     HoverboardService.ControlSignal:Connect(function(action)
         local ctrl = GetControls()
-
         if action == "Disable" then
             ctrl:Disable()
         elseif action == "Enable" then
