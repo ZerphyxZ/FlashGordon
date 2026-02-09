@@ -108,7 +108,7 @@ function GearService.Client:PurchaseTrail(player, trailName, price, currencyType
 	end
 end
 
-function GearService.Client:EquipTrail()
+function GearService.Client:EquipTrail(player, trailName)
 	PlayerDataHandler:SetEquippedTrail(player, trailName)
 	self.TrailEquipped:Fire(player, trailName)
 	return true, "Trail Successfully Equipped!" 
@@ -118,6 +118,10 @@ function GearService.Client:UnequipTrail(player)
 	PlayerDataHandler:SetEquippedTrail(player, nil)
 	self.TrailUnequipped:Fire(player)
 	return true, "Trail Successfully Unequipped!"
+end
+
+function GearService.Client:GetEquippedTrail(player)
+	return PlayerDataHandler:GetEquippedTrail(player)
 end
 
 --CRATES-----------------------------

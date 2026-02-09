@@ -713,7 +713,12 @@ end
 function PlayerDataHandler:GetEquippedTrail(player: Player): string?
 	local profile = Profiles[player]
 	if profile and profile:IsActive() then
-		return profile.Data.EquippedTrail
+		local trail = profile.Data.EquippedTrail
+		print("Getting the last equipped trail: ", trail)
+		if trail == "None" then
+			return nil
+		end
+		return trail
 	end
 	return nil
 end
@@ -721,14 +726,19 @@ end
 function PlayerDataHandler:SetEquippedTrail(player: Player, trailName: string?)
 	local profile = Profiles[player]
 	if profile and profile:IsActive() then
-		if trailName == nil or self:PlayerOwnsTrail(player, trailName) then
+		if trailName == nil then
+			profile.Data.EquippedTrail = "None"
+		elseif self:PlayerOwnsTrail(player, trailName) then
 			profile.Data.EquippedTrail = trailName
-			pcall(function()
-				profile:Save()
-			end)
-			print("[PlayerDataHandler] Trail equipped for", player.Name, "→", trailName)
-			return true
+		else
+			return false
 		end
+		print("Setting the equipped trail: ", profile.Data.EquippedTrail)
+		print("[PlayerDataHandler] Trail equipped for", player.Name, "→", trailName)
+		pcall(function()
+			profile:Save()
+		end)
+		return true
 	end
 	return false
 end
