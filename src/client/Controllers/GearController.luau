@@ -502,7 +502,8 @@ local function OpenWinningBoardFrame(board, active)
     winningBoardFrame.Visible = active
     winningBoardFrameShine.Visible = active
 
-    winningBoardImage.Image = board.Image
+    winningBoardImage:WaitForChild("BoardImage").Image = board.Image
+	winningBoardImage:WaitForChild("RarityBG").Image = board.Background
     winningBoardNameLabel.Text = board.Name
 end
 
@@ -526,6 +527,7 @@ local function PopulateCrateItemBoardsList(crateData)
 
             -- UI fill
             item:WaitForChild("ItemImage").Image = boardData.Image
+			item:WaitForChild("RarityBG").Image = boardData.Background
             item:WaitForChild("PercentageLabel").Text = string.format("%.2f%%", boardData.Percentage)
         end
     end
@@ -540,6 +542,7 @@ local function PopulateCrateItemBoardsList(crateData)
 
             -- Fill card UI
             card:WaitForChild("BoardImage").Image = boardData.Image
+			card:WaitForChild("RarityBG").Image = boardData.Background
             card:WaitForChild("BoardNameLabel").Text = boardData.Name
         end
     end

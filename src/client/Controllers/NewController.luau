@@ -35,7 +35,7 @@ local ProductsService
 local ProductsController
 
 -- MOVEMENT / ORIENTATION
-local RayDistance = 10
+local RayDistance = 20
 local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
@@ -718,7 +718,7 @@ function ApplyOrientation(deltaTimeRender)
     local BoardCF = Board.CFrame
     local newNormal = RaycastResult and RaycastResult.Normal or Vector3.yAxis
     if newNormal then
-        local velocity = bodyVelocity.Velocity * Vector3.new(1, 0, 1)
+        local velocity = Board.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
         local LookVector = BoardCF.LookVector
         if velocity.Magnitude < 0.01 then
             return
