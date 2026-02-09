@@ -404,7 +404,7 @@ local function SelectTrail(trailName)
 		return
 	end
 
-	HoverboardService:PlayerOwnsTrail(trailName)
+	GearService:PlayerOwnsTrail(trailName)
 		:andThen(function(owns)
 			if owns then
 				SetTrailButtonState("Equip")

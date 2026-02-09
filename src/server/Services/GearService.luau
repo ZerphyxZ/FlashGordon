@@ -78,6 +78,10 @@ function GearService.Client:PlayerOwnsHoverboard(player, boardName)
 end
 
 --TRAILS-----------------------------
+function GearService.Client:PlayerOwnsTrail(player, trailName)
+	return PlayerDataHandler:PlayerOwnsTrail(player, trailName)
+end
+
 function GearService.Client:PurchaseTrail(player, trailName, price, currencyType)
 	local data = PlayerDataHandler:GetData(player)
 	if not data then

@@ -27,8 +27,6 @@ local HoverboardService = Knit.CreateService({
 		HoverboardChanged = Knit.CreateSignal(),
 		ControlSignal = Knit.CreateSignal(),
 		GravitySignal = Knit.CreateSignal(),
-		TrailEquipped = Knit.CreateSignal(),
-		TrailUnequipped = Knit.CreateSignal(),
 	},
 })
 
@@ -252,52 +250,6 @@ function HoverboardService.Client:GetHoverboardInventory(player)
 		TotalHoverboards = total,
 		AvailableHoverboards = total - #owned,
 	}
-end
-
-----------------------------------------------------------
--- Trails (Client APIs)
-----------------------------------------------------------
-function HoverboardService.Client:PlayerOwnsTrail(player, trailName)
-	return PlayerDataHandler:PlayerOwnsTrail(player, trailName)
-end
-
-function HoverboardService.Client:PurchaseTrail(player, trailName, price, currencyType)
-	local data = PlayerDataHandler:GetData(player)
-	if not data then
-		return false
-	end
-
-	if PlayerDataHandler:PlayerOwnsTrail(player, trailName) then
-		print("Player already owns this trail")
-		return false
-	end
-
-	if currencyType == "Coins" then
-		if data.Coins < price then
-			print("Insufficient coins to purchase trail")
-			return false
-		end
-		PlayerDataHandler:DeductCoins(player, price)
-		print("Deducted", price, "coins from", player.Name)
-	end
-
-	return PlayerDataHandler:AddTrailToInventory(player, trailName)
-end
-
-function HoverboardService.Client:EquipTrail(player, trailName)
-	PlayerDataHandler:SetEquippedTrail(player, trailName)
-	self.TrailEquipped:Fire(player, trailName)
-	return true
-end
-
-function HoverboardService.Client:UnequipTrail(player)
-	PlayerDataHandler:SetEquippedTrail(player, nil)
-	self.TrailUnequipped:Fire(player)
-	return true
-end
-
-function HoverboardService.Client:GetEquippedTrail(player)
-	return PlayerDataHandler:GetEquippedTrail(player)
 end
 
 ----------------------------------------------------------
