@@ -129,8 +129,45 @@ function GearService.Client:GetEquippedTrail(player)
 end
 
 --CRATES-----------------------------
-function GearService.Client:PurchaseCrate()
+function GearService.Client:PlayerOwnsCrate(player, crateName)
+	return PlayerDataHandler:PlayerOwnsCrate(player, crateName)
+end
 
+function GearService.Client:PurchaseCrate(player, crateName, price, currencyType)
+	local data = PlayerDataHandler:GetData(player)
+	if not data then
+		print("GearService: PurchaseCrate failed")
+		return false
+	end
+
+	if currencyType == "Coins" then
+		if data.Coins < price then
+			print("Insufficient coins to purchase crate")
+			return false
+		end
+		PlayerDataHandler:DeductCoins(player, price)
+		print("Deducted", price, "coins from", player.Name)
+	end
+
+	return PlayerDataHandler:AddCrateToInventory(player, crateName)
+end
+
+function GearService.Client:EquipCrate(player, crateName)
+	PlayerDataHandler:SetEquippedCrate(player, crateName)
+	return true
+end
+
+function GearService.Client:UnequipCrate(player)
+	PlayerDataHandler:SetEquippedCrate(player, nil)
+	return true
+end
+
+function GearService.Client:GetEquippedCrate(player)
+	return PlayerDataHandler:GetEquippedCrate(player)
+end
+
+function GearService.Client:GetOwnedCrates(player)
+	return PlayerDataHandler:GetOwnedCrates(player)
 end
 
 
