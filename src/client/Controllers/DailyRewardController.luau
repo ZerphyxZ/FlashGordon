@@ -27,10 +27,11 @@ local Daily = Contents:WaitForChild("Daily")
 local Time = Contents:WaitForChild("Time")
 
 local Sections = Rewards:WaitForChild("Sections")
-local DailyButtonFrame = Sections:WaitForChild("Daily")
-local DailyRewardbutton = DailyButtonFrame:WaitForChild("Button")
+local DailyRewardButton = Sections:WaitForChild("Daily")
+local CodesButton = Sections:WaitForChild("Codes")
+local TimeButton = Sections:WaitForChild("Time")
 
-local CloseButton = Rewards:WaitForChild("Close"):WaitForChild("Button")
+local CloseButton = Rewards:WaitForChild("Close")
 
 local NormalTemplate = Daily:WaitForChild("NormalTemplate")
 local DaySevenTemplate = Daily:WaitForChild("DaySevenTemplate")
@@ -87,15 +88,18 @@ local function StartCountdown(tNext: number, timeLabel, button)
 			button.Visible = true
 			timeLabel.Visible = false
 		else
-			timeLabel.BackFrame.FrontFrame.TextLabel.Text = FormatHHMMSS(left)
+			timeLabel.TextLabel.Text = FormatHHMMSS(left)
 		end
 	end)
 end
 
 local function EnableDailyReward()
 	Time.Visible = false
+	TimeButton:WaitForChild("Select").Visible = false
 	Codes.Visible = false
+	CodesButton:WaitForChild("Select").Visible = false
 	Daily.Visible = true
+	DailyRewardButton:WaitForChild("Select").Visible = true
 	DailyRewardController:UpdateRewards()
 end
 
@@ -198,7 +202,7 @@ function UpdateState(state: { [string]: any })
 		local day = tonumber(day)
 		if day <= claimedDays and streak > 0 then -- already claimed
 			check.Visible = true
-			check.BackFrame.FrontFrame.TextLabel.Text = "Claimed"
+			check.TextLabel.Text = "Claimed"
 
 			button.Visible = false
 			timer.Visible = false
@@ -220,7 +224,7 @@ function UpdateState(state: { [string]: any })
 			end
 		else -- Future days
 			check.Visible = true
-			check.BackFrame.FrontFrame.TextLabel.Text = "Day " .. day
+			check.TextLabel.Text = "Day " .. day
 
 			button.Visible = false
 			timer.Visible = false
@@ -258,7 +262,7 @@ function DailyRewardController:KnitStart()
 	DailyRewardService = Knit.GetService("DailyRewardService")
 	CoinsController = Knit.GetController("CoinsController")
 
-	DailyRewardbutton.MouseButton1Click:Connect(EnableDailyReward)
+	DailyRewardButton.MouseButton1Click:Connect(EnableDailyReward)
 	Initialize()
 end
 

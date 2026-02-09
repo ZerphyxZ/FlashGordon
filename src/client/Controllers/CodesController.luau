@@ -25,8 +25,9 @@ local textBox = Codes:WaitForChild("Box")
 local ClaimButton = Codes:WaitForChild("ClaimButton")
 
 local Sections = Rewards:WaitForChild("Sections")
-local CodesButtonFrame = Sections:WaitForChild("Codes")
-local Codesbutton = CodesButtonFrame:WaitForChild("Button")
+local CodesButton = Sections:WaitForChild("Codes")
+local DailyRewardButton = Sections:WaitForChild("Daily")
+local TimeButton = Sections:WaitForChild("Time")
 
 -- [Variables]		----
 local PlaceHolderText = "Enter code..."
@@ -85,8 +86,11 @@ end
 
 local function EnableCodes()
 	Daily.Visible = false
+	DailyRewardButton:WaitForChild("Select").Visible = false
 	Time.Visible = false
+	TimeButton:WaitForChild("Select").Visible = false
 	Codes.Visible = true
+	CodesButton:WaitForChild("Select").Visible = true
 	HandleTextBoxFrame()
 end
 
@@ -109,7 +113,7 @@ function CodesController:KnitStart()
 	textBox.Focused:Connect(onFocused)
 
 	ClaimButton.MouseButton1Click:Connect(OnClaim)
-	Codesbutton.MouseButton1Click:Connect(EnableCodes)
+	CodesButton.MouseButton1Click:Connect(EnableCodes)
 end
 
 return CodesController
