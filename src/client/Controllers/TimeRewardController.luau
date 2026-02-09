@@ -27,8 +27,9 @@ local DailyFrame = Contents:WaitForChild("Daily")
 local ProductTemplate = TimeFrame:WaitForChild("Template")
 
 local Sections = Rewards:WaitForChild("Sections")
-local TimeButtonFrame = Sections:WaitForChild("Time")
-local Timebutton = TimeButtonFrame:WaitForChild("Button")
+local TimeButton = Sections:WaitForChild("Time")
+local DailyRewardButton = Sections:WaitForChild("Daily")
+local CodesButton = Sections:WaitForChild("Codes")
 
 --[Constants]
 local TweenInfo1 = TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
@@ -163,8 +164,11 @@ end
 
 local function EnableTime()
 	DailyFrame.Visible = false
+	DailyRewardButton:WaitForChild("Select").Visible = false
 	CodesFrame.Visible = false
+	CodesButton:WaitForChild("Select").Visible = false
 	TimeFrame.Visible = true
+	TimeButton:WaitForChild("Select").Visible = true
 end
 
 function StartAllRewardsTimer()
@@ -216,7 +220,7 @@ function TimeRewardController:KnitStart()
 	end
 
 	TimeRewardServer.RewardClaimed:Connect(RewardClaimedSuccessfully)
-	Timebutton.MouseButton1Click:Connect(EnableTime)
+	TimeButton.MouseButton1Click:Connect(EnableTime)
 
 	StartAllRewardsTimer()
 end
