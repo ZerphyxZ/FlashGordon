@@ -819,9 +819,9 @@ function PlayerDataHandler:AddCrateToInventory(player: Player, crateName: string
 	if profile and profile:IsActive() then
 		profile.Data.OwnedCrates = profile.Data.OwnedCrates or {}
 
-		if self:PlayerOwnsCrate(player, crateName) then
-			return false
-		end
+		-- if self:PlayerOwnsCrate(player, crateName) then
+		-- 	return false
+		-- end
 
 		table.insert(profile.Data.OwnedCrates, crateName)
 		pcall(function()
