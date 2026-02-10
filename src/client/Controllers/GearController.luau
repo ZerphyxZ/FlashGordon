@@ -2,6 +2,7 @@ local Global = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared
     "Global"))
 
 local TweenService = game:GetService("TweenService")
+local MarketplaceService = game:GetService("MarketplaceService")
 local Knit = Global.Knit
 local Players = Global.Players
 local player = Players.LocalPlayer
@@ -11,6 +12,7 @@ local trailData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitFo
 local cratesData = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("CratesConfig"))
 local HoverboardService
 local GearService
+local RobuxReceiptService
 local CoinsController
 
 local character
@@ -358,23 +360,34 @@ local function PurchaseHoverboard()
         return
     end
 
-    GearService:PurchaseHoverboard(currentBoardConfig, boardData.Price, boardData.Currency):andThen(function(success,
-        message)
-        print("Success status:", success)
-        print("Message:", message)
+    if boardData.Currency == "Robux" then
+        GearService:PurchaseRobuxHoverboard(currentBoardConfig):andThen(function(success, productId)
+            if success then
+                MarketplaceService:PromptProductPurchase(player, productId)
+            else
+                ShowStatusMessage("Failed to initiate purchase!", RED_COLOR)
+            end
+        end):catch(function(err)
+            warn("PurchaseRobuxHoverboard failed:", err)
+            ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
+        end)
+        return
+    else
+        GearService:PurchaseCoinsHoverboard(currentBoardConfig, boardData.Price, boardData.Currency):andThen(function(
+            success, message)
+            if success then
+                CoinsController:RefreshDisplay()
+                SetBoardButtonState("Equip")
+                ShowStatusMessage(message, GREEN_COLOR)
+            else
+                ShowStatusMessage(message, RED_COLOR)
+            end
 
-        if success then
-            CoinsController:RefreshDisplay()
-            SetBoardButtonState("Equip")
-            ShowStatusMessage(message, GREEN_COLOR)
-        else
-            ShowStatusMessage(message, RED_COLOR)
-        end
-
-    end):catch(function(err)
-        warn("PurchaseHoverboard failed:", err)
-        ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
-    end)
+        end):catch(function(err)
+            warn("PurchaseHoverboard failed:", err)
+            ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
+        end)
+    end
 end
 --------------------------------------------------------
 
@@ -446,22 +459,33 @@ local function PurchaseTrail()
         return
     end
 
-    GearService:PurchaseTrail(currentTrailConfig, data.Price, data.Currency):andThen(function(success, message)
-        print("Success: ", success)
-        print("Message: ", message)
+    if data.Currency == "Robux" then
+        GearService:PurchaseRobuxTrail(currentTrailConfig):andThen(function(success, productId)
+            if success then
+                MarketplaceService:PromptProductPurchase(player, productId)
+            else
+                ShowStatusMessage("Failed to initiate purchase!", RED_COLOR)
+            end
+        end):catch(function(err)
+            warn("PurchaseRobuxTrail failed:", err)
+            ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
+        end)
+        return
+    else -- Currency is Coins
+        GearService:PurchaseCoinsTrail(currentTrailConfig, data.Price):andThen(function(success, message)
+            if success then
+                CoinsController:RefreshDisplay()
+                SetTrailButtonState("Equip")
+                ShowStatusMessage(message, GREEN_COLOR)
+            else
+                ShowStatusMessage(message, RED_COLOR)
+            end
 
-        if success then
-            CoinsController:RefreshDisplay()
-            SetTrailButtonState("Equip")
-            ShowStatusMessage(message, GREEN_COLOR)
-        else
-            ShowStatusMessage(message, RED_COLOR)
-        end
-
-    end):catch(function(err)
-        warn("PurchaseTrail failed:", err)
-        ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
-    end)
+        end):catch(function(err)
+            warn("PurchaseTrail failed:", err)
+            ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
+        end)
+    end
 end
 
 local function EquipTrail()
@@ -729,14 +753,20 @@ local function SpinCrateAnimation(winningBoardName, winningBoardData)
             scrollingFrame.CanvasPosition = Vector2.new(targetX, 0)
 
             task.delay(1, function()
-                GearService:PurchaseHoverboard(winningBoardName, 0, "Coins"):andThen(function(success, message)
-                    OpenWinningBoardFrame(winningBoardData, true)
-                    cratesBoardListScrollingFrameParent.Visible = false
-                    task.delay(3, function()
-                        OpenWinningBoardFrame(winningBoardData, false)
+                GearService:PurchaseCoinsHoverboard(winningBoardName, 0):andThen(function(success, message)
+                    if success then
+                        OpenWinningBoardFrame(winningBoardData, true)
+                        cratesBoardListScrollingFrameParent.Visible = false
+                        task.delay(3, function()
+                            OpenWinningBoardFrame(winningBoardData, false)
+                            overlay.Visible = false
+                            SetButtonsActive(true)
+                        end)
+                    else
+                        ShowStatusMessage(message, RED_COLOR)
                         overlay.Visible = false
                         SetButtonsActive(true)
-                    end)
+                    end
                 end)
             end)
         end
@@ -855,6 +885,15 @@ local function SpinCrateAnimation(winningBoardName, winningBoardData)
     -- end)
 end
 
+local function StartCrateAnimation()
+    local winningBoardName, winningBoardData = GetRandomBoardFromCrate(currentCrateConfig)
+    if winningBoardName then
+        -- Start spin animation
+        print("Winning board:", winningBoardName)
+        SpinCrateAnimation(winningBoardName, winningBoardData)
+    end
+end
+
 local function PurchaseCrate()
     if not currentCrateConfig then
         print("Not current crate selected")
@@ -866,24 +905,34 @@ local function PurchaseCrate()
         return
     end
 
-    GearService:PurchaseCrate(currentCrateConfig, crateData.Price, crateData.Currency):andThen(
-        function(success, message)
+    print("Purchasing crate:", currentCrateConfig)
+    print("Crate:", crateData)
+
+    if crateData.Currency == "Robux" then
+        GearService:PurchaseRobuxCrate(currentCrateConfig):andThen(function(success, productId)
+            if success then
+                print("Currency is robux, prompting purchase")
+                MarketplaceService:PromptProductPurchase(player, productId)
+            else
+                ShowStatusMessage("Failed to initiate purchase!", RED_COLOR)
+            end
+        end):catch(function(err)
+            warn("PurchaseRobuxCrate failed:", err)
+            ShowStatusMessage(WARNING_TEXT, YELLOW_COLOR)
+        end)
+    else -- Currency == Coins
+        GearService:PurchaseCoinsCrate(currentCrateConfig, crateData.Price):andThen(function(success, result)
             if success then
                 -- Get random winning board
-                print("Success")
+                print("Currency is Coins, refreshing display and showing animation")
                 CoinsController:RefreshDisplay()
-                -- ShowStatusMessage(message, GREEN_COLOR)
-                local winningBoardName, winningBoardData = GetRandomBoardFromCrate(currentCrateConfig)
-                if winningBoardName then
-                    -- Start spin animation
-                    print("Winning board:", winningBoardName)
-                    SpinCrateAnimation(winningBoardName, winningBoardData)
-                end
+                StartCrateAnimation()
             else
                 CoinsController:RefreshDisplay()
-                ShowStatusMessage(message, RED_COLOR)
+                ShowStatusMessage(result, RED_COLOR)
             end
         end)
+    end
 end
 --------------------------------------------------------
 
@@ -907,7 +956,7 @@ local function OpenTab(selectedTab)
             if tabButton == trailsTab and equippedTrail then
                 SelectTrail(equippedTrail)
             elseif tabButton == cratesTab then
-                SelectCrate("BasicBoard")
+                SelectCrate("BasicCrate")
             end
         else
             frame.Visible = false
@@ -1029,6 +1078,7 @@ end
 local function OnCharacterAdded(char)
     HoverboardService = Knit.GetService("HoverboardService")
     GearService = Knit.GetService("GearService")
+    RobuxReceiptService = Knit.GetService("RobuxReceiptService")
     CoinsController = Knit.GetController("CoinsController")
 
     UIReferences()
@@ -1063,6 +1113,11 @@ end
 
 function GearController:KnitStart()
     OnPlayerAdded(player)
+    RobuxReceiptService.CratePurchased:Connect(function()
+        task.delay(1, function()
+            StartCrateAnimation()
+        end)
+    end)
 end
 
 return GearController

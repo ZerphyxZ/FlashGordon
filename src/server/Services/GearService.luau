@@ -3,7 +3,8 @@ local Global = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared
 local Knit = Global.Knit
 local ReplicatedStorage = Global.ReplicatedStorage
 local PlayerDataHandler = require(ReplicatedStorage.Shared.Modules.PlayerDataHandler)
-local Hoverboards = require(ReplicatedStorage:WaitForChild("Configuration"):WaitForChild("HoverboardData"))
+local Hoverboards = require(ReplicatedStorage.Configuration.HoverboardData)
+local RobuxProducts = require(ReplicatedStorage.Configuration.RobuxProducts)
 local HoverboardService
 
 local GearService = Knit.CreateService({
@@ -23,8 +24,15 @@ local GREEN_COLOR = Color3.fromRGB(0, 255, 0)
 
 ---------- Client Methods -----------
 -- BOARDS-----------------------------
-function GearService.Client:PurchaseHoverboard(player, boardName, price, currencyType)
-    print("PurchaseHoverboard called:", player.Name, boardName, price, currencyType)
+function GearService.Client:PurchaseRobuxHoverboard(player, boardName)
+    local productId = RobuxProducts.Hoverboards[boardName]
+    if not productId then
+        return false, "Invalid Robux product!"
+    end
+    return true, productId -- client will prompt purchase
+end
+
+function GearService.Client:PurchaseCoinsHoverboard(player, boardName, price)
     local playerData = PlayerDataHandler:GetData(player)
 
     if not playerData then
@@ -42,30 +50,18 @@ function GearService.Client:PurchaseHoverboard(player, boardName, price, currenc
         return false, "Invalid hoverboard!"
     end
 
-    -- Process payment
-    if currencyType == "Coins" then
-        if playerData.Coins < price then
-            return false, "Insufficient coins!"
-        end
-        PlayerDataHandler:DeductCoins(player, price)
-    elseif currencyType == "Robux" then
-        -- Implement Robux purchase logic here
-        -- This would typically use MarketplaceService
-        return false, "Robux purchases not implemented yet!"
-    else
-        return false, "Invalid currency type!"
+    if playerData.Coins < price then
+        return false, "Insufficient coins!"
     end
+    PlayerDataHandler:DeductCoins(player, price)
 
     -- Add to inventory
     local success = PlayerDataHandler:AddHoverboardToInventory(player, boardName)
     if success then
-        print("[GearService] Purchased hoverboard:", player.Name, boardName, price, currencyType)
         return true, "Purchase successful!"
     else
         -- Refund if failed to add to inventory
-        if currencyType == "Coins" then
-            PlayerDataHandler:IncrementCoins(player, price)
-        end
+		PlayerDataHandler:IncrementCoins(player, price)
         return false, "Purchase failed!"
     end
 end
@@ -82,7 +78,15 @@ function GearService.Client:PlayerOwnsTrail(player, trailName)
     return PlayerDataHandler:PlayerOwnsTrail(player, trailName)
 end
 
-function GearService.Client:PurchaseTrail(player, trailName, price, currencyType)
+function GearService.Client:PurchaseRobuxTrail(player, trailName)
+    local productId = RobuxProducts.Trails[trailName]
+    if not productId then
+        return false, "Invalid Robux product!"
+    end
+    return true, productId -- client will prompt purchase
+end
+
+function GearService.Client:PurchaseCoinsTrail(player, trailName, price)
     local data = PlayerDataHandler:GetData(player)
     if not data then
         return false, "Player Data Not Found!"
@@ -92,22 +96,17 @@ function GearService.Client:PurchaseTrail(player, trailName, price, currencyType
         return false, "Player already owns this trail!"
     end
 
-    if currencyType == "Coins" then
-        if data.Coins < price then
-            return false, "Insufficient coins to purchase trail"
-        end
-        PlayerDataHandler:DeductCoins(player, price)
-        print("Deducted", price, "coins from", player.Name)
+    if data.Coins < price then
+        return false, "Insufficient coins to purchase trail"
     end
+    PlayerDataHandler:DeductCoins(player, price)
+    print("Deducted", price, "coins from", player.Name)
 
     local success = PlayerDataHandler:AddTrailToInventory(player, trailName)
     if success then
-        print("[GearService] Purchased trail:", player.Name, trailName, price, currencyType)
         return true, "Purchase Successful!"
     else
-        if currencyType == "Coins" then
-            PlayerDataHandler:IncrementCoins(player, price)
-        end
+        PlayerDataHandler:IncrementCoins(player, price)
         return false, "Purchase Failed!"
     end
 end
@@ -133,29 +132,33 @@ function GearService.Client:PlayerOwnsCrate(player, crateName)
     return PlayerDataHandler:PlayerOwnsCrate(player, crateName)
 end
 
-function GearService.Client:PurchaseCrate(player, crateName, price, currencyType)
+function GearService.Client:PurchaseRobuxCrate(player, crateName)
+    local productId = RobuxProducts.Crates[crateName]
+    if not productId then
+        return false, "Invalid Robux product!"
+    end
+    return true, productId -- client will prompt purchase
+end
+
+function GearService.Client:PurchaseCoinsCrate(player, crateName, price)
     local data = PlayerDataHandler:GetData(player)
     if not data then
         print("GearService: PurchaseCrate failed")
         return false, "Player Data Not Found!"
     end
 
-    if currencyType == "Coins" then
-        if data.Coins < price then
-            print("Insufficient coins to purchase crate")
-            return false, "Insufficient coins to purchase crate"
-        end
-        PlayerDataHandler:DeductCoins(player, price)
-        print("Deducted", price, "coins from", player.Name)
+    if data.Coins < price then
+        print("Insufficient coins to purchase crate")
+        return false, "Insufficient coins to purchase crate"
     end
+    PlayerDataHandler:DeductCoins(player, price)
+    print("Deducted", price, "coins from", player.Name)
 
     local success = PlayerDataHandler:AddCrateToInventory(player, crateName)
     if success then
         return true, "Purchase Successful!"
     else
-        if currencyType == "Coins" then
-            PlayerDataHandler:IncrementCoins(player, price)
-        end
+        PlayerDataHandler:IncrementCoins(player, price)
         return false, "Failed to add crate to inventory!"
     end
 end

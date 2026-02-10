@@ -66,10 +66,10 @@ local CratesConfig = {
     },
     EpicCrate = {
         Name = "Epic Crate",
-        Price = 2,
+        Price = 1,
         Color = Color3.fromRGB(255, 255, 0),
         Image = "rbxassetid://104715400027940",
-        Currency = "Coins",
+        Currency = "Robux",
         BoardsList = {
             Hoverboard1 = {
                 Name = "Hoverboard1",
