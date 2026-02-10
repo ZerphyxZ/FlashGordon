@@ -503,7 +503,7 @@ local function OpenWinningBoardFrame(board, active)
     winningBoardFrameShine.Visible = active
 
     winningBoardImage:WaitForChild("BoardImage").Image = board.Image
-	winningBoardImage:WaitForChild("RarityBG").Image = board.Background
+    winningBoardImage:WaitForChild("RarityBG").Image = board.Background
     winningBoardNameLabel.Text = board.Name
 end
 
@@ -527,7 +527,7 @@ local function PopulateCrateItemBoardsList(crateData)
 
             -- UI fill
             item:WaitForChild("ItemImage").Image = boardData.Image
-			item:WaitForChild("RarityBG").Image = boardData.Background
+            item:WaitForChild("RarityBG").Image = boardData.Background
             item:WaitForChild("PercentageLabel").Text = string.format("%.2f%%", boardData.Percentage)
         end
     end
@@ -542,7 +542,7 @@ local function PopulateCrateItemBoardsList(crateData)
 
             -- Fill card UI
             card:WaitForChild("BoardImage").Image = boardData.Image
-			card:WaitForChild("RarityBG").Image = boardData.Background
+            card:WaitForChild("RarityBG").Image = boardData.Background
             card:WaitForChild("BoardNameLabel").Text = boardData.Name
         end
     end
@@ -671,74 +671,188 @@ local function SpinCrateAnimation(winningBoardName, winningBoardData)
         end
     end
 
-    -- Center winning item
+    -- Calculate target position to center the winning item
     local targetX = ((winningIndex - 1) * itemWidth) - (viewportWidth / 2) + (itemWidth / 2)
-    targetX = math.clamp(targetX, 0, math.max(0, contentWidth - viewportWidth))
+
+    -- Adjust targetX for looping effect (ensure it's in a reasonable position)
+    -- We want to pass through enough items to make the spin look good
+    local currentX = scrollingFrame.CanvasPosition.X
+    local loops = 2
+    local spinDistance = contentWidth * loops + targetX -- Spin through 3 full loops plus to target
 
     -- Spin parameters
-    local spinDuration = 5
+    local spinDuration = 3
     local elapsed = 0
     local startSpeed = 2000 -- Start spinning speed
-    local decelerationStartTime = 2.5 -- Start deceleration after 3.5 seconds
-    local decelerationDuration = 2.5 -- Decelerate over 1.5 seconds
-    local currentX = scrollingFrame.CanvasPosition.X
+
+    -- Store initial positions
+    local initialCanvasPos = Vector2.new(currentX, 0)
 
     local connection
     connection = RunService.Heartbeat:Connect(function(dt)
         elapsed = elapsed + dt
 
-        -- Calculate current speed based on deceleration phase
-        local currentSpeed = startSpeed
+        -- Calculate progress through the animation
+        local progress = elapsed / spinDuration
 
-        if elapsed >= decelerationStartTime then
-            -- Start decelerating
-            local decelAlpha = math.clamp((elapsed - decelerationStartTime) / decelerationDuration, 0, 1)
-            -- Quadratic ease-out deceleration
-            local decelFactor = (1 - decelAlpha) ^ 2
-            currentSpeed = startSpeed * decelFactor
-            print("Stops here.")
+        -- Use easing function for smooth acceleration and deceleration
+        -- This creates a slow start, fast middle, slow end
+        local easeProgress
+        if progress < 0.1 then
+            -- Quick acceleration
+            easeProgress = (progress / 0.1) ^ 2 * 0.45
+        elseif progress < 0.8 then
+            -- Fast cruising
+            easeProgress = 0.5 + 0.5 * ((progress - 0.1) / 0.7)
+        else
+            -- Long smooth deceleration
+            local decelProgress = (progress - 0.8) / 0.4
+            easeProgress = 0.9 + 0.1 * (1 - (1 - decelProgress) ^ 2) -- Quadratic ease-out
         end
 
-        -- Apply movement
-        currentX = currentX + currentSpeed * dt
+        -- Calculate current position based on eased progress
+        local newX = initialCanvasPos.X + (spinDistance * easeProgress)
 
         -- Loop illusion
-        if currentX >= contentWidth then
-            currentX = currentX - contentWidth
+        if newX >= contentWidth then
+            newX = newX % contentWidth
+            initialCanvasPos = Vector2.new(initialCanvasPos.X - contentWidth, 0)
         end
 
-        scrollingFrame.CanvasPosition = Vector2.new(currentX, 0)
+        scrollingFrame.CanvasPosition = Vector2.new(newX, 0)
 
-        -- Stop only once after the full duration
+        -- Stop after full duration
         if elapsed >= spinDuration then
             connection:Disconnect()
 
-            print("Spin complete")
-            -- Snap to winning position
+            -- Ensure we're exactly on target
             scrollingFrame.CanvasPosition = Vector2.new(targetX, 0)
 
-            task.delay(0.4, function()
-                print("Going to purchase the hoverboard.")
+            task.delay(1, function()
                 GearService:PurchaseHoverboard(winningBoardName, 0, "Coins"):andThen(function(success, message)
-                    if success then
-                        print("Purchased winning board from crate:", winningBoardName)
-                        OpenWinningBoardFrame(winningBoardData, true)
-                        cratesBoardListScrollingFrameParent.Visible = false
-                        task.delay(3, function()
-                            OpenWinningBoardFrame(winningBoardData, false)
-                            overlay.Visible = false
-                            SetButtonsActive(true)
-                        end)
-                    else
-						print("Failed to purchase winning board from crate:", winningBoardName)
-						ShowStatusMessage(message, RED_COLOR)
-						overlay.Visible = false
-						SetButtonsActive(true)
-					end
+                    OpenWinningBoardFrame(winningBoardData, true)
+                    cratesBoardListScrollingFrameParent.Visible = false
+                    task.delay(3, function()
+                        OpenWinningBoardFrame(winningBoardData, false)
+                        overlay.Visible = false
+                        SetButtonsActive(true)
+                    end)
                 end)
             end)
         end
     end)
+
+    -- SetButtonsActive(false)
+    -- overlay.Visible = true
+    -- cratesBoardListScrollingFrameParent.Visible = true
+
+    -- local RunService = game:GetService("RunService")
+
+    -- local scrollingFrame = cratesBoardListScrollingFrame
+    -- local items = scrollingFrame:GetChildren()
+
+    -- -- Filter valid items
+    -- local boardItems = {}
+    -- for _, child in ipairs(items) do
+    --     if child:GetAttribute("ScrollingBoardItem") then
+    --         table.insert(boardItems, child)
+    --     end
+    -- end
+
+    -- if #boardItems == 0 then
+    --     return
+    -- end
+
+    -- -- Measurements
+    -- local itemWidth = boardItems[1].AbsoluteSize.X
+    -- local viewportWidth = scrollingFrame.AbsoluteWindowSize.X
+    -- local contentWidth = itemWidth * #boardItems
+
+    -- -- Find winning index
+    -- local winningIndex = 1
+    -- for i, item in ipairs(boardItems) do
+    --     if item.BoardNameLabel.Text == winningBoardData.Name then
+    --         winningIndex = i
+    --         break
+    --     end
+    -- end
+
+    -- -- Center winning item
+    -- local targetX = ((winningIndex - 1) * itemWidth) - (viewportWidth / 2) + (itemWidth / 2)
+    -- targetX = math.clamp(targetX, 0, math.max(0, contentWidth - viewportWidth))
+
+    -- -- Spin parameters
+    -- local spinDuration = 5
+    -- local elapsed = 0
+    -- local startSpeed = 2000 -- Start spinning speed
+    -- local decelerationStartTime = 2.5 -- Start deceleration after 3.5 seconds
+    -- local decelerationDuration = 2.5 -- Decelerate over 1.5 seconds
+    -- local currentX = scrollingFrame.CanvasPosition.X
+
+    -- local connection
+    -- connection = RunService.Heartbeat:Connect(function(dt)
+    --     elapsed = elapsed + dt
+
+    --     -- Calculate current speed based on deceleration phase
+    --     local currentSpeed = startSpeed
+
+    --     if elapsed >= decelerationStartTime then
+    --         -- Start decelerating
+    --         local decelAlpha = math.clamp((elapsed - decelerationStartTime) / decelerationDuration, 0, 1)
+    --         -- Quadratic ease-out deceleration
+    --         local decelFactor = (1 - decelAlpha) ^ 2
+    --         currentSpeed = startSpeed * decelFactor
+    --         print("Stops here.")
+    --     end
+
+    --     -- Apply movement
+    --     currentX = currentX + currentSpeed * dt
+
+    --     -- Loop illusion
+    --     if currentX >= contentWidth then
+    --         currentX = currentX - contentWidth
+    --     end
+
+    --     scrollingFrame.CanvasPosition = Vector2.new(currentX, 0)
+
+    --     -- Stop only once after the full duration
+    --     if elapsed >= spinDuration then
+    --         connection:Disconnect()
+
+    --         print("Spin complete")
+    --         -- Snap to winning position
+    --         scrollingFrame.CanvasPosition = Vector2.new(targetX, 0)
+
+    --         task.delay(1, function()
+    --             print("Going to purchase the hoverboard.")
+    --             GearService:PurchaseHoverboard(winningBoardName, 0, "Coins"):andThen(function(success, message)
+    --                 OpenWinningBoardFrame(winningBoardData, true)
+    --                 cratesBoardListScrollingFrameParent.Visible = false
+    --                 task.delay(3, function()
+    --                     OpenWinningBoardFrame(winningBoardData, false)
+    --                     overlay.Visible = false
+    --                     SetButtonsActive(true)
+    --                 end)
+
+    --                 -- if success then
+    --                 --     print("Purchased winning board from crate:", winningBoardName)
+    --                 --     OpenWinningBoardFrame(winningBoardData, true)
+    --                 --     cratesBoardListScrollingFrameParent.Visible = false
+    --                 --     task.delay(3, function()
+    --                 --         OpenWinningBoardFrame(winningBoardData, false)
+    --                 --         overlay.Visible = false
+    --                 --         SetButtonsActive(true)
+    --                 --     end)
+    --                 -- else
+    --                 -- 	print("Failed to purchase winning board from crate:", winningBoardName)
+    --                 -- 	ShowStatusMessage(message, RED_COLOR)
+    --                 -- 	overlay.Visible = false
+    --                 -- 	SetButtonsActive(true)
+    --                 -- end
+    --             end)
+    --         end)
+    --     end
+    -- end)
 end
 
 local function PurchaseCrate()
@@ -752,17 +866,24 @@ local function PurchaseCrate()
         return
     end
 
-    local success = HoverboardService:PurchaseCrate(currentCrateConfig, crateData.Price, crateData.Currency)
-    if success then
-        -- Get random winning board
-        print("Success")
-        local winningBoardName, winningBoardData = GetRandomBoardFromCrate(currentCrateConfig)
-        if winningBoardName then
-            -- Start spin animation
-            print("Winning board:", winningBoardName)
-            SpinCrateAnimation(winningBoardName, winningBoardData)
-        end
-    end
+    GearService:PurchaseCrate(currentCrateConfig, crateData.Price, crateData.Currency):andThen(
+        function(success, message)
+            if success then
+                -- Get random winning board
+                print("Success")
+                CoinsController:RefreshDisplay()
+                -- ShowStatusMessage(message, GREEN_COLOR)
+                local winningBoardName, winningBoardData = GetRandomBoardFromCrate(currentCrateConfig)
+                if winningBoardName then
+                    -- Start spin animation
+                    print("Winning board:", winningBoardName)
+                    SpinCrateAnimation(winningBoardName, winningBoardData)
+                end
+            else
+                CoinsController:RefreshDisplay()
+                ShowStatusMessage(message, RED_COLOR)
+            end
+        end)
 end
 --------------------------------------------------------
 

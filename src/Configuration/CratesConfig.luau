@@ -1,9 +1,9 @@
 local CratesConfig = {
-    BasicBoard = {
-        Name = "Basic Board",
+    BasicCrate = {
+        Name = "Basic Crate",
         Price = 1,
         Color = Color3.fromRGB(255, 0, 0),
-        Image = "rbxassetid://139183068357710",
+        Image = "rbxassetid://115904959108660",
         Currency = "Coins",
         BoardsList = {
             Hoverboard1 = {
@@ -64,11 +64,11 @@ local CratesConfig = {
             }
         }
     },
-    EpicBoard = {
-        Name = "Epic Board",
+    EpicCrate = {
+        Name = "Epic Crate",
         Price = 2,
         Color = Color3.fromRGB(255, 255, 0),
-        Image = "rbxassetid://82416139124866",
+        Image = "rbxassetid://104715400027940",
         Currency = "Coins",
         BoardsList = {
             Hoverboard1 = {
@@ -161,11 +161,11 @@ local CratesConfig = {
             }
         }
     },
-    ProBoard = {
-        Name = "Pro Board",
+    RareCrate = {
+        Name = "Rare Crate",
         Price = 3,
         Color = Color3.fromRGB(0, 123, 255),
-        Image = "rbxassetid://125117953055904",
+        Image = "rbxassetid://132543916594969",
         Currency = "Coins",
         BoardsList = {
             Hoverboard1 = {
@@ -242,11 +242,11 @@ local CratesConfig = {
             }
         }
     },
-    LegendaryBoard = {
-        Name = "Legendary Board",
+    LegendaryCrate = {
+        Name = "Legendary Crate",
         Price = 4,
         Color = Color3.fromRGB(0, 255, 0),
-        Image = "rbxassetid://77348673773608",
+        Image = "rbxassetid://106849644513002",
         Currency = "Coins",
         BoardsList = {
             Hoverboard1 = {
@@ -323,11 +323,11 @@ local CratesConfig = {
             }
         }
     },
-    SummerBoard = {
-        Name = "Summer Board",
+    MythicCrate = {
+        Name = "Mythic Crate",
         Price = 5,
         Color = Color3.fromRGB(0, 255, 0),
-        Image = "rbxassetid://963012857",
+        Image = "rbxassetid://74383462184580",
         Currency = "Coins",
         BoardsList = {
             Hoverboard1 = {
