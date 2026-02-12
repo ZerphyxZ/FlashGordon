@@ -826,6 +826,8 @@ function KeepJumping()
 end
 
 function HandleLanding()
+    if not rootPart then return end
+    
     local vel = rootPart.AssemblyLinearVelocity
     if vel.Y >= 0 then
         return
@@ -838,7 +840,7 @@ function HandleLanding()
 
     local maxFallingSpeed = -5
     local maxDistanceCheck = 1
-    if raycast.Distance <= maxDistanceCheck then
+    if raycast.Distance <= maxDistanceCheck and rootPart then
         local newY = math.max(vel.Y, maxFallingSpeed)
         rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, newY, vel.Z)
     end
@@ -1159,11 +1161,11 @@ function NewController:OnPlayerAdded(plr)
         return
     end
     plr.CharacterAdded:Connect(function()
-        self:OnCharacterAdded(plr.Character)
+        self:OnCharacterAdded(plr.Character or plr.CharacterAdded:Wait())
     end)
     plr.CharacterRemoving:Connect(self.OnCharacterRemoving)
     if plr.Character then
-        self:OnCharacterAdded(plr.Character)
+        self:OnCharacterAdded(plr.Character or plr.CharacterAdded:Wait())
     end
 end
 
