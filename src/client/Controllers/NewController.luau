@@ -164,35 +164,101 @@ function WallDetection(dt)
     rayParams.IgnoreWater = true
     rayParams.FilterDescendantsInstances = {character, Board}
 
-    local lookDir = rootPart.CFrame.LookVector
-    local speed = Board.AssemblyLinearVelocity.Magnitude
-    -- local speed = bodyVelocity.Velocity.Magnitude
-
-    -- Dynamic ray length (prevents tunneling)
-    local rayLength = math.max(5, speed * deltaTimeRender + 1)
-
-    local origin = rootPart.Position
-    local direction = lookDir * rayLength
-
-    local hit = workspace:Raycast(origin, direction, rayParams)
-
-    if hit then
-        print("Wall detected!")
-        local normal = hit.Normal
-        local currentVel = Board.AssemblyLinearVelocity
-        -- local currentVel = bodyVelocity.Velocity
-
-        -- Slide with the wall
-        local intoWall = currentVel:Dot(normal)
-        local slideVelocity = currentVel - normal * intoWall
-        -- local maxSlideSpeed = currentVel.Magnitude
-        -- slideVelocity = slideVelocity.Unit * math.min(slideVelocity.Magnitude, maxSlideSpeed)
-        if intoWall < 0 then
-            -- Board.AssemblyLinearVelocity = Vector3.new(slideVelocity.X * 0, currentVel.Y, slideVelocity.Z * 0)
-            bodyVelocity.Velocity = Vector3.new(slideVelocity.X * 0.95, 0, slideVelocity.Z * 0.95)
-        end
+    local velocity = Board.AssemblyLinearVelocity
+    --local velocity = bodyVelocity.Velocity
+    local speed = velocity.Magnitude
+    if speed <= 0.1 then
         return
     end
+    local lookDir = velocity.Unit
+    local cframe = Board.CFrame
+    local objectLookDir = cframe:VectorToObjectSpace(lookDir)
+    local halfSize = Board.Size / 2
+    --local offset = lookDir.X * halfSize.X + lookDir.Y * halfSize.Y + lookDir.Z * halfSize.Z
+    local objectOffset = Vector3.new(
+        objectLookDir.X * halfSize.X,
+        objectLookDir.Y * halfSize.Y,
+        objectLookDir.Z * halfSize.Z
+    )
+    local worldOffset = cframe:VectorToWorldSpace(objectOffset)
+    --local origin = Board.Position + lookDir * offset
+    local origin = Board.Position + worldOffset
+    local rayLength = math.max(2, speed * dt + 1)
+    local direction = lookDir * rayLength
+    
+    local hit = workspace:Raycast(origin, direction, rayParams)
+    if hit and hit.Instance and hit.Instance:IsA("BasePart") then
+        if hit.Instance.CollisionGroup ~= "Walls" then
+            return
+        end
+
+        print("Wall detected!")
+
+        local normal = hit.Normal
+        -- Check if moving into wall
+        local intoWall = velocity:Dot(normal)
+
+        if intoWall < 0 then
+            -- Push slightly opposite to wall normal
+            local pushStrength = 200 -- adjust this for how strong push back is
+            --local pushStrength = math.clamp(speed * 2, 100, 200)
+            local pushDirection = normal * pushStrength
+
+            -- Keep Y velocity untouched (optional)
+            local targetVelocity = Vector3.new(
+                pushDirection.X,
+                velocity.Y,
+                pushDirection.Z
+            )
+
+            -- Smooth transition using Lerp
+            --local smoothFactor = math.clamp(speed * 0.12, 8, 25) -- stronger push at higher speeds
+            local smoothFactor = 5
+            local alpha = 1 - math.exp(-smoothFactor * dt) -- exponential smoothing
+
+            --bodyVelocity.Velocity = velocity:Lerp(targetVelocity, alpha)
+            Board.AssemblyLinearVelocity = velocity:Lerp(targetVelocity, alpha)
+        end
+    end
+
+
+
+
+    --OLD CODE
+    -- local rayParams = RaycastParams.new()
+    -- rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    -- rayParams.IgnoreWater = true
+    -- rayParams.FilterDescendantsInstances = {character, Board}
+
+    -- local lookDir = rootPart.CFrame.LookVector
+    -- local speed = Board.AssemblyLinearVelocity.Magnitude
+    -- -- local speed = bodyVelocity.Velocity.Magnitude
+
+    -- -- Dynamic ray length (prevents tunneling)
+    -- local rayLength = math.max(5, speed * dt + 1)
+
+    -- local origin = rootPart.Position
+    -- local direction = lookDir * rayLength
+
+    -- local hit = workspace:Raycast(origin, direction, rayParams)
+
+    -- if hit then
+    --     print("Wall detected!")
+    --     local normal = hit.Normal
+    --     local currentVel = Board.AssemblyLinearVelocity
+    --     -- local currentVel = bodyVelocity.Velocity
+
+    --     -- Slide with the wall
+    --     local intoWall = currentVel:Dot(normal)
+    --     local slideVelocity = currentVel - normal * intoWall
+    --     -- local maxSlideSpeed = currentVel.Magnitude
+    --     -- slideVelocity = slideVelocity.Unit * math.min(slideVelocity.Magnitude, maxSlideSpeed)
+    --     if intoWall < 0 then
+    --         -- Board.AssemblyLinearVelocity = Vector3.new(slideVelocity.X * 0, currentVel.Y, slideVelocity.Z * 0)
+    --         bodyVelocity.Velocity = Vector3.new(slideVelocity.X * 0.95, 0, slideVelocity.Z * 0.95)
+    --     end
+    --     --return
+    -- end
 end
 
 function GetMaxJumps()
@@ -668,7 +734,8 @@ function GetRaycastResult()
     local backRaycast = workspace:Raycast(Origin - invisiblePart.CFrame.LookVector * halfOffset, offsetY, RayParams)
 
     local RaycastResult = middleRaycast
-    RAY_PREFERENCE_DISTANCE = math.clamp(RAY_PREFERENCE_DISTANCE, 0.05, 0.8)
+    RAY_PREFERENCE_DISTANCE = 0.05
+    --RAY_PREFERENCE_DISTANCE = math.clamp(RAY_PREFERENCE_DISTANCE, 0.05, 0.8)
 
     if RaycastResult == nil or (backRaycast and backRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE) then
         RaycastResult = backRaycast
@@ -692,6 +759,7 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
     local downhillAngle = 0
     if RaycastResult then
         local distanceToGround = RaycastResult.Distance
+        --print("Distance to ground: ", distanceToGround)
         if distanceToGround < 0.6 then
             grounded = true
         else
@@ -699,6 +767,8 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
         end
         downhillVector = ReturnDownhillVector(RaycastResult.Normal)
         downhillAngle = ReturnAngleBetweenVectors(RaycastResult.Normal, Vector3.yAxis)
+    else
+        grounded = false
     end
 
     downhillAngle = math.clamp(math.abs(downhillAngle), 0, 45)
@@ -934,6 +1004,7 @@ function NewController:StartHoverboard(config)
         CalculateSpeed(topSpeed)
         ApplyVelocity(acceleration, dt)
         ApplyOrientation(dt)
+        WallDetection(dt)
         UpdateFOV(topSpeed, dt)
         KeepJumping()
         HandleLanding()
