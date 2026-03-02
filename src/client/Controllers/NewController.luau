@@ -35,7 +35,7 @@ local ProductsService
 local ProductsController
 
 -- MOVEMENT / ORIENTATION
-local RayDistance = 20
+local RayDistance = 10
 local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
@@ -47,10 +47,15 @@ local FLOATING_ERROR_MARGIN = 0.01
 local JUMP_POWER = 70
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
-local DOWNHILL_SLOPE_ANGLE = 45
+local DOWNHILL_SLOPE_ANGLE = 90 -- angle at which board gets max downhill boost (clamped in code)
 local RAY_PREFERENCE_DISTANCE = 0
 local MIN_FOV = 70
 local MAX_FOV = 100
+
+-- HOVER SPRING: maintain constant hover height above ground surface
+local TARGET_HOVER_DISTANCE = 0.0 -- target distance from invisiblePart center to ground (tune per board geometry)
+local HOVER_KP = 25 -- spring position gain (stiffness)
+local HOVER_KD = 8 -- spring velocity damping
 
 -- MOVEMENT / SPEED
 local IsDecelerating = false
@@ -64,6 +69,7 @@ local jumpPower
 
 -- JUMP
 local grounded = false
+local rayHit = false
 local spaceHeld = false
 local totalJumps = 0
 local canDoubleJump = false
@@ -165,7 +171,7 @@ function WallDetection(dt)
     rayParams.FilterDescendantsInstances = {character, Board}
 
     local velocity = Board.AssemblyLinearVelocity
-    --local velocity = bodyVelocity.Velocity
+    -- local velocity = bodyVelocity.Velocity
     local speed = velocity.Magnitude
     if speed <= 0.1 then
         return
@@ -174,18 +180,15 @@ function WallDetection(dt)
     local cframe = Board.CFrame
     local objectLookDir = cframe:VectorToObjectSpace(lookDir)
     local halfSize = Board.Size / 2
-    --local offset = lookDir.X * halfSize.X + lookDir.Y * halfSize.Y + lookDir.Z * halfSize.Z
-    local objectOffset = Vector3.new(
-        objectLookDir.X * halfSize.X,
-        objectLookDir.Y * halfSize.Y,
-        objectLookDir.Z * halfSize.Z
-    )
+    -- local offset = lookDir.X * halfSize.X + lookDir.Y * halfSize.Y + lookDir.Z * halfSize.Z
+    local objectOffset = Vector3.new(objectLookDir.X * halfSize.X, objectLookDir.Y * halfSize.Y,
+        objectLookDir.Z * halfSize.Z)
     local worldOffset = cframe:VectorToWorldSpace(objectOffset)
-    --local origin = Board.Position + lookDir * offset
+    -- local origin = Board.Position + lookDir * offset
     local origin = Board.Position + worldOffset
     local rayLength = math.max(2, speed * dt + 1)
     local direction = lookDir * rayLength
-    
+
     local hit = workspace:Raycast(origin, direction, rayParams)
     if hit and hit.Instance and hit.Instance:IsA("BasePart") then
         if hit.Instance.CollisionGroup ~= "Walls" then
@@ -201,30 +204,23 @@ function WallDetection(dt)
         if intoWall < 0 then
             -- Push slightly opposite to wall normal
             local pushStrength = 200 -- adjust this for how strong push back is
-            --local pushStrength = math.clamp(speed * 2, 100, 200)
+            -- local pushStrength = math.clamp(speed * 2, 100, 200)
             local pushDirection = normal * pushStrength
 
             -- Keep Y velocity untouched (optional)
-            local targetVelocity = Vector3.new(
-                pushDirection.X,
-                velocity.Y,
-                pushDirection.Z
-            )
+            local targetVelocity = Vector3.new(pushDirection.X, velocity.Y, pushDirection.Z)
 
             -- Smooth transition using Lerp
-            --local smoothFactor = math.clamp(speed * 0.12, 8, 25) -- stronger push at higher speeds
+            -- local smoothFactor = math.clamp(speed * 0.12, 8, 25) -- stronger push at higher speeds
             local smoothFactor = 5
             local alpha = 1 - math.exp(-smoothFactor * dt) -- exponential smoothing
 
-            --bodyVelocity.Velocity = velocity:Lerp(targetVelocity, alpha)
+            -- bodyVelocity.Velocity = velocity:Lerp(targetVelocity, alpha)
             Board.AssemblyLinearVelocity = velocity:Lerp(targetVelocity, alpha)
         end
     end
 
-
-
-
-    --OLD CODE
+    -- OLD CODE
     -- local rayParams = RaycastParams.new()
     -- rayParams.FilterType = Enum.RaycastFilterType.Exclude
     -- rayParams.IgnoreWater = true
@@ -275,8 +271,10 @@ end
 
 ------------------- UPDATE SPEED GUI -----------------------
 function UpdateSpeedGUI(topSpeed)
-    if not bodyVelocity or not topSpeed or topSpeed <= 0 then return end
-    
+    if not bodyVelocity or not topSpeed or topSpeed <= 0 then
+        return
+    end
+
     local speed = (bodyVelocity.Velocity * Vector3.new(1, 0, 1)).Magnitude or 0
     speedLabel.Text = string.format("Speed: %.0f", math.round(speed))
     local alpha = math.clamp(speed / topSpeed, 0, 1)
@@ -690,88 +688,96 @@ function Lerp(Start, Target, Alpha)
 end
 
 function CalculateSpeed(topSpeed)
-    local newTargetSpeed = NewController.MoveVector.Magnitude == 0 and 0 or topSpeed
+    local isThrottling = NewController.MoveVector.Magnitude > 0.05
+    IsDecelerating = not isThrottling
+    NewController.CurrentSpeed = isThrottling and topSpeed or 0
 
-    if NewController.CurrentSpeed ~= newTargetSpeed then
-        IsDecelerating = newTargetSpeed == 0
-    end
-    NewController.CurrentSpeed = newTargetSpeed
+    -- local newTargetSpeed = NewController.MoveVector.Magnitude == 0 and 0 or topSpeed
+
+    -- if NewController.CurrentSpeed ~= newTargetSpeed then
+    --     IsDecelerating = newTargetSpeed == 0
+    -- end
+    -- NewController.CurrentSpeed = newTargetSpeed
 end
 
 function ReturnDownhillVector(SurfaceNormal)
     if SurfaceNormal then
         local horizontalVector = SurfaceNormal:Cross(Vector3.yAxis)
         local downhillVector = SurfaceNormal:Cross(horizontalVector)
-
         if downhillVector.Magnitude >= FLOATING_ERROR_MARGIN then
             return downhillVector.Unit
         end
     end
-
     return Vector3.zero
 end
 
 function GetRaycastResult()
     if not invisiblePart then
-        return
+        return nil
     end
-    local SizeY = invisiblePart.Size.Y
+
     local Origin = invisiblePart.Position
     local Direction = Vector3.new(0, -1, 0)
     local CheckingDistance = RayDistance
-    local Size = Board.Size.Y / 2
 
     local RayParams = RaycastParams.new()
     RayParams.FilterType = Enum.RaycastFilterType.Exclude
     RayParams.FilterDescendantsInstances = {Board, character, invisiblePart}
 
-    local offsetY = (Direction * CheckingDistance)
-    local boardSize = invisiblePart.Size.Z
-    local halfOffset = boardSize / 2
+    local offsetY = Direction * CheckingDistance
+    local halfOffset = invisiblePart.Size.Z / 2
 
-    local frontRaycast = workspace:Raycast(Origin + invisiblePart.CFrame.LookVector * halfOffset, offsetY, RayParams)
-    local middleRaycast = workspace:Raycast(Origin, offsetY, RayParams)
-    local backRaycast = workspace:Raycast(Origin - invisiblePart.CFrame.LookVector * halfOffset, offsetY, RayParams)
+    local front = workspace:Raycast(Origin + invisiblePart.CFrame.LookVector * halfOffset, offsetY, RayParams)
+    local middle = workspace:Raycast(Origin, offsetY, RayParams)
+    local back = workspace:Raycast(Origin - invisiblePart.CFrame.LookVector * halfOffset, offsetY, RayParams)
 
-    local RaycastResult = middleRaycast
-    RAY_PREFERENCE_DISTANCE = 0.05
-    --RAY_PREFERENCE_DISTANCE = math.clamp(RAY_PREFERENCE_DISTANCE, 0.05, 0.8)
-
-    if RaycastResult == nil or (backRaycast and backRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE) then
-        RaycastResult = backRaycast
-    end
-
-    if RaycastResult == nil or
-        (frontRaycast and frontRaycast.Distance < RaycastResult.Distance - RAY_PREFERENCE_DISTANCE) then
-        RaycastResult = frontRaycast
-    end
-
-    return RaycastResult
+    return {
+        front = front,
+        middle = middle,
+        back = back
+    }
 end
 
 function ApplyVelocity(Acceleration, deltaTimeRender)
-    local RaycastResult = GetRaycastResult()
+    local rays = GetRaycastResult()
+
     local velocityFactor = Acceleration
-    if IsDecelerating then
-        velocityFactor = grounded and Acceleration * 1.5 or DECELERATION_FACTOR
-    end
     local downhillVector = Vector3.zero
     local downhillAngle = 0
-    if RaycastResult then
-        local distanceToGround = RaycastResult.Distance
-        --print("Distance to ground: ", distanceToGround)
-        if distanceToGround < 0.6 then
-            grounded = true
+
+    if rays then
+        local hits = {}
+        local totalNormal = Vector3.zero
+        local totalDistance = 0
+
+        for _, result in pairs(rays) do
+            if result then
+                table.insert(hits, result)
+                totalNormal = totalNormal + result.Normal
+                totalDistance = totalDistance + result.Distance
+            end
+        end
+
+        if #hits > 0 then
+            rayHit = true
+            grounded = (totalDistance / #hits) < 0.6
+
+            local averagedNormal = (totalNormal / #hits).Unit
+
+            downhillVector = ReturnDownhillVector(averagedNormal)
+            downhillAngle = ReturnAngleBetweenVectors(averagedNormal, Vector3.yAxis)
         else
+            rayHit = false
             grounded = false
         end
-        downhillVector = ReturnDownhillVector(RaycastResult.Normal)
-        downhillAngle = ReturnAngleBetweenVectors(RaycastResult.Normal, Vector3.yAxis)
-    else
-        grounded = false
     end
 
-    downhillAngle = math.clamp(math.abs(downhillAngle), 0, 45)
+    if IsDecelerating then
+        velocityFactor = rayHit and Acceleration * 1.5 or DECELERATION_FACTOR
+    end
+
+    downhillAngle = math.clamp(math.abs(downhillAngle), 0, 90)
+
     local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.CurrentSpeed, bodyVelocity.Velocity.Y,
         NewController.MoveVector.Z * NewController.CurrentSpeed) + downhillVector * (workspace.Gravity / 2) *
                               (downhillAngle / DOWNHILL_SLOPE_ANGLE)
@@ -780,32 +786,43 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
         bodyVelocity.Velocity * Vector3.new(1, 0, 1))
 
     HorizontalTiltAngle = -direction * tiltAngle
+
     bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * velocityFactor)
 end
 
 function ApplyOrientation(deltaTimeRender)
-    local RaycastResult = GetRaycastResult()
+    local rays = GetRaycastResult()
     local BoardCF = Board.CFrame
-    local newNormal = RaycastResult and RaycastResult.Normal or Vector3.yAxis
-    if newNormal then
-        local velocity = Board.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
-        local LookVector = BoardCF.LookVector
-        if velocity.Magnitude < 0.01 then
-            return
+    local averagedNormal = Vector3.yAxis
+    if rays then
+        local totalNormal = Vector3.zero
+        local hitCount = 0
+        for _, result in pairs(rays) do
+            if result then
+                totalNormal = totalNormal + result.Normal
+                hitCount = hitCount + 1
+            end
         end
-        LookVector = velocity.Unit
-        local RightVector = LookVector:Cross(newNormal)
-        if RightVector.Magnitude < 0.01 then
-            return
+        if hitCount > 0 then
+            averagedNormal = (totalNormal / hitCount).Unit
         end
-        RightVector = RightVector.Unit
-        local UpVector = newNormal
-        local AlignedCFrame = CFrame.fromMatrix(Board.Position, RightVector, UpVector)
-        local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_TILT, MAX_HORIZONTAL_TILT)
-        local alpha = 1 - math.exp(-ORIENTATION_FACTOR * 0.8 * deltaTimeRender)
-        local targetCFrame = AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt))
-        bodyGyro.CFrame = bodyGyro.CFrame:Lerp(targetCFrame, alpha)
     end
+    local velocity = Board.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
+    if velocity.Magnitude < 0.01 then
+        return
+    end
+    local LookVector = velocity.Unit
+    local RightVector = LookVector:Cross(averagedNormal)
+    if RightVector.Magnitude < 0.01 then
+        return
+    end
+    RightVector = RightVector.Unit
+    local UpVector = averagedNormal
+    local AlignedCFrame = CFrame.fromMatrix(Board.Position, RightVector, UpVector)
+    local normalizedTilt = math.clamp(HorizontalTiltAngle, -MAX_HORIZONTAL_TILT, MAX_HORIZONTAL_TILT)
+    local alpha = 1 - math.exp(-ORIENTATION_FACTOR * 0.8 * deltaTimeRender)
+    local targetCFrame = AlignedCFrame * CFrame.Angles(0, 0, math.rad(normalizedTilt))
+    bodyGyro.CFrame = bodyGyro.CFrame:Lerp(targetCFrame, alpha)
 end
 
 function UpdateFOV(topSpeed, deltaTimeRender)
@@ -827,23 +844,69 @@ end
 
 function HandleLanding()
     if not rootPart then return end
-    
+
     local vel = rootPart.AssemblyLinearVelocity
     if vel.Y >= 0 then
         return
     end
 
-    local raycast = GetRaycastResult()
-    if not raycast then
+    local raycasts = GetRaycastResult()
+    if not raycasts then
         return
     end
 
     local maxFallingSpeed = -5
     local maxDistanceCheck = 1
-    if raycast.Distance <= maxDistanceCheck and rootPart then
+    
+    -- Check all three raycasts
+    local closestDistance = math.huge
+    if raycasts.front and raycasts.front.Distance then
+        closestDistance = math.min(closestDistance, raycasts.front.Distance)
+    end
+    if raycasts.middle and raycasts.middle.Distance then
+        closestDistance = math.min(closestDistance, raycasts.middle.Distance)
+    end
+    if raycasts.back and raycasts.back.Distance then
+        closestDistance = math.min(closestDistance, raycasts.back.Distance)
+    end
+    
+    if closestDistance <= maxDistanceCheck and rootPart then
         local newY = math.max(vel.Y, maxFallingSpeed)
         rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, newY, vel.Z)
     end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    -- if not rootPart then return end
+
+    -- local vel = rootPart.AssemblyLinearVelocity
+    -- if vel.Y >= 0 then
+    --     return
+    -- end
+
+    -- local raycast = GetRaycastResult()
+    -- if not raycast then
+    --     return
+    -- end
+
+    -- local maxFallingSpeed = -5
+    -- local maxDistanceCheck = 1
+    -- if raycast.Distance <= maxDistanceCheck and rootPart then
+    --     local newY = math.max(vel.Y, maxFallingSpeed)
+    --     rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, newY, vel.Z)
+    -- end
 end
 
 function UpdateFlyBar(dt)
@@ -1009,7 +1072,7 @@ function NewController:StartHoverboard(config)
         WallDetection(dt)
         UpdateFOV(topSpeed, dt)
         KeepJumping()
-        HandleLanding()
+        --HandleLanding()
         UpdateFlyBar(dt)
 
         if speedGUI and speedLabel and speedFrame then
@@ -1128,7 +1191,7 @@ function NewController:OnCharacterAdded(char)
     humanoid.AutoRotate = false
     HandleHumanoidStates()
     humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-    
+
     -- Disable all humanoid animations
     local animator = humanoid:FindFirstChildOfClass("Animator")
     if animator then
@@ -1207,7 +1270,9 @@ function NewController:BindGear()
     GearService.TrailEquipped:Connect(function(trailName)
         print("EquipTrail event received")
         local trailConfig = TrailsConfig.GetConfig(trailName)
-        if not trailConfig then return end
+        if not trailConfig then
+            return
+        end
         Trail.Enabled = true
         SetTrail(trailConfig.Color)
     end)
