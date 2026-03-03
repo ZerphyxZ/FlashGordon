@@ -742,7 +742,6 @@ function GetRaycastResult()
     }
 end
 
-local isWallStopped = false
 function ApplyVelocity(Acceleration, deltaTimeRender)
     -- ───────────────────────────────────────────────────────────────
     -- 1. GROUND DETECTION  (downhill slope + grounded state)
@@ -856,8 +855,12 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
             if flatNormal.Magnitude > FLOATING_ERROR_MARGIN then
                 flatNormal = flatNormal.Unit
                 -- Only react when moving INTO the surface (dot < 0).
-                if currentXZ:Dot(flatNormal) < 0.5 then
+                if currentXZ:Dot(flatNormal) < 0.9 then
                     collisionActive = true
+                    -- U-turn: reverse the travel direction, preserve speed.
+                    --local oppositeXZ = -currentXZ.Unit
+                    --local alpha = 1 - math.exp(-WALL_TURN_SMOOTH * deltaTimeRender)
+                    --collisionXZ = currentXZ:Lerp(oppositeXZ, alpha)
                 end
             end
         end
@@ -873,15 +876,13 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
         NewController.MoveVector.Z * NewController.CurrentSpeed
     ) + downhillContribution
 
-    local finalXZ = intendedXZ
+    local finalXZ = intendedXZ --collisionActive and collisionXZ or intendedXZ
     if collisionActive then
         if intendedXZ.Magnitude > FLOATING_ERROR_MARGIN then
             print("Collision is active")
-            -- -- Flip the intended direction 180°
             local reversedDir = -intendedXZ.Unit * 5
-            -- Preserve intended speed
             local speed = intendedXZ.Magnitude
-            finalXZ = reversedDir * (speed * 2.5)
+            finalXZ = reversedDir * speed
         end
     end
     local finalVelocity = Vector3.new(finalXZ.X, correctionY, finalXZ.Z)
