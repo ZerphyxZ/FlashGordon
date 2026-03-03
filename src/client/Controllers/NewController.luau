@@ -52,10 +52,14 @@ local RAY_PREFERENCE_DISTANCE = 0
 local MIN_FOV = 70
 local MAX_FOV = 100
 
--- HOVER SPRING: maintain constant hover height above ground surface
-local TARGET_HOVER_DISTANCE = 0.0 -- target distance from invisiblePart center to ground (tune per board geometry)
-local HOVER_KP = 25 -- spring position gain (stiffness)
-local HOVER_KD = 8 -- spring velocity damping
+-- WALL AVOIDANCE: single ray from character, turns board to opposite direction on hit.
+local WALL_RAY_LENGTH     = 5     -- studs ahead of character to detect walls
+local WALL_TURN_SMOOTH    = 30     -- exponential lerp speed for the U-turn redirect
+
+-- SMOOTH LANDING: absorb hard fall impact without touching slope / jump behaviour.
+-- Only fires when the board is grounded AND vertical velocity is significantly negative.
+local LANDING_THRESHOLD   = -18    -- Y velocity (studs/s) that counts as a hard landing
+local LANDING_ABSORB      = 0.08   -- fraction of impact Y that survives (0 = full stop)
 
 -- MOVEMENT / SPEED
 local IsDecelerating = false
@@ -738,56 +742,256 @@ function GetRaycastResult()
     }
 end
 
+local isWallStopped = false
 function ApplyVelocity(Acceleration, deltaTimeRender)
+    -- ───────────────────────────────────────────────────────────────
+    -- 1. GROUND DETECTION  (downhill slope + grounded state)
+    -- ───────────────────────────────────────────────────────────────
     local rays = GetRaycastResult()
-
     local velocityFactor = Acceleration
+    if IsDecelerating then
+        velocityFactor = grounded and Acceleration * 1.5 or DECELERATION_FACTOR
+    end
+
     local downhillVector = Vector3.zero
-    local downhillAngle = 0
+    local downhillAngle  = 0
+    local middleRayDist  = nil
 
     if rays then
-        local hits = {}
+        local hitCount = 0
         local totalNormal = Vector3.zero
         local totalDistance = 0
 
         for _, result in pairs(rays) do
             if result then
-                table.insert(hits, result)
-                totalNormal = totalNormal + result.Normal
-                totalDistance = totalDistance + result.Distance
+                hitCount += 1
+                totalNormal += result.Normal
+                totalDistance += result.Distance
             end
         end
-
-        if #hits > 0 then
-            rayHit = true
-            grounded = (totalDistance / #hits) < 0.6
-
-            local averagedNormal = (totalNormal / #hits).Unit
-
+        if hitCount > 0 then
+            local averagedNormal = (totalNormal / hitCount)
+            if averagedNormal.Magnitude > FLOATING_ERROR_MARGIN then
+                averagedNormal = averagedNormal.Unit
+            end
+            local averagedDistance = totalDistance / hitCount
+            grounded = averagedDistance < 0.6
             downhillVector = ReturnDownhillVector(averagedNormal)
-            downhillAngle = ReturnAngleBetweenVectors(averagedNormal, Vector3.yAxis)
+            downhillAngle  = ReturnAngleBetweenVectors(averagedNormal, Vector3.yAxis)
         else
-            rayHit = false
             grounded = false
+        end
+    else
+        grounded = false
+    end
+
+    -- ───────────────────────────────────────────────────────────────
+    -- 2. DOWNHILL SLOPE CONTRIBUTION  (XZ only, no negative-Y push)
+    -- ───────────────────────────────────────────────────────────────
+    downhillAngle = math.clamp(math.abs(downhillAngle), 0, 45)
+    local downhillHorizontal = Vector3.new(downhillVector.X, 0, downhillVector.Z)
+    if downhillHorizontal.Magnitude > FLOATING_ERROR_MARGIN then
+        downhillHorizontal = downhillHorizontal.Unit
+    end
+    local downhillContribution =
+        downhillHorizontal * (workspace.Gravity / 2) * (downhillAngle / DOWNHILL_SLOPE_ANGLE)
+
+    -- ───────────────────────────────────────────────────────────────
+    -- 3. HOVER HEIGHT SPRING-DAMPER  (Y axis)
+    -- Maintains a constant TARGET_HOVER_DISTANCE above the ground
+    -- surface, regardless of slope direction.
+    -- ───────────────────────────────────────────────────────────────
+    local correctionY = bodyVelocity.Velocity.Y   -- default: preserve current Y (air)
+
+    -- ───────────────────────────────────────────────────────────────
+    -- 4. SMOOTH LANDING  (absorb hard fall-impact on Y)
+    --
+    -- Fires ONLY when:
+    --   • The board just became grounded (near the surface), AND
+    --   • The current Y velocity is severely negative (hard fall),
+    --     well below what normal slope movement ever produces.
+    --
+    -- It does NOT fire during:
+    --   • Normal jumps  (Y velocity is positive when leaving ground)
+    --   • Uphill/downhill travel  (Y velocities stay near 0)
+    --   • Regular hover corrections  (correctionY is small)
+    --
+    -- Mechanism: override correctionY with a strongly damped target
+    -- (LANDING_ABSORB fraction of impact), then let the fast Y-lerp
+    -- below converge it in a single frame for a crisp, bounce-free land.
+    -- ───────────────────────────────────────────────────────────────
+    local currentVelY = bodyVelocity.Velocity.Y
+    if grounded and currentVelY < LANDING_THRESHOLD then
+        -- Absorb the bulk of the impact; allow a tiny residual so the
+        -- hover spring can take over cleanly without a hard stop jolt.
+        correctionY = 0 --currentVelY * LANDING_ABSORB
+    end
+
+    -- ───────────────────────────────────────────────────────────────
+    -- 5. WALL AVOIDANCE  (single ray from character → U-turn)
+    --
+    -- One horizontal ray originates from the character (rootPart) in
+    -- the direction the board is currently moving.  If it detects any
+    -- BasePart wall within WALL_RAY_LENGTH studs, and the board is
+    -- genuinely travelling into that surface (dot < 0), the XZ
+    -- velocity is smoothly redirected to the exact OPPOSITE direction.
+    --
+    -- ───────────────────────────────────────────────────────────────
+    local currentXZ       = bodyVelocity.Velocity * Vector3.new(1, 0, 1)
+    local collisionActive = false
+    local collisionXZ     = currentXZ
+
+    if rootPart and currentXZ.Magnitude > 0.5 then
+        local moveDir = currentXZ.Unit
+
+        local wallRay = RaycastParams.new()
+        wallRay.FilterType = Enum.RaycastFilterType.Exclude
+        wallRay.IgnoreWater = true
+        wallRay.FilterDescendantsInstances = {Board, character, invisiblePart}
+
+        local hit = workspace:Raycast(rootPart.Position, moveDir * WALL_RAY_LENGTH, wallRay)
+
+        if hit and hit.Instance and hit.Instance:IsA("BasePart") then
+            local flatNormal = Vector3.new(hit.Normal.X, 0, hit.Normal.Z)
+            if flatNormal.Magnitude > FLOATING_ERROR_MARGIN then
+                flatNormal = flatNormal.Unit
+                -- Only react when moving INTO the surface (dot < 0).
+                if currentXZ:Dot(flatNormal) < 0.5 then
+                    collisionActive = true
+                end
+            end
         end
     end
 
-    if IsDecelerating then
-        velocityFactor = rayHit and Acceleration * 1.5 or DECELERATION_FACTOR
+    -- ───────────────────────────────────────────────────────────────
+    -- 6. ASSEMBLE FINAL VELOCITY  (single combination point)
+    -- ───────────────────────────────────────────────────────────────
+    -- XZ base: player intent + downhill contribution
+    local intendedXZ = Vector3.new(
+        NewController.MoveVector.X * NewController.CurrentSpeed,
+        0,
+        NewController.MoveVector.Z * NewController.CurrentSpeed
+    ) + downhillContribution
+
+    local finalXZ = intendedXZ
+    if collisionActive then
+        if intendedXZ.Magnitude > FLOATING_ERROR_MARGIN then
+            print("Collision is active")
+            -- -- Flip the intended direction 180°
+            local reversedDir = -intendedXZ.Unit * 5
+            -- Preserve intended speed
+            local speed = intendedXZ.Magnitude
+            finalXZ = reversedDir * (speed * 2.5)
+        end
     end
+    local finalVelocity = Vector3.new(finalXZ.X, correctionY, finalXZ.Z)
 
-    downhillAngle = math.clamp(math.abs(downhillAngle), 0, 90)
-
-    local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.CurrentSpeed, bodyVelocity.Velocity.Y,
-        NewController.MoveVector.Z * NewController.CurrentSpeed) + downhillVector * (workspace.Gravity / 2) *
-                              (downhillAngle / DOWNHILL_SLOPE_ANGLE)
-
-    local direction, tiltAngle = ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1),
-        bodyVelocity.Velocity * Vector3.new(1, 0, 1))
-
+    -- ───────────────────────────────────────────────────────────────
+    -- 7. TILT CALCULATION  (uses combined XZ before write)
+    -- ───────────────────────────────────────────────────────────────
+    local direction, tiltAngle = ReturnDirectionAndTiltAngle(
+        finalVelocity * Vector3.new(1, 0, 1),
+        bodyVelocity.Velocity * Vector3.new(1, 0, 1)
+    )
     HorizontalTiltAngle = -direction * tiltAngle
 
-    bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(finalVelocity, deltaTimeRender * velocityFactor)
+    -- ───────────────────────────────────────────────────────────────
+    -- 8. SINGLE BODYVELOCITY WRITE
+    -- XZ uses the standard acceleration lerp.
+    -- Y uses a faster exponential lerp when grounded so hover-spring
+    -- and landing corrections converge within the same frame.
+    -- ───────────────────────────────────────────────────────────────
+    local xzAlpha = deltaTimeRender * velocityFactor
+    local yAlpha  = grounded
+        and (1 - math.exp(-20 * deltaTimeRender))
+        or xzAlpha
+
+    bodyVelocity.Velocity = Vector3.new(
+        Lerp(bodyVelocity.Velocity.X, finalVelocity.X, xzAlpha),
+        Lerp(bodyVelocity.Velocity.Y, correctionY,     yAlpha),
+        Lerp(bodyVelocity.Velocity.Z, finalVelocity.Z, xzAlpha)
+    )
+
+
+
+
+
+
+
+
+
+
+    -- local rays = GetRaycastResult()
+    -- local velocityFactor = Acceleration
+    -- local downhillVector = Vector3.zero
+    -- local downhillAngle = 0
+    -- local smallestDistance = 0
+    -- local currentVelocity = bodyVelocity.Velocity
+    -- if rays then
+    --     local hits = {}
+    --     local totalNormal = Vector3.zero
+    --     local totalDistance = 0
+    --     for _, result in pairs(rays) do
+    --         if result then
+    --             table.insert(hits, result)
+    --             totalNormal = totalNormal + result.Normal
+    --             totalDistance = totalDistance + result.Distance
+    --         end
+    --     end
+    --     if #hits > 0 then
+    --         rayHit = true
+    --         smallestDistance = totalDistance / #hits
+    --         grounded = smallestDistance < 0.6
+    --         local averagedNormal = (totalNormal / #hits).Unit
+    --         downhillVector = ReturnDownhillVector(averagedNormal)
+    --         downhillAngle = ReturnAngleBetweenVectors(averagedNormal, Vector3.yAxis)
+    --     else
+    --         rayHit = false
+    --         grounded = false
+    --     end
+    -- end
+    -- downhillAngle = math.clamp(math.abs(downhillAngle), 0, 90)
+    -- local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.CurrentSpeed, 
+    --                                   currentVelocity.Y,
+    --     NewController.MoveVector.Z * NewController.CurrentSpeed) + downhillVector * (workspace.Gravity / 2) *
+    --                           (downhillAngle / DOWNHILL_SLOPE_ANGLE)
+
+    -- ---------------------------------------------------
+    -- -- Smooth falling handling
+    -- ---------------------------------------------------
+    -- local isFalling = rootPart.AssemblyLinearVelocity.Y < 0
+    -- local maxFallingSpeed = -5
+    -- local maxDistanceCheck = 3
+    -- if isFalling and smallestDistance > 0 and smallestDistance < maxDistanceCheck then
+    --     local alpha = 1 - (smallestDistance / maxDistanceCheck)
+    --     alpha = math.clamp(alpha, 0, 1)
+    --     local targetY = math.max(currentVelocity.Y, maxFallingSpeed)
+    --     local smoothY = currentVelocity.Y + (targetY - currentVelocity.Y) * alpha
+    --     print("Falling now")
+    --     if smallestDistance < maxDistanceCheck then
+    --         finalVelocity = Vector3.new(
+    --             finalVelocity.X,
+    --             smoothY,
+    --             finalVelocity.Z
+    --         )
+    --     end
+    -- end
+    -- if grounded and isFalling then
+    --     finalVelocity = Vector3.new(
+    --         finalVelocity.X,
+    --         0,
+    --         finalVelocity.Z
+    --     )
+    -- end
+
+    -- local direction, tiltAngle = ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1),
+    --     bodyVelocity.Velocity * Vector3.new(1, 0, 1))
+
+    -- HorizontalTiltAngle = -direction * tiltAngle
+    -- if IsDecelerating then
+    --     velocityFactor = rayHit and Acceleration * 1.5 or DECELERATION_FACTOR
+    -- end
+    -- bodyVelocity.Velocity = currentVelocity:Lerp(finalVelocity, deltaTimeRender * velocityFactor)
 end
 
 function ApplyOrientation(deltaTimeRender)
@@ -872,7 +1076,8 @@ function HandleLanding()
     
     if closestDistance <= maxDistanceCheck and rootPart then
         local newY = math.max(vel.Y, maxFallingSpeed)
-        rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, newY, vel.Z)
+        bodyVelocity.Velocity = Vector3.new(vel.X, newY, vel.Z)
+        --rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, newY, vel.Z)
     end
 
 
@@ -1069,7 +1274,7 @@ function NewController:StartHoverboard(config)
         CalculateSpeed(topSpeed)
         ApplyVelocity(acceleration, dt)
         ApplyOrientation(dt)
-        WallDetection(dt)
+        --WallDetection(dt)
         UpdateFOV(topSpeed, dt)
         KeepJumping()
         --HandleLanding()
