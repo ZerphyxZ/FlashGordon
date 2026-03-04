@@ -35,31 +35,26 @@ local ProductsService
 local ProductsController
 
 -- MOVEMENT / ORIENTATION
-local RayDistance = 10
+local RayDistance = 12
 local HorizontalTiltAngle = 0
 
 -- CONSTANT VALUES
 local DECELERATION_FACTOR = 0.5
 local ORIENTATION_FACTOR = 10
 local MAX_HORIZONTAL_TILT = 15
-local FOV_FACTOR = 1
 local FLOATING_ERROR_MARGIN = 0.01
 local JUMP_POWER = 70
 local MAX_SPEED = 100
 local ACCELERATION = 0.3
 local DOWNHILL_SLOPE_ANGLE = 90 -- angle at which board gets max downhill boost (clamped in code)
 local RAY_PREFERENCE_DISTANCE = 0
-local MIN_FOV = 70
-local MAX_FOV = 100
 
 -- WALL AVOIDANCE: single ray from character, turns board to opposite direction on hit.
 local WALL_RAY_LENGTH     = 5     -- studs ahead of character to detect walls
-local WALL_TURN_SMOOTH    = 30     -- exponential lerp speed for the U-turn redirect
-
--- SMOOTH LANDING: absorb hard fall impact without touching slope / jump behaviour.
--- Only fires when the board is grounded AND vertical velocity is significantly negative.
-local LANDING_THRESHOLD   = -18    -- Y velocity (studs/s) that counts as a hard landing
-local LANDING_ABSORB      = 0.08   -- fraction of impact Y that survives (0 = full stop)
+local WALL_TURN_SMOOTH    = 80     -- exponential lerp speed for the U-turn redirect
+local WALL_GROUP_NAME = "Walls"
+local collisionActive = false
+local redirectDir = nil
 
 -- MOVEMENT / SPEED
 local IsDecelerating = false
@@ -166,99 +161,6 @@ local function SetCollisionGroup(model, groupName)
             inst.CollisionGroup = groupName
         end
     end
-end
-
-function WallDetection(dt)
-    local rayParams = RaycastParams.new()
-    rayParams.FilterType = Enum.RaycastFilterType.Exclude
-    rayParams.IgnoreWater = true
-    rayParams.FilterDescendantsInstances = {character, Board}
-
-    local velocity = Board.AssemblyLinearVelocity
-    -- local velocity = bodyVelocity.Velocity
-    local speed = velocity.Magnitude
-    if speed <= 0.1 then
-        return
-    end
-    local lookDir = velocity.Unit
-    local cframe = Board.CFrame
-    local objectLookDir = cframe:VectorToObjectSpace(lookDir)
-    local halfSize = Board.Size / 2
-    -- local offset = lookDir.X * halfSize.X + lookDir.Y * halfSize.Y + lookDir.Z * halfSize.Z
-    local objectOffset = Vector3.new(objectLookDir.X * halfSize.X, objectLookDir.Y * halfSize.Y,
-        objectLookDir.Z * halfSize.Z)
-    local worldOffset = cframe:VectorToWorldSpace(objectOffset)
-    -- local origin = Board.Position + lookDir * offset
-    local origin = Board.Position + worldOffset
-    local rayLength = math.max(2, speed * dt + 1)
-    local direction = lookDir * rayLength
-
-    local hit = workspace:Raycast(origin, direction, rayParams)
-    if hit and hit.Instance and hit.Instance:IsA("BasePart") then
-        if hit.Instance.CollisionGroup ~= "Walls" then
-            return
-        end
-
-        print("Wall detected!")
-
-        local normal = hit.Normal
-        -- Check if moving into wall
-        local intoWall = velocity:Dot(normal)
-
-        if intoWall < 0 then
-            -- Push slightly opposite to wall normal
-            local pushStrength = 200 -- adjust this for how strong push back is
-            -- local pushStrength = math.clamp(speed * 2, 100, 200)
-            local pushDirection = normal * pushStrength
-
-            -- Keep Y velocity untouched (optional)
-            local targetVelocity = Vector3.new(pushDirection.X, velocity.Y, pushDirection.Z)
-
-            -- Smooth transition using Lerp
-            -- local smoothFactor = math.clamp(speed * 0.12, 8, 25) -- stronger push at higher speeds
-            local smoothFactor = 5
-            local alpha = 1 - math.exp(-smoothFactor * dt) -- exponential smoothing
-
-            -- bodyVelocity.Velocity = velocity:Lerp(targetVelocity, alpha)
-            Board.AssemblyLinearVelocity = velocity:Lerp(targetVelocity, alpha)
-        end
-    end
-
-    -- OLD CODE
-    -- local rayParams = RaycastParams.new()
-    -- rayParams.FilterType = Enum.RaycastFilterType.Exclude
-    -- rayParams.IgnoreWater = true
-    -- rayParams.FilterDescendantsInstances = {character, Board}
-
-    -- local lookDir = rootPart.CFrame.LookVector
-    -- local speed = Board.AssemblyLinearVelocity.Magnitude
-    -- -- local speed = bodyVelocity.Velocity.Magnitude
-
-    -- -- Dynamic ray length (prevents tunneling)
-    -- local rayLength = math.max(5, speed * dt + 1)
-
-    -- local origin = rootPart.Position
-    -- local direction = lookDir * rayLength
-
-    -- local hit = workspace:Raycast(origin, direction, rayParams)
-
-    -- if hit then
-    --     print("Wall detected!")
-    --     local normal = hit.Normal
-    --     local currentVel = Board.AssemblyLinearVelocity
-    --     -- local currentVel = bodyVelocity.Velocity
-
-    --     -- Slide with the wall
-    --     local intoWall = currentVel:Dot(normal)
-    --     local slideVelocity = currentVel - normal * intoWall
-    --     -- local maxSlideSpeed = currentVel.Magnitude
-    --     -- slideVelocity = slideVelocity.Unit * math.min(slideVelocity.Magnitude, maxSlideSpeed)
-    --     if intoWall < 0 then
-    --         -- Board.AssemblyLinearVelocity = Vector3.new(slideVelocity.X * 0, currentVel.Y, slideVelocity.Z * 0)
-    --         bodyVelocity.Velocity = Vector3.new(slideVelocity.X * 0.95, 0, slideVelocity.Z * 0.95)
-    --     end
-    --     --return
-    -- end
 end
 
 function GetMaxJumps()
@@ -586,7 +488,7 @@ function Dash(dashPower)
         return
     end
 
-    local velocity = Board.AssemblyLinearVelocity
+    local velocity = bodyVelocity.Velocity
     local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
 
     if horizontal.Magnitude < 0.1 then
@@ -754,7 +656,6 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
 
     local downhillVector = Vector3.zero
     local downhillAngle  = 0
-    local middleRayDist  = nil
 
     if rays then
         local hitCount = 0
@@ -763,9 +664,9 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
 
         for _, result in pairs(rays) do
             if result then
-                hitCount += 1
-                totalNormal += result.Normal
-                totalDistance += result.Distance
+                hitCount = hitCount + 1
+                totalNormal = totalNormal + result.Normal
+                totalDistance = totalDistance + result.Distance
             end
         end
         if hitCount > 0 then
@@ -784,6 +685,13 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
         grounded = false
     end
 
+    -- local state = humanoid:GetState()
+    -- if not grounded and rootPart.AssemblyLinearVelocity.Y < -10 then 
+    --     if state ~= Enum.HumanoidStateType.Freefall then
+    --         humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+    --     end
+    -- end
+
     -- ───────────────────────────────────────────────────────────────
     -- 2. DOWNHILL SLOPE CONTRIBUTION  (XZ only, no negative-Y push)
     -- ───────────────────────────────────────────────────────────────
@@ -795,77 +703,7 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
     local downhillContribution =
         downhillHorizontal * (workspace.Gravity / 2) * (downhillAngle / DOWNHILL_SLOPE_ANGLE)
 
-    -- ───────────────────────────────────────────────────────────────
-    -- 3. HOVER HEIGHT SPRING-DAMPER  (Y axis)
-    -- Maintains a constant TARGET_HOVER_DISTANCE above the ground
-    -- surface, regardless of slope direction.
-    -- ───────────────────────────────────────────────────────────────
-    local correctionY = bodyVelocity.Velocity.Y   -- default: preserve current Y (air)
-
-    -- ───────────────────────────────────────────────────────────────
-    -- 4. SMOOTH LANDING  (absorb hard fall-impact on Y)
-    --
-    -- Fires ONLY when:
-    --   • The board just became grounded (near the surface), AND
-    --   • The current Y velocity is severely negative (hard fall),
-    --     well below what normal slope movement ever produces.
-    --
-    -- It does NOT fire during:
-    --   • Normal jumps  (Y velocity is positive when leaving ground)
-    --   • Uphill/downhill travel  (Y velocities stay near 0)
-    --   • Regular hover corrections  (correctionY is small)
-    --
-    -- Mechanism: override correctionY with a strongly damped target
-    -- (LANDING_ABSORB fraction of impact), then let the fast Y-lerp
-    -- below converge it in a single frame for a crisp, bounce-free land.
-    -- ───────────────────────────────────────────────────────────────
-    local currentVelY = bodyVelocity.Velocity.Y
-    if grounded and currentVelY < LANDING_THRESHOLD then
-        -- Absorb the bulk of the impact; allow a tiny residual so the
-        -- hover spring can take over cleanly without a hard stop jolt.
-        correctionY = 0 --currentVelY * LANDING_ABSORB
-    end
-
-    -- ───────────────────────────────────────────────────────────────
-    -- 5. WALL AVOIDANCE  (single ray from character → U-turn)
-    --
-    -- One horizontal ray originates from the character (rootPart) in
-    -- the direction the board is currently moving.  If it detects any
-    -- BasePart wall within WALL_RAY_LENGTH studs, and the board is
-    -- genuinely travelling into that surface (dot < 0), the XZ
-    -- velocity is smoothly redirected to the exact OPPOSITE direction.
-    --
-    -- ───────────────────────────────────────────────────────────────
-    local currentXZ       = bodyVelocity.Velocity * Vector3.new(1, 0, 1)
-    local collisionActive = false
-    local collisionXZ     = currentXZ
-
-    if rootPart and currentXZ.Magnitude > 0.5 then
-        local moveDir = currentXZ.Unit
-
-        local wallRay = RaycastParams.new()
-        wallRay.FilterType = Enum.RaycastFilterType.Exclude
-        wallRay.IgnoreWater = true
-        wallRay.FilterDescendantsInstances = {Board, character, invisiblePart}
-
-        local hit = workspace:Raycast(rootPart.Position, moveDir * WALL_RAY_LENGTH, wallRay)
-
-        if hit and hit.Instance and hit.Instance:IsA("BasePart") then
-            local flatNormal = Vector3.new(hit.Normal.X, 0, hit.Normal.Z)
-            if flatNormal.Magnitude > FLOATING_ERROR_MARGIN then
-                flatNormal = flatNormal.Unit
-                -- Only react when moving INTO the surface (dot < 0).
-                if currentXZ:Dot(flatNormal) < 0.9 then
-                    collisionActive = true
-                    -- U-turn: reverse the travel direction, preserve speed.
-                    --local oppositeXZ = -currentXZ.Unit
-                    --local alpha = 1 - math.exp(-WALL_TURN_SMOOTH * deltaTimeRender)
-                    --collisionXZ = currentXZ:Lerp(oppositeXZ, alpha)
-                end
-            end
-        end
-    end
-
+    local correctionY = bodyVelocity.Velocity.Y
     -- ───────────────────────────────────────────────────────────────
     -- 6. ASSEMBLE FINAL VELOCITY  (single combination point)
     -- ───────────────────────────────────────────────────────────────
@@ -876,15 +714,7 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
         NewController.MoveVector.Z * NewController.CurrentSpeed
     ) + downhillContribution
 
-    local finalXZ = intendedXZ --collisionActive and collisionXZ or intendedXZ
-    if collisionActive then
-        if intendedXZ.Magnitude > FLOATING_ERROR_MARGIN then
-            print("Collision is active")
-            local reversedDir = -intendedXZ.Unit * 5
-            local speed = intendedXZ.Magnitude
-            finalXZ = reversedDir * speed
-        end
-    end
+    local finalXZ = intendedXZ
     local finalVelocity = Vector3.new(finalXZ.X, correctionY, finalXZ.Z)
 
     -- ───────────────────────────────────────────────────────────────
@@ -912,87 +742,6 @@ function ApplyVelocity(Acceleration, deltaTimeRender)
         Lerp(bodyVelocity.Velocity.Y, correctionY,     yAlpha),
         Lerp(bodyVelocity.Velocity.Z, finalVelocity.Z, xzAlpha)
     )
-
-
-
-
-
-
-
-
-
-
-    -- local rays = GetRaycastResult()
-    -- local velocityFactor = Acceleration
-    -- local downhillVector = Vector3.zero
-    -- local downhillAngle = 0
-    -- local smallestDistance = 0
-    -- local currentVelocity = bodyVelocity.Velocity
-    -- if rays then
-    --     local hits = {}
-    --     local totalNormal = Vector3.zero
-    --     local totalDistance = 0
-    --     for _, result in pairs(rays) do
-    --         if result then
-    --             table.insert(hits, result)
-    --             totalNormal = totalNormal + result.Normal
-    --             totalDistance = totalDistance + result.Distance
-    --         end
-    --     end
-    --     if #hits > 0 then
-    --         rayHit = true
-    --         smallestDistance = totalDistance / #hits
-    --         grounded = smallestDistance < 0.6
-    --         local averagedNormal = (totalNormal / #hits).Unit
-    --         downhillVector = ReturnDownhillVector(averagedNormal)
-    --         downhillAngle = ReturnAngleBetweenVectors(averagedNormal, Vector3.yAxis)
-    --     else
-    --         rayHit = false
-    --         grounded = false
-    --     end
-    -- end
-    -- downhillAngle = math.clamp(math.abs(downhillAngle), 0, 90)
-    -- local finalVelocity = Vector3.new(NewController.MoveVector.X * NewController.CurrentSpeed, 
-    --                                   currentVelocity.Y,
-    --     NewController.MoveVector.Z * NewController.CurrentSpeed) + downhillVector * (workspace.Gravity / 2) *
-    --                           (downhillAngle / DOWNHILL_SLOPE_ANGLE)
-
-    -- ---------------------------------------------------
-    -- -- Smooth falling handling
-    -- ---------------------------------------------------
-    -- local isFalling = rootPart.AssemblyLinearVelocity.Y < 0
-    -- local maxFallingSpeed = -5
-    -- local maxDistanceCheck = 3
-    -- if isFalling and smallestDistance > 0 and smallestDistance < maxDistanceCheck then
-    --     local alpha = 1 - (smallestDistance / maxDistanceCheck)
-    --     alpha = math.clamp(alpha, 0, 1)
-    --     local targetY = math.max(currentVelocity.Y, maxFallingSpeed)
-    --     local smoothY = currentVelocity.Y + (targetY - currentVelocity.Y) * alpha
-    --     print("Falling now")
-    --     if smallestDistance < maxDistanceCheck then
-    --         finalVelocity = Vector3.new(
-    --             finalVelocity.X,
-    --             smoothY,
-    --             finalVelocity.Z
-    --         )
-    --     end
-    -- end
-    -- if grounded and isFalling then
-    --     finalVelocity = Vector3.new(
-    --         finalVelocity.X,
-    --         0,
-    --         finalVelocity.Z
-    --     )
-    -- end
-
-    -- local direction, tiltAngle = ReturnDirectionAndTiltAngle(finalVelocity * Vector3.new(1, 0, 1),
-    --     bodyVelocity.Velocity * Vector3.new(1, 0, 1))
-
-    -- HorizontalTiltAngle = -direction * tiltAngle
-    -- if IsDecelerating then
-    --     velocityFactor = rayHit and Acceleration * 1.5 or DECELERATION_FACTOR
-    -- end
-    -- bodyVelocity.Velocity = currentVelocity:Lerp(finalVelocity, deltaTimeRender * velocityFactor)
 end
 
 function ApplyOrientation(deltaTimeRender)
@@ -1012,7 +761,7 @@ function ApplyOrientation(deltaTimeRender)
             averagedNormal = (totalNormal / hitCount).Unit
         end
     end
-    local velocity = Board.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
+    local velocity = bodyVelocity.Velocity * Vector3.new(1, 0, 1)
     if velocity.Magnitude < 0.01 then
         return
     end
@@ -1031,14 +780,78 @@ function ApplyOrientation(deltaTimeRender)
 end
 
 function UpdateFOV(topSpeed, deltaTimeRender)
+    local DEFAULT_FOV = 70
+    local MIN_FOV = 70
+    local MAX_FOV = 100
+    local MAX_VERTICAL_SPEED = 30
+    local VERTICAL_FOV_BOOST = 35
+    local FOV_FACTOR = 3
+
+    local velocity = bodyVelocity.Velocity
+    local horizontalSpeed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+    local verticalSpeed = rootPart.AssemblyLinearVelocity.Y
+
+    -------------------------------------------------
+    -- Base Speed FOV (horizontal movement)
+    -------------------------------------------------
     local diff = MAX_FOV - MIN_FOV
-    local speedBasedFOV = math.clamp(MIN_FOV + diff * (Board.AssemblyLinearVelocity.Magnitude / topSpeed), MIN_FOV,
-        MAX_FOV)
-    if isBoosting or isDashing then
-        speedBasedFOV = math.min(speedBasedFOV + 10, MAX_FOV + 10)
+    local speedBasedFOV = math.clamp(
+        MIN_FOV + diff * (horizontalSpeed / topSpeed),
+        MIN_FOV,
+        MAX_FOV
+    )
+
+    -------------------------------------------------
+    -- Vertical FOV effect (jump / fall)
+    -------------------------------------------------
+    local verticalFOV = DEFAULT_FOV
+    if verticalSpeed > 0 and not grounded then
+        -- Going UP
+        local alpha = math.clamp(verticalSpeed / MAX_VERTICAL_SPEED, 0, 1)
+        verticalFOV = DEFAULT_FOV + VERTICAL_FOV_BOOST-- * alpha
+    elseif verticalSpeed < 0 and not grounded then
+        -- Going DOWN
+        local alpha = math.clamp(math.abs(verticalSpeed) / MAX_VERTICAL_SPEED, 0, 1)
+        verticalFOV = DEFAULT_FOV + VERTICAL_FOV_BOOST-- * alpha
     end
 
-    Camera.FieldOfView = Lerp(Camera.FieldOfView, speedBasedFOV, deltaTimeRender * FOV_FACTOR)
+    -------------------------------------------------
+    -- Choose higher of horizontal or vertical effect
+    -------------------------------------------------
+    local finalFOV = math.max(speedBasedFOV, verticalFOV)
+
+    -------------------------------------------------
+    -- Boost / Dash override
+    -------------------------------------------------
+    if isBoosting or isDashing then
+        finalFOV = math.min(finalFOV + 10, MAX_FOV + 10)
+    end
+
+    -------------------------------------------------
+    -- Smooth transition
+    -------------------------------------------------
+    Camera.FieldOfView = Lerp(
+        Camera.FieldOfView,
+        finalFOV,
+        deltaTimeRender * FOV_FACTOR
+    )
+
+
+
+
+
+
+
+
+
+
+    -- local diff = MAX_FOV - MIN_FOV
+    -- local speedBasedFOV = math.clamp(MIN_FOV + diff * (bodyVelocity.Velocity.Magnitude / topSpeed), MIN_FOV, MAX_FOV)
+    -- if isBoosting or isDashing then
+    --     speedBasedFOV = math.min(speedBasedFOV + 10, MAX_FOV + 10)
+    -- end
+
+    -- Camera.FieldOfView = Lerp(Camera.FieldOfView, speedBasedFOV, deltaTimeRender * FOV_FACTOR)
 end
 
 function KeepJumping()
@@ -1048,71 +861,10 @@ function KeepJumping()
 end
 
 function HandleLanding()
-    if not rootPart then return end
-
     local vel = rootPart.AssemblyLinearVelocity
-    if vel.Y >= 0 then
-        return
+    if vel.Y < -30 then
+        rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, -45, vel.Z)
     end
-
-    local raycasts = GetRaycastResult()
-    if not raycasts then
-        return
-    end
-
-    local maxFallingSpeed = -5
-    local maxDistanceCheck = 1
-    
-    -- Check all three raycasts
-    local closestDistance = math.huge
-    if raycasts.front and raycasts.front.Distance then
-        closestDistance = math.min(closestDistance, raycasts.front.Distance)
-    end
-    if raycasts.middle and raycasts.middle.Distance then
-        closestDistance = math.min(closestDistance, raycasts.middle.Distance)
-    end
-    if raycasts.back and raycasts.back.Distance then
-        closestDistance = math.min(closestDistance, raycasts.back.Distance)
-    end
-    
-    if closestDistance <= maxDistanceCheck and rootPart then
-        local newY = math.max(vel.Y, maxFallingSpeed)
-        bodyVelocity.Velocity = Vector3.new(vel.X, newY, vel.Z)
-        --rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, newY, vel.Z)
-    end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    -- if not rootPart then return end
-
-    -- local vel = rootPart.AssemblyLinearVelocity
-    -- if vel.Y >= 0 then
-    --     return
-    -- end
-
-    -- local raycast = GetRaycastResult()
-    -- if not raycast then
-    --     return
-    -- end
-
-    -- local maxFallingSpeed = -5
-    -- local maxDistanceCheck = 1
-    -- if raycast.Distance <= maxDistanceCheck and rootPart then
-    --     local newY = math.max(vel.Y, maxFallingSpeed)
-    --     rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, newY, vel.Z)
-    -- end
 end
 
 function UpdateFlyBar(dt)
@@ -1130,6 +882,7 @@ function UpdateFlyBar(dt)
     elseif state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.Landed or state ==
         Enum.HumanoidStateType.Physics then
 
+        task.wait(0.5) -- small delay to prevent immediate refuel on jump
         flyEnergy = flyEnergy + REFILL_RATE * dt
         flyEnergy = math.clamp(flyEnergy, 0, MAX_FLY_ENERGY)
     end
@@ -1248,6 +1001,9 @@ function NewController:SetActiveConfig(boardName)
     print("Hoverboard: Active config: ", self.ActiveConfig)
     Board = character:WaitForChild("Hoverboard"):WaitForChild("PrimaryPart")
     invisiblePart = Board.Parent:WaitForChild("Invisible")
+    -- invisiblePart.Touched:Connect(function(hit)
+    --     NewController:HandleObstacleTouch(hit)
+    -- end)
     Trail = Board:WaitForChild("Trail")
     ApplyEquippedTrail()
     isHoverboardInitialized = true
@@ -1275,16 +1031,69 @@ function NewController:StartHoverboard(config)
         CalculateSpeed(topSpeed)
         ApplyVelocity(acceleration, dt)
         ApplyOrientation(dt)
-        --WallDetection(dt)
+        --NewController:ObstacleTouchUpdate(dt)
+        HandleLanding()
         UpdateFOV(topSpeed, dt)
         KeepJumping()
-        --HandleLanding()
         UpdateFlyBar(dt)
 
         if speedGUI and speedLabel and speedFrame then
             UpdateSpeedGUI(topSpeed)
         end
     end)
+end
+
+function NewController:HandleObstacleTouch(hit)
+    if not hit or not hit:IsA("BasePart") then
+        return
+    end
+    local groupName = PhysicsService:GetCollisionGroupName(hit.CollisionGroupId)
+    if groupName ~= WALL_GROUP_NAME then
+        return
+    end
+
+    if not bodyVelocity then
+        return
+    end
+    print("Wall touched:", hit.Name)
+    local currentXZ = bodyVelocity.Velocity * Vector3.new(1,0,1)
+    if currentXZ.Magnitude > 0.01 then
+        collisionActive = true
+        redirectDir = -currentXZ.Unit
+    end
+end
+
+function NewController:ObstacleTouchUpdate(dt)
+    if not collisionActive or not redirectDir or not bodyVelocity then
+        return
+    end
+
+    local currentVel = bodyVelocity.Velocity
+    local currentXZ = currentVel * Vector3.new(1,0,1)
+    local speed = 0
+
+    if isDashing or isBoosting then
+        speed = currentXZ.Magnitude
+    else
+        speed = currentXZ.Magnitude * 2
+    end
+    
+    local targetXZ = redirectDir * speed
+
+    local alpha = 1 - math.exp(-WALL_TURN_SMOOTH * dt)
+    local newXZ = currentXZ:Lerp(targetXZ, alpha)
+
+    bodyVelocity.Velocity = Vector3.new(
+        newXZ.X,
+        currentVel.Y,
+        newXZ.Z
+    )
+
+    -- Stop once mostly reversed
+    if currentXZ:Dot(redirectDir) > 0.95 then
+        collisionActive = false
+        redirectDir = nil
+    end
 end
 
 function InputListeners()
@@ -1324,7 +1133,9 @@ function InputListeners()
         end
     end)
     UserInputService.JumpRequest:Connect(function()
-        -- Fly
+        ------------------------------
+        -- FLY MODULE IMPLEMENTED HERE
+        ------------------------------
         if not canFly then
             return
         end
@@ -1363,7 +1174,7 @@ end
 
 function HandleHumanoidStates()
     humanoid.StateChanged:Connect(function(oldState, newState)
-        if newState == Enum.HumanoidStateType.Landed or newState == Enum.HumanoidStateType.Running then
+        if newState == Enum.HumanoidStateType.Running then --or newState == Enum.HumanoidStateType.Running then
             humanoid:ChangeState(Enum.HumanoidStateType.Physics)
             totalJumps = 0
             canDoubleJump = false
@@ -1441,7 +1252,6 @@ end
 -- [External Modifier Functions]		------
 function NewController:ApplyAssist(ForceVector)
     bodyVelocity.Velocity = bodyVelocity.Velocity + ForceVector
-    -- rootPart.AssemblyLinearVelocity += ForceVector	--Added
 end
 
 function NewController:ApplyJump(JumpPower)
