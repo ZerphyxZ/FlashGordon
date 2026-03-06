@@ -75,6 +75,42 @@ function ProductsService.Client:GetProductId(player, productName)
 	return true, id
 end
 
+-- ── GetActiveProducts ─────────────────────────────────────────────────────────
+-- Called by the client on every character spawn to restore any still-active
+-- timed products (covers both rejoin and respawn).
+-- Returns: { [productName] = remainingSeconds }
+-- productName keys match the signal-name prefix used in ProductsController.
+function ProductsService.Client:GetActiveProducts(player)
+	local data = PlayerDataHandler:GetData(player)
+	if not data then return {} end
+	local now = os.time()
+
+	-- dataKey = the profile.Data field that holds the os.time() end-timestamp.
+	local KEYS = {
+		DoubleJump    = "DoubleJumpEndTime",
+		FastRespawn   = "FastRespawnEndTime",
+		GravityCoil   = "GravityEndTime",
+		DoubleLuck    = "DoubleLuckEndTime",
+		DoubleCoins   = "DoubleCoinsEndTime",
+		DisablePopups = "DisablePopupsEndTime",
+		WorldPass     = "WorldPassEndTime",
+		InfFlyBar     = "InfFlyBarEndTime",
+		Fly           = "FlyEndTime",
+	}
+
+	local active = {}
+	for productName, dataKey in pairs(KEYS) do
+		local endTime = data[dataKey]
+		if endTime then
+			local remaining = endTime - now
+			if remaining > 0 then
+				active[productName] = math.floor(remaining)
+			end
+		end
+	end
+	return active
+end
+
 -- ── Double Jump ───────────────────────────────────────────────────────────────
 function ProductsService.Client:PurchaseDoubleJump(player)
 	print("PurchaseDoubleJump:", player.Name)

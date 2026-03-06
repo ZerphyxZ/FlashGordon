@@ -2,67 +2,157 @@ local Global = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared
     "Global"))
 
 local MarketplaceService = game:GetService("MarketplaceService")
-local TweenService = game:GetService("TweenService")
-local Knit = Global.Knit
-local Players = Global.Players
-local player = Players.LocalPlayer
-local workspace = game:GetService("Workspace")
+local Knit               = Global.Knit
+local Players            = Global.Players
+local player             = Players.LocalPlayer
+local workspace          = game:GetService("Workspace")
 
 local ProductsController = Knit.CreateController({ Name = "ProductsController" })
-local ProductsService
+local ProductsService    -- resolved in KnitStart
 
--- ── Public flags (read by NewController and other systems) ────────────────────
+-- ── Public flags read by NewController ───────────────────────────────────────
+-- HasFly is the single gate NewController.HandleHumanoidStates checks.
+-- Both InfFlyBar AND legacy Fly set it when active so the existing fly logic works.
 ProductsController.HasDoubleJump    = false
-ProductsController.HasFastRespawn  = false
-ProductsController.HasGravity      = false
-ProductsController.HasDoubleLuck   = false
-ProductsController.HasDoubleCoins  = false
+ProductsController.HasFastRespawn   = false
+ProductsController.HasGravity       = false
+ProductsController.HasDoubleLuck    = false
+ProductsController.HasDoubleCoins   = false
 ProductsController.HasDisablePopups = false
-ProductsController.HasWorldPass    = false
-ProductsController.HasInfFlyBar    = false
--- Legacy fly kept for NewController compatibility
-ProductsController.HasFly          = false
-ProductsController.flybar          = nil   -- Frame set by CreateFlyBar, read by NewController
+ProductsController.HasWorldPass     = false
+ProductsController.HasInfFlyBar     = false
+ProductsController.HasFly           = false  -- unified fly gate for NewController
+ProductsController.flybar           = nil    -- EnergyBar Frame; NewController reads this each frame
 
--- ── Character refs ────────────────────────────────────────────────────────────
+-- ── Character / billboard refs ────────────────────────────────────────────────
 local character, humanoid
 local billboard, flyBarBackground
 
--- ── Gravity ───────────────────────────────────────────────────────────────────
+-- ── Physics constants ─────────────────────────────────────────────────────────
 local DEFAULT_GRAVITY = workspace.Gravity
 local REDUCED_GRAVITY = workspace.Gravity / 2
 
--- ── UI refs (rebuilt on every character spawn) ────────────────────────────────
+-- ── UI state rebuilt every respawn ───────────────────────────────────────────
 local playerGui, gameHUD
--- Per-product: { button, timer }
-local UI = {}
+local UI = {}  -- UI[productName] = { btn, timerLabel }
 
-local RED_COLOR    = Color3.fromRGB(255, 60, 60)
-local GREEN_COLOR  = Color3.fromRGB(60, 255, 120)
-local YELLOW_COLOR = Color3.fromRGB(255, 220, 0)
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PRODUCT CONFIG TABLE
+-- frameName / buttonName follow the GameHUD naming convention:
+--   <frameName>Frame  →  <buttonName>Button  +  DurationTimer
+-- onActivate / onExpire handle side-effects (gravity, flybar, etc.)
+-- InfFlyBar and Fly both set HasFly = true so NewController's fly gate works.
+-- ─────────────────────────────────────────────────────────────────────────────
+local PRODUCT_CONFIG = {
+    DoubleJump    = { flag = "HasDoubleJump",    frameName = "DoubleJump",    buttonName = "DoubleJump"    },
+    FastRespawn   = { flag = "HasFastRespawn",   frameName = "FastRespawn",   buttonName = "FastRespawn"   },
+    GravityCoil   = { flag = "HasGravity",       frameName = "Gravity",       buttonName = "Gravity",
+        onActivate = function() workspace.Gravity = REDUCED_GRAVITY end,
+        onExpire   = function() workspace.Gravity = DEFAULT_GRAVITY  end,
+    },
+    DoubleLuck    = { flag = "HasDoubleLuck",    frameName = "DoubleLuck",    buttonName = "DoubleLuck"    },
+    DoubleCoins   = { flag = "HasDoubleCoins",   frameName = "DoubleCoins",   buttonName = "DoubleCoins"   },
+    DisablePopups = { flag = "HasDisablePopups", frameName = "DisablePopups", buttonName = "DisablePopups" },
+    WorldPass     = { flag = "HasWorldPass",     frameName = "WorldPass",     buttonName = "WorldPass"     },
+    -- InfFlyBar: the main fly product (349 R$). Sets HasFly so NewController gates it.
+    InfFlyBar = { flag = "HasInfFlyBar", frameName = "InfFlyBar", buttonName = "InfFlyBar",
+        onActivate = function()
+            ProductsController.HasFly = true          -- gate for NewController
+            ProductsController:CreateFlyBar()
+        end,
+        onExpire = function()
+            ProductsController.HasFly = false
+            ProductsController:DestroyFlyBar()
+        end,
+    },
+    -- Fly: legacy entry. Button now prompts InfFlyBar purchase.
+    -- Still needs its own config entry so signal listeners work for rejoin restoration.
+    Fly = { flag = "HasFly", frameName = "Fly", buttonName = "Fly",
+        onActivate = function()
+            ProductsController.HasFly = true
+            ProductsController:CreateFlyBar()
+        end,
+        onExpire = function()
+            ProductsController.HasFly = false
+            ProductsController:DestroyFlyBar()
+        end,
+    },
+}
 
--- ── UI helper: find a Frame + Button + DurationTimer inside GameHUD ────────────
--- Expected structure for each product:
---   GameHUD / <FrameName>Frame / <ButtonName>Button   (TextButton/ImageButton)
---   GameHUD / <FrameName>Frame / DurationTimer        (TextLabel)
-local function FindProductUI(frameName, buttonName)
-    if not gameHUD then return nil, nil end
-    local frame = gameHUD:FindFirstChild(frameName .. "Frame")
-    if not frame then return nil, nil end
-    local btn   = frame:FindFirstChild(buttonName .. "Button")
-    local timer = frame:FindFirstChild("DurationTimer")
-    return btn, timer
+-- Server-side signal names that map to each product
+local SIGNAL_NAMES = {
+    DoubleJump    = { activated = "DoubleJumpActivated",    expired = "DoubleJumpExpired"    },
+    FastRespawn   = { activated = "FastRespawnActivated",   expired = "FastRespawnExpired"   },
+    GravityCoil   = { activated = "GravityActivated",       expired = "GravityExpired"       },
+    DoubleLuck    = { activated = "DoubleLuckActivated",    expired = "DoubleLuckExpired"    },
+    DoubleCoins   = { activated = "DoubleCoinsActivated",   expired = "DoubleCoinsExpired"   },
+    DisablePopups = { activated = "DisablePopupsActivated", expired = "DisablePopupsExpired" },
+    WorldPass     = { activated = "WorldPassActivated",     expired = "WorldPassExpired"     },
+    InfFlyBar     = { activated = "InfFlyBarActivated",     expired = "InfFlyBarExpired"     },
+    Fly           = { activated = "FlyActivated",           expired = "FlyExpired"           },
+}
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- FLY BAR  (BillboardGui parented to humanoid, read by NewController.UpdateFlyBar)
+-- ─────────────────────────────────────────────────────────────────────────────
+function ProductsController:CreateFlyBar()
+    if billboard and billboard.Parent then return end  -- already exists
+
+    billboard                      = Instance.new("BillboardGui")
+    billboard.Name                 = "FlyEnergyBillboard"
+    billboard.Parent               = humanoid  -- character-specific
+    billboard.Size                 = UDim2.fromScale(0.85, 4)
+    billboard.StudsOffsetWorldSpace = Vector3.new(3, -1.5, 0)
+    billboard.AlwaysOnTop          = true
+    billboard.LightInfluence       = 0
+    billboard.ResetOnSpawn         = false
+
+    flyBarBackground                        = Instance.new("Frame")
+    flyBarBackground.Name                   = "Background"
+    flyBarBackground.Parent                 = billboard
+    flyBarBackground.Size                   = UDim2.fromScale(1, 1)
+    flyBarBackground.BackgroundColor3       = Color3.fromRGB(30, 30, 30)
+    flyBarBackground.BackgroundTransparency = 0.2
+    flyBarBackground.BorderSizePixel        = 0
+    local bgCorner = Instance.new("UICorner")
+    bgCorner.CornerRadius = UDim.new(0.1, 0)
+    bgCorner.Parent = flyBarBackground
+
+    -- NewController.UpdateFlyBar reads ProductsController.flybar every PreRender frame
+    -- and lerps its Size.Y.Scale based on flyEnergy ratio.
+    -- AnchorPoint (0,1) + Position (0,1) = bar grows upward from the bottom.
+    ProductsController.flybar                  = Instance.new("Frame")
+    ProductsController.flybar.Name             = "EnergyBar"
+    ProductsController.flybar.Parent           = flyBarBackground
+    ProductsController.flybar.Size             = UDim2.fromScale(1, 1)
+    ProductsController.flybar.AnchorPoint      = Vector2.new(0, 1)
+    ProductsController.flybar.Position         = UDim2.fromScale(0, 1)
+    ProductsController.flybar.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    ProductsController.flybar.BorderSizePixel  = 0
+    local barCorner = Instance.new("UICorner")
+    barCorner.CornerRadius = UDim.new(0.1, 0)
+    barCorner.Parent = ProductsController.flybar
 end
 
--- ── Countdown timer ────────────────────────────────────────────────────────────
-local function RunTimer(button, label, endAt)
+function ProductsController:DestroyFlyBar()
+    if billboard then billboard:Destroy() end
+    billboard                  = nil
+    flyBarBackground           = nil
+    ProductsController.flybar  = nil
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ACTIVATE / EXPIRE
+-- Both are idempotent — safe to call from signals AND from RestoreActiveProducts.
+-- ─────────────────────────────────────────────────────────────────────────────
+local function RunTimer(btn, label, endAt)
     task.spawn(function()
         while true do
             local left = math.max(0, math.ceil(endAt - tick()))
             if label then label.Text = left .. "s" end
             if left <= 0 then
-                if label  then label.Visible = false end
-                if button then button.Interactable = true end
+                if label then label.Visible = false end
+                if btn   then btn.Interactable = true end
                 break
             end
             task.wait(1)
@@ -70,231 +160,203 @@ local function RunTimer(button, label, endAt)
     end)
 end
 
--- ── Generic bind: one signal pair drives one product slot ─────────────────────
-local function BindProduct(options)
-    -- options: {
-    --   activatedSignal, expiredSignal,
-    --   button, timer,
-    --   flag,        -- string key into ProductsController (e.g. "HasDoubleJump")
-    --   onActivate,  -- optional function()
-    --   onExpire,    -- optional function()
-    -- }
-    options.activatedSignal:Connect(function(duration)
-        print(options.flag, "activated, duration:", duration)
-        ProductsController[options.flag] = true
-        local endAt = tick() + duration
-        if options.button then
-            options.button.Interactable = false
-        end
-        if options.timer then
-            options.timer.Visible = true
-        end
-        if options.onActivate then options.onActivate() end
-        RunTimer(options.button, options.timer, endAt)
-    end)
-
-    options.expiredSignal:Connect(function()
-        print(options.flag, "expired.")
-        ProductsController[options.flag] = false
-        if options.timer  then options.timer.Visible = false end
-        if options.button then options.button.Interactable = true end
-        if options.onExpire then options.onExpire() end
-    end)
-end
-
--- ── Fly Bar (BillboardGui created at runtime) ─────────────────────────────────
-function ProductsController:CreateFlyBar()
-    billboard = Instance.new("BillboardGui")
-    billboard.Name = "FlyEnergyBillboard"
-    billboard.Parent = humanoid
-    billboard.Size = UDim2.fromScale(0.85, 4)
-    billboard.StudsOffsetWorldSpace = Vector3.new(3, -1.5, 0)
-    billboard.AlwaysOnTop = true
-    billboard.LightInfluence = 0
-    billboard.ResetOnSpawn = false
-
-    flyBarBackground = Instance.new("Frame")
-    flyBarBackground.Name = "Background"
-    flyBarBackground.Parent = billboard
-    flyBarBackground.Size = UDim2.fromScale(1, 1)
-    flyBarBackground.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    flyBarBackground.BackgroundTransparency = 0.2
-    flyBarBackground.BorderSizePixel = 0
-    local bgCorner = Instance.new("UICorner")
-    bgCorner.CornerRadius = UDim.new(0.1, 0)
-    bgCorner.Parent = flyBarBackground
-
-    ProductsController.flybar = Instance.new("Frame")
-    ProductsController.flybar.Name = "EnergyBar"
-    ProductsController.flybar.Parent = flyBarBackground
-    ProductsController.flybar.Size = UDim2.fromScale(1, 1)
-    ProductsController.flybar.AnchorPoint = Vector2.new(0, 1)
-    ProductsController.flybar.Position = UDim2.fromScale(0, 1)
-    ProductsController.flybar.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-    ProductsController.flybar.BorderSizePixel = 0
-    local barCorner = Instance.new("UICorner")
-    barCorner.CornerRadius = UDim.new(0.1, 0)
-    barCorner.Parent = ProductsController.flybar
-end
-
-function ProductsController:DestroyFlyBar()
-    if billboard then
-        billboard:Destroy()
-        billboard = nil
+-- `remainingSecs` = seconds from NOW until the product expires.
+function ProductsController:ActivateProduct(productName, remainingSecs)
+    local cfg = PRODUCT_CONFIG[productName]
+    if not cfg then
+        warn("[ProductsController] Unknown product:", productName)
+        return
     end
-    ProductsController.flybar = nil
+
+    -- Guard: skip if already active (handles duplicate signal delivery)
+    if ProductsController[cfg.flag] then
+        print("[ProductsController] Already active, skipping:", productName)
+        return
+    end
+
+    print(("[ProductsController] Activating %s for %ds"):format(productName, remainingSecs))
+    ProductsController[cfg.flag] = true
+
+    -- Update button / timer UI
+    local slot  = UI[productName] or {}
+    local btn   = slot[1]
+    local timer = slot[2]
+    if btn   then btn.Interactable = false end
+    if timer then timer.Visible    = true  end
+
+    -- Side-effects (gravity, fly bar, etc.)
+    if cfg.onActivate then cfg.onActivate() end
+
+    -- Visual countdown (tick()-based, survives multiple task.wait calls)
+    local endAt = tick() + remainingSecs
+    RunTimer(btn, timer, endAt)
+
+    -- Local safety expiry timer so the product always ends even if the server
+    -- Expired signal arrives slightly late or is dropped.
+    task.delay(remainingSecs + 1, function()
+        self:ExpireProduct(productName)
+    end)
 end
 
--- ── UIReferences ─────────────────────────────────────────────────────────────
+function ProductsController:ExpireProduct(productName)
+    local cfg = PRODUCT_CONFIG[productName]
+    if not cfg or not ProductsController[cfg.flag] then return end
+
+    print("[ProductsController] Expiring:", productName)
+    ProductsController[cfg.flag] = false
+
+    local slot  = UI[productName] or {}
+    local btn   = slot[1]
+    local timer = slot[2]
+    if timer then timer.Visible    = false end
+    if btn   then btn.Interactable = true  end
+
+    if cfg.onExpire then cfg.onExpire() end
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- UIReferences  (rebuilt each respawn so refs point to the new HUD instances)
+-- ─────────────────────────────────────────────────────────────────────────────
 function ProductsController:UIReferences()
     playerGui = player:WaitForChild("PlayerGui")
     gameHUD   = playerGui:WaitForChild("GameHUD")
 
-    UI.DoubleJump    = { FindProductUI("DoubleJump",    "DoubleJump")    }
-    UI.FastRespawn   = { FindProductUI("FastRespawn",   "FastRespawn")   }
-    UI.Gravity       = { FindProductUI("Gravity",       "Gravity")       }
-    UI.DoubleLuck    = { FindProductUI("DoubleLuck",    "DoubleLuck")    }
-    UI.DoubleCoins   = { FindProductUI("DoubleCoins",   "DoubleCoins")   }
-    UI.DisablePopups = { FindProductUI("DisablePopups", "DisablePopups") }
-    UI.WorldPass     = { FindProductUI("WorldPass",     "WorldPass")     }
-    UI.InfFlyBar     = { FindProductUI("InfFlyBar",     "InfFlyBar")     }
-    -- Legacy (existing HUD frames kept as-is)
-    UI.Fly           = { FindProductUI("Fly",           "Fly")           }
+    UI = {}
+    for productName, cfg in pairs(PRODUCT_CONFIG) do
+        local frame = gameHUD:FindFirstChild(cfg.frameName .. "Frame")
+        if frame then
+            local btn   = frame:FindFirstChild(cfg.buttonName .. "Button")
+            local timer = frame:FindFirstChild("DurationTimer")
+            UI[productName] = { btn, timer }
+        else
+            UI[productName] = { nil, nil }
+        end
+    end
 end
 
--- ── ClearUI ───────────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ClearUI  (called on CharacterRemoving)
+-- Resets all flags so RestoreActiveProducts can re-assert them cleanly.
+-- ─────────────────────────────────────────────────────────────────────────────
 function ProductsController:ClearUI()
     playerGui, gameHUD = nil, nil
     UI = {}
-    ProductsController.flybar = nil
-    flyBarBackground = nil
-    billboard = nil
+    -- Flybar is parented to the old humanoid which is about to be destroyed
+    ProductsController:DestroyFlyBar()
+    -- Reset gravity in case it was reduced
+    workspace.Gravity = DEFAULT_GRAVITY
+    -- Reset all flags; RestoreActiveProducts on the next CharacterAdded re-sets them
     ProductsController.HasDoubleJump    = false
-    ProductsController.HasFastRespawn  = false
-    ProductsController.HasGravity      = false
-    ProductsController.HasDoubleLuck   = false
-    ProductsController.HasDoubleCoins  = false
+    ProductsController.HasFastRespawn   = false
+    ProductsController.HasGravity       = false
+    ProductsController.HasDoubleLuck    = false
+    ProductsController.HasDoubleCoins   = false
     ProductsController.HasDisablePopups = false
-    ProductsController.HasWorldPass    = false
-    ProductsController.HasInfFlyBar    = false
-    ProductsController.HasFly          = false
+    ProductsController.HasWorldPass     = false
+    ProductsController.HasInfFlyBar     = false
+    ProductsController.HasFly           = false
 end
 
--- ── GetProductId helper used by BindInput ─────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────────────────────
+-- BindInput  (called per-respawn — old HUD buttons are destroyed so no duplicate fires)
+--
+-- BUG FIX: The legacy Fly button previously called ProductsService:PurchaseFly()
+-- which granted the ability directly without opening a Robux purchase prompt.
+-- It now calls PromptPurchase("InfFlyBar") — the correct Robux product.
+-- ─────────────────────────────────────────────────────────────────────────────
 local function PromptPurchase(productName)
     ProductsService:GetProductId(productName):andThen(function(success, productId)
         if success then
             MarketplaceService:PromptProductPurchase(player, productId)
         else
-            warn("[ProductsController] GetProductId failed for", productName, productId)
+            warn("[ProductsController] No product ID configured for:", productName)
         end
     end):catch(function(err)
         warn("[ProductsController] GetProductId error:", err)
     end)
 end
 
--- ── BindInput ─────────────────────────────────────────────────────────────────
 function ProductsController:BindInput()
-    local function safe(btn, fn)
+    local function safe(slot, fn)
+        local btn = slot and slot[1]
         if btn then btn.MouseButton1Click:Connect(fn) end
     end
 
-    safe(UI.DoubleJump[1],    function() PromptPurchase("DoubleJump")    end)
-    safe(UI.FastRespawn[1],   function() PromptPurchase("FastRespawn")   end)
-    safe(UI.Gravity[1],       function() PromptPurchase("GravityCoil")   end)
-    safe(UI.DoubleLuck[1],    function() PromptPurchase("DoubleLuck")    end)
-    safe(UI.DoubleCoins[1],   function() PromptPurchase("DoubleCoins")   end)
-    safe(UI.DisablePopups[1], function() PromptPurchase("DisablePopups") end)
-    safe(UI.WorldPass[1],     function() PromptPurchase("WorldPass")     end)
-    safe(UI.InfFlyBar[1],     function() PromptPurchase("InfFlyBar")     end)
-    -- Legacy fly button
-    safe(UI.Fly[1],           function() ProductsService:PurchaseFly()   end)
+    safe(UI.DoubleJump,    function() PromptPurchase("DoubleJump")    end)
+    safe(UI.FastRespawn,   function() PromptPurchase("FastRespawn")   end)
+    safe(UI.GravityCoil,   function() PromptPurchase("GravityCoil")   end)
+    safe(UI.Gravity,       function() PromptPurchase("GravityCoil")   end)
+    safe(UI.DoubleLuck,    function() PromptPurchase("DoubleLuck")    end)
+    safe(UI.DoubleCoins,   function() PromptPurchase("DoubleCoins")   end)
+    safe(UI.DisablePopups, function() PromptPurchase("DisablePopups") end)
+    safe(UI.WorldPass,     function() PromptPurchase("WorldPass")     end)
+    safe(UI.InfFlyBar,     function() PromptPurchase("InfFlyBar")     end)
+    -- FIX: legacy Fly button → purchase prompt for InfFlyBar (not a free grant)
+    safe(UI.Fly,           function() PromptPurchase("InfFlyBar")     end)
 end
 
--- ── BindSignals ───────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────────────────────
+-- BindSignals  (called ONCE in KnitStart — NOT per respawn)
+--
+-- Previous bug: BindSignals was called in OnCharacterAdded which meant every
+-- respawn accumulated another set of listeners. On respawn #3 there would be
+-- 3 timers running, gravity changed 3 times, 3 fly bars created, etc.
+-- ─────────────────────────────────────────────────────────────────────────────
 function ProductsController:BindSignals()
-    BindProduct({
-        activatedSignal = ProductsService.DoubleJumpActivated,
-        expiredSignal   = ProductsService.DoubleJumpExpired,
-        button = UI.DoubleJump[1], timer = UI.DoubleJump[2],
-        flag   = "HasDoubleJump",
-    })
+    for productName, sigNames in pairs(SIGNAL_NAMES) do
+        local activatedSig = ProductsService[sigNames.activated]
+        local expiredSig   = ProductsService[sigNames.expired]
 
-    BindProduct({
-        activatedSignal = ProductsService.FastRespawnActivated,
-        expiredSignal   = ProductsService.FastRespawnExpired,
-        button = UI.FastRespawn[1], timer = UI.FastRespawn[2],
-        flag   = "HasFastRespawn",
-    })
-
-    BindProduct({
-        activatedSignal = ProductsService.GravityActivated,
-        expiredSignal   = ProductsService.GravityExpired,
-        button = UI.Gravity[1], timer = UI.Gravity[2],
-        flag   = "HasGravity",
-        onActivate = function() workspace.Gravity = REDUCED_GRAVITY end,
-        onExpire   = function() workspace.Gravity = DEFAULT_GRAVITY  end,
-    })
-
-    BindProduct({
-        activatedSignal = ProductsService.DoubleLuckActivated,
-        expiredSignal   = ProductsService.DoubleLuckExpired,
-        button = UI.DoubleLuck[1], timer = UI.DoubleLuck[2],
-        flag   = "HasDoubleLuck",
-    })
-
-    BindProduct({
-        activatedSignal = ProductsService.DoubleCoinsActivated,
-        expiredSignal   = ProductsService.DoubleCoinsExpired,
-        button = UI.DoubleCoins[1], timer = UI.DoubleCoins[2],
-        flag   = "HasDoubleCoins",
-    })
-
-    BindProduct({
-        activatedSignal = ProductsService.DisablePopupsActivated,
-        expiredSignal   = ProductsService.DisablePopupsExpired,
-        button = UI.DisablePopups[1], timer = UI.DisablePopups[2],
-        flag   = "HasDisablePopups",
-    })
-
-    BindProduct({
-        activatedSignal = ProductsService.WorldPassActivated,
-        expiredSignal   = ProductsService.WorldPassExpired,
-        button = UI.WorldPass[1], timer = UI.WorldPass[2],
-        flag   = "HasWorldPass",
-    })
-
-    BindProduct({
-        activatedSignal = ProductsService.InfFlyBarActivated,
-        expiredSignal   = ProductsService.InfFlyBarExpired,
-        button = UI.InfFlyBar[1], timer = UI.InfFlyBar[2],
-        flag   = "HasInfFlyBar",
-        onActivate = function() self:CreateFlyBar() end,
-        onExpire   = function() self:DestroyFlyBar() end,
-    })
-
-    -- Legacy fly (kept for back-compat with existing buttons/NewController)
-    BindProduct({
-        activatedSignal = ProductsService.FlyActivated,
-        expiredSignal   = ProductsService.FlyExpired,
-        button = UI.Fly[1], timer = UI.Fly[2],
-        flag   = "HasFly",
-        onActivate = function() self:CreateFlyBar() end,
-        onExpire   = function() self:DestroyFlyBar() end,
-    })
+        if activatedSig then
+            activatedSig:Connect(function(remaining)
+                self:ActivateProduct(productName, remaining)
+            end)
+        end
+        if expiredSig then
+            expiredSig:Connect(function()
+                self:ExpireProduct(productName)
+            end)
+        end
+    end
 end
 
--- ── Character lifecycle ───────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────────────────────
+-- RestoreActiveProducts  (called on every CharacterAdded via task.defer)
+--
+-- Queries the server for all currently active timed products and re-activates
+-- them on this client. This is the PRIMARY persistence mechanism:
+--   • Respawn  → flags were cleared by ClearUI, this restores them
+--   • Rejoin   → CheckTimedProductsAtStart fires during LoadProfile before the
+--                client's signal listeners exist, so those signals are lost.
+--                This method queries fresh data AFTER the client is ready.
+-- ─────────────────────────────────────────────────────────────────────────────
+function ProductsController:RestoreActiveProducts()
+    ProductsService:GetActiveProducts():andThen(function(active)
+        if not active then return end
+        for productName, remaining in pairs(active) do
+            if remaining > 0 then
+                self:ActivateProduct(productName, remaining)
+            end
+        end
+    end):catch(function(err)
+        warn("[ProductsController] RestoreActiveProducts error:", err)
+    end)
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Character lifecycle
+-- ─────────────────────────────────────────────────────────────────────────────
 function ProductsController:OnCharacterAdded(char)
     character = char
-    humanoid  = character:WaitForChild("Humanoid")
-    ProductsService = Knit.GetService("ProductsService")
+    humanoid  = char:WaitForChild("Humanoid")
+
     self:UIReferences()
     self:BindInput()
-    self:BindSignals()
-    if ProductsController.HasFly or ProductsController.HasInfFlyBar then
-        self:CreateFlyBar()
-    end
+
+    -- Defer so Knit's remote bridge is fully ready before querying the server
+    task.defer(function()
+        self:RestoreActiveProducts()
+    end)
 end
 
 function ProductsController:OnCharacterRemoving()
@@ -314,7 +376,13 @@ function ProductsController:OnPlayerAdded(plr)
     end
 end
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- KnitStart
+-- ─────────────────────────────────────────────────────────────────────────────
 function ProductsController:KnitStart()
+    ProductsService = Knit.GetService("ProductsService")
+    -- Bind signals ONCE here, before any character spawns
+    self:BindSignals()
     self:OnPlayerAdded(player)
 end
 
