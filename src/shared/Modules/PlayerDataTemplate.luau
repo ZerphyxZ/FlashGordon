@@ -38,10 +38,16 @@ local PlayerDataTemplate = {
 	OwnedCrates = {"BasicBoard"}, -- Start with default crate
 	EquippedCrate = "BasicBoard", -- Currently equipped crate
 
-	--Products Inventory
-	DoubleJumpEndTime = nil, -- timestamp or nil
-	GravityEndTime = nil, -- timestamp or nil
-	FlyEndTime = nil, -- timestamp or nil
+	--Products Inventory (timed, stored as os.time() end-timestamps or nil)
+	DoubleJumpEndTime  = nil, -- Double Jump    (149 R$)
+	GravityEndTime     = nil, -- Gravity Coil   (119 R$)
+	FlyEndTime         = nil, -- legacy fly (kept for back-compat)
+	FastRespawnEndTime = nil, -- Fast Respawn   (59  R$)
+	DoubleLuckEndTime  = nil, -- Double Luck    (99  R$)
+	DoubleCoinsEndTime = nil, -- Double Coins   (110 R$)
+	DisablePopupsEndTime = nil, -- Disable Popups (49  R$)
+	WorldPassEndTime   = nil, -- World Pass     (199 R$)
+	InfFlyBarEndTime   = nil, -- Inf Fly Bar    (349 R$)
 }
 
 return PlayerDataTemplate
